@@ -62,6 +62,19 @@ The game keeps saves and settings in `ux0:data/DaggerfallUnity/UserData`.
 
 The front touch screen clicks in menus. A new game starts with the HUD hidden, so tap Select to bring it up. In a text box, Triangle reopens the system keyboard.
 
+## Lighting
+
+You can adjust the lighting from the dropdown list in the pause menu. Each entry moves to its next value when you click it, and the changes apply right away.
+
+| Option | Values | Default |
+|---|---|---|
+| Dungeon light | 30%, 50%, 70%, 100% | 100% |
+| Fire light (torches and lanterns) | 50%, 75%, 100%, 150%, 200% | 100% |
+| Fire colour | White, Slightly warm, Warm, Warmest | White |
+| Torch reach | 6 m, 9 m, 12 m | 6 m |
+
+The defaults match the look of Daggerfall Unity on PC.
+
 ## Performance
 
 I measured these on one PCH-1000 with the alpha's data and code, following a fixed test route. Frame rates change a lot depending on where you are in the game.
