@@ -295,6 +295,18 @@ namespace DaggerfallWorkshop.Utility
             return true;
         }
 
+#if UNITY_PSP2
+        /// <summary>
+        /// Baked block (VitaBlockBake): the combined model as Apply() made it on the PC.
+        /// </summary>
+        public void VitaSetCombined(CombinedModel model)
+        {
+            combinedModel = model;
+            vertexCount = model.Vertices.Length;
+            Seal();
+        }
+#endif
+
         #endregion
 
         #region Private Methods

@@ -32,6 +32,24 @@ InteriorShadowDistance=30.0
 ExteriorShadowDistance=90.0
 EnableTextureArrays=True
 RandomDungeonTextures=0
+VitaTextureLimit=0
+VitaCulling=True
+VitaTerrainGrid2x2=True
+VitaStaticBatching=False
+VitaCityMerge=0
+VitaTownDistance=300
+VitaFogDistance=360
+VitaSyncGuard=False
+VitaPinAudioThread=True
+VitaExteriorLowRes=False
+VitaPixelLights=0
+VitaGpuMode=2
+VitaAtlas=True
+VitaFlatBatch=True
+VitaModelBatch=True
+VitaFireLevel=100
+VitaFireTone=0
+VitaTorchReach=6
 
 [Effects]
 AntialiasingMethod=0
@@ -79,7 +97,7 @@ SoundFont=
 PlayerNudity=False
 
 [GUI]
-ShowOptionsAtStart=True
+ShowOptionsAtStart=False
 GUIFilterMode=0
 VideoFilterMode=1
 Crosshair=True
@@ -141,7 +159,7 @@ WeaponAttackThreshold=0.005
 WeaponSensitivity=1.0
 MovementAcceleration=False
 ToggleSneak=False
-WeaponSwingMode = 0
+WeaponSwingMode = 1
 CameraRecoilStrength = 3
 SoundVolume = 0.5
 MusicVolume = 0.5
@@ -170,7 +188,7 @@ StartCellY=158
 StartInDungeon=True
 
 [Experimental]
-TerrainDistance=3
+TerrainDistance=1
 TerrainHeightmapPixelError=5
 SmallerDungeons=False
 CustomBooksImport=True
@@ -182,7 +200,7 @@ LypyL_ModSystem=True
 AssetInjection=True
 CompressModdedTextures=True
 NearDeathWarning=True
-AdvancedClimbing=False
+AdvancedClimbing=True
 AlternateRandomEnemySelection=False
 DungeonAmbientLightScale=1.0
 NightAmbientLightScale=1.0

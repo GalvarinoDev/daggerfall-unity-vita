@@ -132,5 +132,42 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         {
             Reset();
         }
+
+#if UNITY_PSP2
+        List<Vector2> vitaNavPoints;
+
+        /// <summary>D-pad targets for VitaMenuNav: a small screen box on one pixel of each province, the one nearest its middle.</summary>
+        public void AddVitaNavTargets(List<Rect> targets)
+        {
+            int width = racePickerBitmap.Width, height = racePickerBitmap.Data.Length / width;
+            if (vitaNavPoints == null)
+            {
+                vitaNavPoints = new List<Vector2>();
+                foreach (int id in raceDict.Keys)
+                {
+                    Vector2 sum = Vector2.zero;
+                    int count = 0;
+                    for (int i = 0; i < racePickerBitmap.Data.Length; i++)
+                        if (racePickerBitmap.Data[i] == id) { sum += new Vector2(i % width, i / width); count++; }
+                    if (count == 0)
+                        continue;
+                    Vector2 mid = sum / count, best = mid;
+                    float bestDist = float.MaxValue;
+                    for (int i = 0; i < racePickerBitmap.Data.Length; i++)
+                    {
+                        if (racePickerBitmap.Data[i] != id)
+                            continue;
+                        Vector2 p = new Vector2(i % width, i / width);
+                        if ((p - mid).sqrMagnitude < bestDist) { bestDist = (p - mid).sqrMagnitude; best = p; }
+                    }
+                    vitaNavPoints.Add(best + new Vector2(0.5f, 0.5f));
+                }
+            }
+            Rect panel = NativePanel.Rectangle;
+            float sx = panel.width / width, sy = panel.height / height;
+            foreach (Vector2 p in vitaNavPoints)
+                targets.Add(new Rect(panel.x + (p.x - 2) * sx, panel.y + (p.y - 2) * sy, 4 * sx, 4 * sy));
+        }
+#endif
     }
 }

@@ -57,6 +57,18 @@ namespace DaggerfallWorkshop.Utility.AssetInjection
         private static Dictionary<int, DFRegion> regions = new Dictionary<int, DFRegion>();
         private static Dictionary<string, DFLocation> locations = new Dictionary<string, DFLocation>();
         private static Dictionary<string, DFBlock> blocks = new Dictionary<string, DFBlock>();
+#if UNITY_PSP2
+        // every one for the whole game. They're re-read quickly
+        // from the pack, so they are dropped at each level change (FileProxy.VitaClearLevelCache); the rest stays cached
+        private static readonly List<string> vitaPackBlocks = new List<string>();
+
+        public static void VitaClearPackBlocks()
+        {
+            foreach (string key in vitaPackBlocks)
+                blocks.Remove(key);
+            vitaPackBlocks.Clear();
+        }
+#endif
         private static Dictionary<BlockRecordKey, BuildingReplacementData> buildings = new Dictionary<BlockRecordKey, BuildingReplacementData>();
 
         // New block index/name mappings.

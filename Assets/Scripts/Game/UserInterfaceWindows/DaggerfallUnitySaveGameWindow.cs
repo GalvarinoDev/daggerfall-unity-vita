@@ -481,6 +481,11 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         {
             if (mode == Modes.SaveGame)
             {
+#if UNITY_PSP2
+                // No on-screen keyboard yet: an empty name saves under the current date and time
+                if (saveNameTextBox.Text.Length == 0)
+                    saveNameTextBox.Text = VitaClock.Now.ToString("yyyy-MM-dd HH.mm.ss");
+#endif
                 // Must have a save name
                 if (saveNameTextBox.Text.Length == 0)
                 {

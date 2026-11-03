@@ -29,6 +29,7 @@ Shader "Daggerfall/Default" {
         #pragma surface surf BlinnPhong vertex:vert
         #pragma multi_compile_local __ _NORMALMAP
         #pragma multi_compile_local __ _EMISSION
+        #pragma multi_compile __ _EMISSION // Vita (Unity 2018.2 skips multi_compile_local, so no glow variant was built: dull torches/fires)
         #pragma multi_compile_local __ _PARALLAXMAP
         #pragma multi_compile_local __ _METALLICGLOSSMAP
 

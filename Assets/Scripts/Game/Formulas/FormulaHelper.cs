@@ -2222,7 +2222,11 @@ namespace DaggerfallWorkshop.Game.Formulas
                 if (string.IsNullOrEmpty(effectEntries[i].Key))
                     continue;
 
+#if UNITY_PSP2
+                FormulaHelper.SpellCost cost = CalculateEffectCosts(effectEntries[i], casterEntity); int goldCost = cost.goldCost, spellPointCost = cost.spellPointCost;
+#else
                 (int goldCost, int spellPointCost) = CalculateEffectCosts(effectEntries[i], casterEntity);
+#endif
                 totalCost.goldCost += goldCost;
                 totalCost.spellPointCost += spellPointCost;
             }

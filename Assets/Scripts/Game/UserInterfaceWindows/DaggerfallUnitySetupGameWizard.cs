@@ -84,7 +84,11 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
 
         #region Fields
 
+#if UNITY_PSP2
+        const string titleScreenFilename = "Vita/StartupBackground2"; // 960x544 copy (screen size) instead of the 1920x1040 original
+#else
         const string titleScreenFilename = "StartupBackground2";
+#endif
         const float panelSwipeTime = 1;
         const SongFiles titleSongFile = SongFiles.song_5strong;
 
@@ -171,6 +175,9 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             base.Update();
 
             // Loop title song
+#if UNITY_PSP2
+            VitaBootMusic.Stop();
+#endif
             if (!DaggerfallUI.Instance.DaggerfallSongPlayer.IsPlaying)
             {
                 DaggerfallUI.Instance.DaggerfallSongPlayer.Play(titleSongFile);
@@ -254,6 +261,17 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         bool backdropCreated = false;
         void CreateBackdrop()
         {
+#if UNITY_PSP2
+            // A whole 3D city block behind the menu loads ARCH3D, ~340 world textures and a 2048x2048 atlas before the game starts
+            // (~40 MB of VRAM); show the 2D title background instead (the folder stage that normally sets it is skipped on Vita)
+            backdropCreated = true;
+            if (titleTexture != null)
+            {
+                titleTexture.filterMode = DaggerfallUI.Instance.GlobalFilterMode;
+                ParentPanel.BackgroundTexture = titleTexture;
+                ParentPanel.BackgroundTextureLayout = BackgroundLayout.ScaleToFit;
+            }
+#else
             // Add a block into the scene
             GameObjectHelper.CreateRMBBlockGameObject("CUSTAA06.RMB", 0, 0, 0, 0);
             backdropCreated = true;
@@ -261,6 +279,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             // Clear background texture
             ParentPanel.BackgroundTexture = null;
             ParentPanel.BackgroundColor = Color.clear;
+#endif
         }
 
         void ShowResolutionPanel()
@@ -386,6 +405,9 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             resolutionPanel.Components.Add(testOrConfirmButton);
         }
 
+#if UNITY_PSP2
+        public Button VitaNavStart;
+#endif
         float optionPos = 12f;
         float optionSpacing = 12f;
         Checkbox AddOption(float x, string key, bool isChecked)
@@ -512,7 +534,11 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             if (!DaggerfallUnity.Settings.HideLoginName)
             {
                 Panel settingsPanel = new Panel();
+#if UNITY_PSP2
+                settingsPanel.Position = new Vector2(0, 136);   // below the Vita mod checkboxes (row 122)
+#else
                 settingsPanel.Position = new Vector2(0, 130);
+#endif
                 settingsPanel.Size = new Vector2(318, 16);
                 settingsPanel.HorizontalAlignment = HorizontalAlignment.Center;
 
@@ -574,6 +600,9 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             optionsConfirmButton.OnMouseClick += OptionsConfirmButton_OnMouseClick;
             optionsConfirmButton.Hotkey = DaggerfallShortcut.GetBinding(DaggerfallShortcut.Buttons.GameSetupPlay);
             optionsPanel.Components.Add(optionsConfirmButton);
+#if UNITY_PSP2
+            VitaNavStart = optionsConfirmButton;   // D-pad cursor starts on Play, not on the topmost button (Restart)
+#endif
 
             // Restart button
             Button restartButton = new Button();
@@ -596,7 +625,11 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             if (!string.IsNullOrEmpty(DaggerfallUnity.Settings.DistributionSuffix))
                 restartButton.Enabled = false;
 
+#if UNITY_PSP2
+            if (false)      // no-mods alpha (vita/nomods.txt): no Mods button
+#else
             if (DaggerfallUnity.Settings.LypyL_ModSystem)
+#endif
             {
                 // Add mod note
                 TextLabel modNoteLabel = DaggerfallUI.AddTextLabel(DaggerfallUI.DefaultFont, new Vector2(4, optionsPanel.InteriorHeight - 24), GetText("modNote"), optionsPanel);
@@ -740,12 +773,23 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             return TextManager.Instance.GetText("MainMenu", key);
         }
 
+#if UNITY_PSP2
+        // Static: the StateManager.OnStateChange subscription outlives this window (it fires in the game scene),
+        // and an instance handler kept the whole startup scene's DaggerfallUnity and readers alive through it
+        private static void SetCursor(bool refresh = false)
+#else
         private void SetCursor(bool refresh = false)
+#endif
         {
             int cursorWidth = 32;
             int cursorHeight = 32;
 
+#if UNITY_PSP2
+            Texture2D tex;
+            if (TextureReplacement.TryImportTexture("Cursor", true, out tex))
+#else
             if (TextureReplacement.TryImportTexture("Cursor", true, out Texture2D tex))
+#endif
             {
                 CursorMode cursorMode = CursorMode.Auto;
                 cursorWidth = tex.width;
@@ -871,7 +915,11 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             if (DaggerfallUnity.Settings.ShowOptionsAtStart && !alwayShowOptions.IsChecked)
             {
                 var messageBox = new DaggerfallMessageBox(uiManager, this, true);
+#if UNITY_PSP2
+                messageBox.SetText(GetText("showOptionsAgainVita"));
+#else
                 messageBox.SetText(GetText("showOptionsAgain"));
+#endif
                 messageBox.AllowCancel = true;
                 messageBox.ClickAnywhereToClose = true;
                 messageBox.OnClose += () => {
@@ -952,8 +1000,11 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         {
             if (optionsPanel.Enabled)
             {
+#if UNITY_PSP2
+#else
                 ModLoaderInterfaceWindow modLoaderWindow = new ModLoaderInterfaceWindow(DaggerfallUI.UIManager);
                 DaggerfallUI.UIManager.PushWindow(modLoaderWindow);
+#endif
             }
         }
 
@@ -967,7 +1018,11 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             }
         }
 
+#if UNITY_PSP2
+        private static void StateManager_OnStateChange(StateManager.StateTypes state)
+#else
         private void StateManager_OnStateChange(StateManager.StateTypes state)
+#endif
         {
             if (state == StateManager.StateTypes.Start)
             {

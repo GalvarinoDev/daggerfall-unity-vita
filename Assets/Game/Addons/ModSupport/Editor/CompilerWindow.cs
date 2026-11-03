@@ -1,3 +1,4 @@
+#if !UNITY_PSP2 // modder tool, not needed for the Vita build (uses Unity 2018+ editor APIs)
 // Project:         Daggerfall Unity
 // Copyright:       Copyright (C) 2009-2023 Daggerfall Workshop
 // Web Site:        http://www.dfworkshop.net
@@ -153,3 +154,4 @@ namespace DaggerfallWorkshop.Game.Utility
 
     }
 }
+#endif

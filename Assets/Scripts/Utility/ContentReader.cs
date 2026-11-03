@@ -99,6 +99,17 @@ namespace DaggerfallWorkshop.Utility
 
         #region Blocks & Locations
 
+#if UNITY_PSP2
+        /// <summary>
+        /// objects after one town), so the level unloads call this; a block read again comes from the baked pack (VitaBlockData).
+        /// </summary>
+        public void VitaDiscardBlocks()
+        {
+            if (blockFileReader != null)
+                blockFileReader.DiscardAllBlocks();
+        }
+#endif
+
         /// <summary>
         /// Attempts to get a Daggerfall block from BLOCKS.BSA.
         /// </summary>
@@ -285,21 +296,61 @@ namespace DaggerfallWorkshop.Utility
         /// </summary>
         private void SetupReaders()
         {
+#if UNITY_PSP2
+            // Vita: read the big world files from disk on demand instead of keeping ~77 MB of raw bytes in the managed heap
+            const FileUsage worldFileUsage = FileUsage.UseDisk;
+            var vitaWatch = System.Diagnostics.Stopwatch.StartNew();
+            var vitaLaps = new System.Text.StringBuilder();
+
+#endif
             // Try to setup Arena2-dependent content readers
             if (blockFileReader == null)
+#if UNITY_PSP2
+                blockFileReader = new BlocksFile(Path.Combine(arena2Path, BlocksFile.Filename), worldFileUsage, true);
+#else
                 blockFileReader = new BlocksFile(Path.Combine(arena2Path, BlocksFile.Filename), FileUsage.UseMemory, true);
+#endif
+#if UNITY_PSP2
+            vitaLaps.Append(" blocks ").Append(vitaWatch.ElapsedMilliseconds);   // temporary: reader setup cost (s41)
+#endif
             if (mapFileReader == null)
+#if UNITY_PSP2
+                mapFileReader = new MapsFile(Path.Combine(arena2Path, MapsFile.Filename), worldFileUsage, true);
+#else
                 mapFileReader = new MapsFile(Path.Combine(arena2Path, MapsFile.Filename), FileUsage.UseMemory, true);
+#endif
+#if UNITY_PSP2
+            vitaLaps.Append(" maps+paks ").Append(vitaWatch.ElapsedMilliseconds);   // temporary: reader setup cost (s41)
+#endif
             if (monsterFileReader == null)
                 monsterFileReader = new MonsterFile(Path.Combine(arena2Path, MonsterFile.Filename), FileUsage.UseMemory, true);
+#if UNITY_PSP2
+            vitaLaps.Append(" monster ").Append(vitaWatch.ElapsedMilliseconds);   // temporary: reader setup cost (s41)
+#endif
             if (woodsFileReader == null)
+#if UNITY_PSP2
+                woodsFileReader = new WoodsFile(Path.Combine(arena2Path, WoodsFile.Filename), worldFileUsage, true);
+#else
                 woodsFileReader = new WoodsFile(Path.Combine(arena2Path, WoodsFile.Filename), FileUsage.UseMemory, true);
+#endif
+#if UNITY_PSP2
+            vitaLaps.Append(" woods ").Append(vitaWatch.ElapsedMilliseconds);   // temporary: reader setup cost (s41)
+#endif
             if (factionFileReader == null)
                 factionFileReader = new FactionFile(GetFactionFilePath(), FileUsage.UseMemory, true);
+#if UNITY_PSP2
+            vitaLaps.Append(" faction ").Append(vitaWatch.ElapsedMilliseconds);   // temporary: reader setup cost (s41)
+#endif
             if (flatsFileReader == null)
                 flatsFileReader = new FlatsFile(Path.Combine(arena2Path, FlatsFile.Filename), FileUsage.UseMemory, true);
             if (paintFileReader == null)
                 paintFileReader = new PaintFile(Path.Combine(arena2Path, PaintFile.Filename), FileUsage.UseMemory, true);
+#if UNITY_PSP2
+            vitaLaps.Append(" flats+paint ").Append(vitaWatch.ElapsedMilliseconds);   // temporary: reader setup cost (s41)
+#endif
+#if UNITY_PSP2
+            Debug.Log("VITAREADERS ms:" + vitaLaps);   // temporary: reader setup cost (s41)
+#endif
 
             // Raise ready flag
             isReady = true;
@@ -322,6 +373,11 @@ namespace DaggerfallWorkshop.Utility
 
             mapDict = new Dictionary<int, MapSummary>();
             locationIdToMapIdDict = new Dictionary<int, int>();
+#if UNITY_PSP2
+            // Baked on the PC by DFU's own EnumerateMaps (VitaMapIndex.cs): 4.7 s of MAPS.BSA reads on hardware without it
+            if (VitaMapIndex.TryLoad(mapDict, locationIdToMapIdDict))
+                return;
+#endif
             for (int region = 0; region < mapFileReader.RegionCount; region++)
             {
                 DFRegion dfRegion = mapFileReader.GetRegion(region);

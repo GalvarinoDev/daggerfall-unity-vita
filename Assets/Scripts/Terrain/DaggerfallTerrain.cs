@@ -94,6 +94,20 @@ namespace DaggerfallWorkshop
         {
             UpdateNeighbours();
             ready = false;
+#if UNITY_PSP2
+        }
+
+        void OnDestroy()
+        {
+            // Runtime-made and owned by this terrain (usually pooled forever, but destroyed when the world is cleared)
+            if (tileMapTexture)
+                Destroy(tileMapTexture);
+            if (terrainMaterial)
+                Destroy(terrainMaterial);
+            Terrain terrain = GetComponent<Terrain>();
+            if (terrain && terrain.terrainData)
+                Destroy(terrain.terrainData);
+#endif
         }
 
         /// <summary>
@@ -283,8 +297,16 @@ namespace DaggerfallWorkshop
                 terrainData.heightmapResolution = heightmapDimension;
                 terrainData.size = new Vector3(terrainSize, dfUnity.TerrainSampler.MaxTerrainHeight, terrainSize);
                 terrainData.SetDetailResolution(detailResolution, resolutionPerPatch);
+#if UNITY_PSP2
+                // The Vita terrain draws with its own tilemap material (materialType Custom below) and pushes the basemap 10 km away,
+                // so the splat map and basemap are never shown: the smallest sizes Unity allows. 129 each cost 46 ms per new terrain
+                // object in play plus their memory.
+                terrainData.alphamapResolution = 16;
+                terrainData.baseMapResolution = 16;
+#else
                 terrainData.alphamapResolution = detailResolution;
                 terrainData.baseMapResolution = detailResolution;
+#endif
 
                 // Apply terrain data
                 terrain.terrainData = terrainData;
@@ -300,6 +322,12 @@ namespace DaggerfallWorkshop
             // Promote material
             var terrainMaterialData = new TerrainMaterialData(terrainMaterial, terrain.terrainData, tileMapTexture, currentWorldClimate);
             dfUnity.TerrainMaterialProvider.PromoteMaterial(this, terrainMaterialData);
+#if UNITY_PSP2
+            // Unity 2017 draws a terrain with materialTemplate only when materialType is Custom (2019 dropped the property, so upstream never
+            // sets it); otherwise it uses the built-in terrain shader with default white splat textures: the plain white/grey ground seen
+            // in every city
+            terrain.materialType = Terrain.MaterialType.Custom;
+#endif
             terrain.materialTemplate = terrainMaterial;
 
             // Promote heights

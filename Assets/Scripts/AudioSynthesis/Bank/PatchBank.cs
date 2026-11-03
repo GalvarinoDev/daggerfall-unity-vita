@@ -86,6 +86,9 @@ namespace DaggerfallWorkshop.AudioSynthesis.Bank
                 case ".sf2":
                     bankName = "SoundFont";
                     LoadSf2(bankFile.OpenResourceForRead());
+#if UNITY_PSP2
+                    VitaMemory.Mark("SoundFont");
+#endif
                     break;
                 default:
                     throw new Exception("Invalid bank resource was provided. An extension must be included in the resource name.");
@@ -261,6 +264,9 @@ namespace DaggerfallWorkshop.AudioSynthesis.Bank
         }
         private void LoadSf2(Stream stream)
         {
+#if UNITY_PSP2
+            VitaMemory.Mark("before SoundFont");
+#endif
             SoundFont sf = new SoundFont(stream);
             bankName = sf.Info.BankName;
             comment = sf.Info.Comments;

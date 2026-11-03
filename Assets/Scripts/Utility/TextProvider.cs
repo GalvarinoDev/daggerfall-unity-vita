@@ -10,14 +10,18 @@
 //
 
 using UnityEngine;
+#if !UNITY_PSP2
 using UnityEngine.Localization;
 using UnityEngine.Localization.Settings;
+#endif
 using System.Collections.Generic;
 using DaggerfallConnect;
 using DaggerfallConnect.Arena2;
 using DaggerfallWorkshop.Game.Items;
 using DaggerfallWorkshop.Localization;
+#if !UNITY_PSP2
 using UnityEngine.Localization.Tables;
+#endif
 using DaggerfallWorkshop.Game;
 using DaggerfallWorkshop.Game.Entity;
 
@@ -158,6 +162,52 @@ namespace DaggerfallWorkshop.Utility
     {
         public bool localizedStringDebug = false;
 
+#if UNITY_PSP2
+        // Vita: no Unity Localization package, English only. Each collection is loaded on first use from the
+        // master CSV shipped in StreamingAssets/Text, then StreamingAssets/Text/<collection>.csv patches it
+        // (the same patch files StringTablePatcher applies on other platforms).
+        const string masterCSVFolder = "Master Localization CSV Files";
+        static readonly Dictionary<string, VitaStringTable> vitaStringTables = new Dictionary<string, VitaStringTable>();
+
+        /// <summary>
+        /// Gets the English string table for a collection, loading it on first use. Writable for runtime tables (e.g. Internal_Quests).
+        /// </summary>
+        public static VitaStringTable GetVitaStringTable(string collection)
+        {
+            VitaStringTable table;
+            if (vitaStringTables.TryGetValue(collection, out table))
+                return table;
+
+#if !UNITY_EDITOR
+            // Baked by VitaTextTableBaker (VitaTextTables, item 12): the same merged table without parsing CSV text
+            table = VitaTextTables.Read(collection);
+#endif
+            if (table == null)
+                table = new VitaStringTable(LoadVitaCsvTable(collection));
+            vitaStringTables.Add(collection, table);
+            return table;
+        }
+
+        /// <summary>
+        /// A collection's table parsed from its CSVs (master, Vita additions, patch): the baker's source and the fallback without a bake.
+        /// </summary>
+        public static Dictionary<string, string> LoadVitaCsvTable(string collection)
+        {
+            var table = new Dictionary<string, string>();
+            // Vita/<collection>.csv: keys upstream's master CSVs lack but its string tables have (Advanced settings threw on
+            // meleeAttackDetectionModes and never finished its setup: no close button, repeated tabs)
+            foreach (string file in new string[] { System.IO.Path.Combine(masterCSVFolder, collection), System.IO.Path.Combine("Vita", collection), collection })
+            {
+                var rows = StringTableCSVParser.Load(file);
+                if (rows == null)
+                    continue;
+                foreach (var row in rows)
+                    table[row.Key] = row.Value;
+            }
+            return table;
+        }
+
+#endif
         TextFile rscFile = new TextFile();
 
         public TextProvider()
@@ -294,12 +344,20 @@ namespace DaggerfallWorkshop.Utility
         {
             result = string.Empty;
             if (string.IsNullOrEmpty(collection))
+#if !UNITY_PSP2
             {
                 if (localizedStringDebug)
                     Debug.Log("Collection name is null or empty.");
+#endif
                 return false;
+#if !UNITY_PSP2
             }
+#endif
 
+#if UNITY_PSP2
+            if (GetVitaStringTable(collection).TryGetValue(id, out result))
+                return true;
+#else
             StringTable table = null;
             var sd = LocalizationSettings.StringDatabase;
             var op = sd.GetTableAsync(collection);
@@ -308,7 +366,13 @@ namespace DaggerfallWorkshop.Utility
                 table = op.Result;
             else
                 Debug.LogErrorFormat("GetLocalizedString() failed on collection='{0}' id='{1}'", collection, id);
+#endif
 
+#if UNITY_PSP2
+            if (localizedStringDebug)
+                Debug.LogFormat("String '{0}' not found in collection '{1}'", id, collection);
+            result = string.Empty;
+#else
             if (table != null)
             {
                 var entry = table.GetEntry(id);
@@ -326,6 +390,7 @@ namespace DaggerfallWorkshop.Utility
                     Debug.LogFormat("StringTable collection '{0}' not found", collection);
             }
 
+#endif
             return false;
         }
 

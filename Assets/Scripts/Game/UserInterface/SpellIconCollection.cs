@@ -142,7 +142,11 @@ namespace DaggerfallWorkshop.Game.UserInterface
             if (pack.iconCount == 0 || pack.icons == null || icon.index < 0 || icon.index >= pack.iconCount)
                 return null;
             else
+#if UNITY_PSP2
+                return VitaGetPackIcon(pack, icon.index);
+#else
                 return pack.icons[icon.index].texture;
+#endif
         }
 
         /// <summary>
@@ -235,6 +239,10 @@ namespace DaggerfallWorkshop.Game.UserInterface
                 // Read each atlas found and its metadata
                 foreach (string path in atlasPaths)
                 {
+#if UNITY_PSP2
+                    if (VitaTryLoadBakedPack(path, sourcePath))
+                        continue;
+#endif
                     // Get source atlas
                     Texture2D atlasTexture = LoadAtlasTextureFromPNG(path);
                     if (atlasTexture == null)
@@ -287,6 +295,54 @@ namespace DaggerfallWorkshop.Game.UserInterface
                 }
             }
         }
+
+#if UNITY_PSP2
+        // Baked packs whose icons are loaded on first use (VitaGetPackIcon)
+        readonly Dictionary<SpellIconPack, string> vitaBakedPacks = new Dictionary<SpellIconPack, string>();
+
+        // Icons baked on the PC by vita/tools/spellicons.py (raw RGBA32, cut as TryLoadPackIcons cuts them): decoding the 2560x512 test pack PNG
+        // made the first spellbook open take 1.3 s and left its 5 MB atlas texture unowned. False = no baked file: upstream path.
+        // Uploading all 69 128x128 icons up front still cost ~0.65 s of the first spellbook open and 4.5 MB of textures, though only
+        // spells that use a pack icon and the icon picker ever show them: now each icon loads on first use.
+        bool VitaTryLoadBakedPack(string atlasPath, string sourcePath)
+        {
+            string packKey = Path.GetFileNameWithoutExtension(atlasPath);
+            string metadataPath = Path.Combine(sourcePath, packKey + ".txt");
+            string bakedPath = Path.Combine(Path.Combine(Application.streamingAssetsPath, "VitaNative"), "spellicons-" + packKey + ".bin");
+            if (!File.Exists(bakedPath) || !File.Exists(metadataPath))
+                return false;
+            SpellIconPack pack = ReadMetadata(metadataPath);
+            using (BinaryReader reader = new BinaryReader(File.OpenRead(bakedPath)))
+            {
+                int dim = reader.ReadInt32(), count = reader.ReadInt32();
+                if (pack == null || pack.icons == null || count != pack.iconCount || count > pack.icons.Length ||
+                    reader.BaseStream.Length != 8 + (long)count * dim * dim * 4)
+                    return false;
+            }
+            vitaBakedPacks[pack] = bakedPath;
+            spellIconPacks.Add(packKey, pack);
+            return true;
+        }
+
+        // Pack icon texture, read from the baked pack on first use (index checked by the callers)
+        public Texture2D VitaGetPackIcon(SpellIconPack pack, int index)
+        {
+            Texture2D iconTexture = pack.icons[index].texture;
+            string bakedPath;
+            if (iconTexture != null || !vitaBakedPacks.TryGetValue(pack, out bakedPath))
+                return iconTexture;
+            using (BinaryReader reader = new BinaryReader(File.OpenRead(bakedPath)))
+            {
+                int dim = reader.ReadInt32();
+                reader.BaseStream.Position = 8 + (long)index * dim * dim * 4;
+                iconTexture = new Texture2D(dim, dim, TextureFormat.RGBA32, false);
+                iconTexture.LoadRawTextureData(reader.ReadBytes(dim * dim * 4));
+                iconTexture.Apply(false, true);
+                iconTexture.filterMode = pack.filterMode;
+            }
+            return pack.icons[index].texture = iconTexture;
+        }
+#endif
 
         Texture2D LoadAtlasTextureFromPNG(string path)
         {
@@ -397,7 +453,11 @@ namespace DaggerfallWorkshop.Game.UserInterface
             spellIcons.Clear();
 
             // Get source atlas
+#if UNITY_PSP2
+            Texture2D spellIconAtlas = DaggerfallUI.GetTextureFromImg(spellIconsFile, TextureFormat.ARGB32, false);   // read on the CPU below
+#else
             Texture2D spellIconAtlas = DaggerfallUI.GetTextureFromImg(spellIconsFile);
+#endif
             if (spellIconAtlas == null)
             {
                 Debug.LogWarning("SpellIconCollection: Could not load spell icons atlas texture. Arena2 path might not be set yet.");
@@ -420,8 +480,13 @@ namespace DaggerfallWorkshop.Game.UserInterface
             for (int i = 0; i < SpellIconCount; i++)
             {
                 // Extract texture
+#if UNITY_PSP2
+                // The Vita player has no Graphics.CopyTexture (copyTextureSupport None): every classic spell icon came out blank (spellbook
+                Texture2D iconTexture = ImageReader.GetSubTexture(spellIconAtlas, new Rect(srcX, spellIconAtlas.height - dim - srcY, dim, dim));
+#else
                 Texture2D iconTexture = new Texture2D(dim, dim, spellIconAtlas.format, false);
                 Graphics.CopyTexture(spellIconAtlas, 0, 0, srcX, srcY, dim, dim, iconTexture, 0, 0, 0, 0);
+#endif
                 iconTexture.filterMode = DaggerfallUnity.Instance.MaterialReader.MainFilterMode;
                 spellIcons.Add(iconTexture);
 

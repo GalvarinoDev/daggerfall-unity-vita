@@ -97,6 +97,15 @@ namespace DaggerfallConnect.Utility
                 results.FolderValid = true;
 
             // Get files
+#if UNITY_PSP2
+            // Listing ARENA2 (~1440 entries) is slow on Vita: the seven listings below took ~7 s on Unity 2017 and ~52 s on 2018
+            //. Stat the known names instead; same counts (472 textures in TEXTURE.000-511, 17 videos).
+            // Each stat in that folder still costs ~90 ms (all ~530: 46.6 s of every boot, menunav7), so the Vita assumes the files are there
+            //. A missing file then fails when it is first read instead of in the setup wizard.
+            string[] textures = new string[minTextureCount];
+            string[] models = new string[1], blocks = new string[1], maps = new string[1], sounds = new string[1], woods = new string[1];
+            string[] videos = new string[minVidCount];
+#else
             string[] textures = Directory.GetFiles(path, textureSearchPattern);
             string[] models = Directory.GetFiles(path, Arch3dFile.Filename);
             string[] blocks = Directory.GetFiles(path, BlocksFile.Filename);
@@ -104,6 +113,7 @@ namespace DaggerfallConnect.Utility
             string[] sounds = Directory.GetFiles(path, SndFile.Filename);
             string[] woods = Directory.GetFiles(path, WoodsFile.Filename);
             string[] videos = Directory.GetFiles(path, vidSearchPattern);
+#endif
 
             // Validate texture count
             if (textures.Length >= minTextureCount)

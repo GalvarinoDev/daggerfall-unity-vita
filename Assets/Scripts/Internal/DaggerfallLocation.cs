@@ -148,6 +148,21 @@ namespace DaggerfallWorkshop
             ApplyClimateSettings();
         }
 
+#if UNITY_PSP2
+        /// <summary>
+        /// Vita: applies the current season and window style now instead of on the next Update, so VitaCityMerge builds its texture atlas
+        /// from the textures the town will show (a later season swap would refill the atlas).
+        /// </summary>
+        public void VitaApplyTimeAndSpace()
+        {
+            if (!ReadyCheck() || !dfUnity.Option_AutomateTextureSwaps)
+                return;
+            ApplyTimeAndSpace();
+            lastSeason = dfUnity.WorldTime.Now.SeasonValue;
+            lastCityLightsFlag = dfUnity.WorldTime.Now.IsCityLightsOn;
+        }
+
+#endif
         public void SetLocation(DFLocation location, bool performLayout = true)
         {
             if (!ReadyCheck())

@@ -144,7 +144,11 @@ namespace DaggerfallWorkshop.Game
 
                 float yPos = 0;
 
+#if UNITY_PSP2
+                System.Action<TextLabel, string> initLabel = (label, initialValue) =>
+#else
                 void initLabel(TextLabel label, string initialValue)
+#endif
                 {
                     label.Text = initialValue;
                     label.Position = new Vector2(0, yPos);
@@ -152,7 +156,11 @@ namespace DaggerfallWorkshop.Game
                     Components.Add(label);
 
                     yPos += 10;
+#if UNITY_PSP2
+                };
+#else
                 }
+#endif
 
                 initLabel(releasedFromCeilingLabel, $"releasedFromCeiling: {ClimbingMotor.releasedFromCeiling}");
                 initLabel(overrideSkillCheckLabel, $"overrideSkillCheck: {ClimbingMotor.overrideSkillCheck}");
@@ -248,7 +256,12 @@ namespace DaggerfallWorkshop.Game
                 }
                 else
                 {
+#if UNITY_PSP2
+                    int value;
+                    if (!int.TryParse(args[0], out value))
+#else
                     if (!int.TryParse(args[0], out int value))
+#endif
                     {
                         return "Invalid argument '" + args[0] + "': expected '0' or '1'";
                     }

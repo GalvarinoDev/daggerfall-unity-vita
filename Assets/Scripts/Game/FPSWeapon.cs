@@ -41,6 +41,9 @@ namespace DaggerfallWorkshop.Game
             public Texture2D AtlasTexture { get; set; }
             public Rect[] WeaponRects { get; set; }
             public RecordIndex[] WeaponIndices { get; set; }
+#if UNITY_PSP2
+            public Texture2D PaletteTexture { get; set; }   // set: AtlasTexture holds palette indices (VitaWeaponPack)
+#endif
         }
 
         class CustomWeaponAnimation
@@ -147,9 +150,17 @@ namespace DaggerfallWorkshop.Game
             // Weapon is forced to offset when using docked HUD else it would appear underneath HUD
             // This helps user avoid such misconfiguration or it might be interpreted as a bug
             weaponOffsetHeight = 0;
+#if UNITY_PSP2
+            // The Vita shows the large HUD only in Select's full mode (DaggerfallHUD): lift the weapon only while it shows, or the arm
+            // floats above the bottom edge and only the blade is seen
+            if (DaggerfallUI.Instance.DaggerfallHUD != null &&
+                DaggerfallUI.Instance.DaggerfallHUD.LargeHUD.Enabled &&
+                (DaggerfallUnity.Settings.LargeHUDUndockedOffsetWeapon || DaggerfallUnity.Settings.LargeHUDDocked))
+#else
             if (DaggerfallUI.Instance.DaggerfallHUD != null &&
                 DaggerfallUnity.Settings.LargeHUD &&
                 (DaggerfallUnity.Settings.LargeHUDUndockedOffsetWeapon || DaggerfallUnity.Settings.LargeHUDDocked))
+#endif
             {
                 weaponOffsetHeight = (int)DaggerfallUI.Instance.DaggerfallHUD.LargeHUD.ScreenHeight;
             }
@@ -178,8 +189,15 @@ namespace DaggerfallWorkshop.Game
             if (Event.current.type.Equals(EventType.Repaint) && ShowWeapon)
             {
                 // Draw weapon texture behind other HUD elements
+#if UNITY_PSP2
+                if (!curCustomTexture && weaponAtlas.PaletteTexture)
+                    VitaWeaponPack.Draw(GetWeaponRect(), weaponAtlas.AtlasTexture, weaponAtlas.PaletteTexture, curAnimRect, Tint);
+                else
+                    DaggerfallUI.DrawTextureWithTexCoords(GetWeaponRect(), curCustomTexture ? curCustomTexture : weaponAtlas.AtlasTexture, curAnimRect, true, Tint);
+#else
                 Texture2D tex = curCustomTexture ? curCustomTexture : weaponAtlas.AtlasTexture;
                 DaggerfallUI.DrawTextureWithTexCoords(GetWeaponRect(), tex, curAnimRect, true, Tint);
+#endif
             }
         }
 
@@ -330,7 +348,12 @@ namespace DaggerfallWorkshop.Game
             var fileName = WeaponBasics.GetWeaponFilename(weaponType);
             if (GetCachedWeaponAtlas(fileName, metalType) == null)
             {
+#if UNITY_PSP2
+                CustomWeaponAnimation animation;
+                CacheWeaponAtlas(GetWeaponTextureAtlas(fileName, metalType, 2, 2, out animation, true), isRightHand);
+#else
                 CacheWeaponAtlas(GetWeaponTextureAtlas(fileName, metalType, 2, 2, out var animation, true), isRightHand);
+#endif
                 CacheCustomWeaponAnimation(animation, isRightHand);
             }
         }
@@ -491,6 +514,9 @@ namespace DaggerfallWorkshop.Game
 
         IEnumerator AnimateWeapon()
         {
+#if UNITY_PSP2
+            vitaNextTick = Time.time;
+#endif
             while (true)
             {
                 if (weaponAnims != null && ShowWeapon)
@@ -542,9 +568,35 @@ namespace DaggerfallWorkshop.Game
                         UpdateWeapon();
                 }
 
+#if UNITY_PSP2
+                // WaitForSeconds resumes on the first frame after the time is up, so every step was late by up to a frame: at Vita frame
+                // rates swings ran ~10-75% slower than on PC (worst at high Speed, where a step is 46 ms). Time each step from the previous
+                // step's due time instead, still at most one step per frame (WeaponManager polls for the hit frame each frame); a hitch
+                // or pause longer than a step drops the debt rather than rushing the frames after it.
+                if (VitaUpstreamTick)
+                {
+                    yield return new WaitForSeconds(animTickTime);
+                    vitaNextTick = Time.time;
+                    continue;
+                }
+                vitaNextTick += animTickTime;
+                if (Time.time - vitaNextTick > animTickTime)
+                    vitaNextTick = Time.time;
+                do
+                    yield return null;
+                while (Time.time < vitaNextTick);
+#else
                 yield return new WaitForSeconds(animTickTime);
+#endif
             }
         }
+
+#if UNITY_PSP2
+        float vitaNextTick;
+        public static bool VitaUpstreamTick;
+        public float VitaAnimTickTime { get { return animTickTime; } }
+        public int VitaFrameCount(WeaponStates state) { return weaponAnims != null ? weaponAnims[(int)state].NumFrames : 0; }
+#endif
 
         private float GetAnimTickTime()
         {
@@ -563,7 +615,14 @@ namespace DaggerfallWorkshop.Game
             // Load the weapon texture atlas
             // Texture is dilated into a transparent coloured border to remove dark edges when filtered
             // Important to use returned UV rects when drawing to get right dimensions
+#if UNITY_PSP2
+            CustomWeaponAnimation customAnimation;
+            WeaponAtlas oldAtlas = weaponAtlas;
+            weaponAtlas = GetWeaponTextureAtlas(filename, MetalType, 2, 2, out customAnimation, true);
+            VitaReleaseAtlas(oldAtlas);
+#else
             weaponAtlas = GetWeaponTextureAtlas(filename, MetalType, 2, 2, out var customAnimation, true);
+#endif
             if (customAnimation != null)
                 customTextures = customAnimation.Textures;
             else
@@ -607,24 +666,48 @@ namespace DaggerfallWorkshop.Game
 
             // Load texture file
             cifFile.Load(Path.Combine(dfUnity.Arena2Path, filename), FileUsage.UseMemory, true);
+#if UNITY_PSP2
+            // Baked index atlas + metal palette (VitaWeaponPack) instead of decoding, tinting and packing ARGB32 frames
+            Texture2D packedTexture = null;
+            Rect[] packedRects = null;
+            if (cachedAtlas == null)
+            {
+                int frameCount = 0;
+                for (int record = 0; record < cifFile.RecordCount; record++)
+                    frameCount += cifFile.GetFrameCount(record);
+                packedTexture = VitaWeaponPack.Load(filename, frameCount, out packedRects);
+            }
+#endif
 
             // Read every image in archive
             Rect rect;
             List<Texture2D> textures = new List<Texture2D>();
             List<RecordIndex> indices = new List<RecordIndex>();
+#if UNITY_PSP2
+            int startIndex = 0;   // textures stays empty with the baked pack, so count frames instead of textures.Count
+#endif
             for (int record = 0; record < cifFile.RecordCount; record++)
             {
                 int frames = cifFile.GetFrameCount(record);
                 DFSize size = cifFile.GetSize(record);
                 RecordIndex ri = new RecordIndex()
                 {
+#if UNITY_PSP2
+                    startIndex = startIndex,
+#else
                     startIndex = textures.Count,
+#endif
                     frameCount = frames,
                     width = size.Width,
                     height = size.Height,
                 };
                 indices.Add(ri);
+#if UNITY_PSP2
+                startIndex += frames;
+                if (cachedAtlas == null && packedTexture == null) // Load atlas if not already cached.
+#else
                 if (cachedAtlas == null) // Load atlas if not already cached.
+#endif
                 {
                     for (int frame = 0; frame < frames; frame++)
                         textures.Add(GetWeaponTexture2D(filename, record, frame, metalType, out rect, border, dilate));
@@ -657,10 +740,35 @@ namespace DaggerfallWorkshop.Game
                 customWeaponAnimation = new CustomWeaponAnimation() { FileName = filename, MetalType = metalType, Textures = modTextures };
             if (cachedAtlas != null)
                 return cachedAtlas;
+#if UNITY_PSP2
+            if (packedTexture != null)
+            {
+                return new WeaponAtlas()
+                {
+                    FileName = filename,
+                    MetalType = metalType,
+                    AtlasTexture = packedTexture,
+                    PaletteTexture = VitaWeaponPack.Palette(cifFile.Palette, metalType),
+                    WeaponRects = packedRects,
+                    WeaponIndices = indices.ToArray()
+                };
+            }
+#endif
 
             // Pack textures into atlas
+#if UNITY_PSP2
+            // PackTextures resizes the atlas to what the frames need; a 2048x2048 ARGB32 start is a 16 MB block that failed to allocate on
+            // the Vita when a weapon was readied after the inventory
+            Texture2D atlasTexture = new Texture2D(4, 4, TextureFormat.ARGB32, false);
+#else
             Texture2D atlasTexture = new Texture2D(2048, 2048, TextureFormat.ARGB32, false);
+#endif
             Rect[] rectsOut = atlasTexture.PackTextures(textures.ToArray(), padding, 2048);
+#if UNITY_PSP2
+            // The frames were only atlas sources and nothing else holds them: free them (each was a leaked texture per weapon change)
+            foreach (Texture2D texture in textures)
+                Destroy(texture);
+#endif
             RecordIndex[] indicesOut = indices.ToArray();
 
             // Shrink UV rect to compensate for internal border
@@ -737,8 +845,57 @@ namespace DaggerfallWorkshop.Game
 
         private void CacheWeaponAtlas(WeaponAtlas weaponAtlas, bool isRightHand)
         {
+#if UNITY_PSP2
+            WeaponAtlas old = weaponAtlasCache[isRightHand ? 0 : 1];
             weaponAtlasCache[isRightHand ? 0 : 1] = weaponAtlas;
+            VitaReleaseAtlas(old);
+#else
+            weaponAtlasCache[isRightHand ? 0 : 1] = weaponAtlas;
+#endif
         }
+
+#if UNITY_PSP2
+        // An atlas texture is owned by this weapon while the current atlas or a cache slot holds it; replaced ones were never destroyed
+        void VitaReleaseAtlas(WeaponAtlas atlas)
+        {
+            if (atlas == null || atlas == weaponAtlas || atlas == weaponAtlasCache[0] || atlas == weaponAtlasCache[1] || !atlas.AtlasTexture)
+                return;
+            Destroy(atlas.AtlasTexture);
+        }
+
+        /// <summary>Rebuilds the current atlas and drops the cached ones.</summary>
+        public void VitaFlushAtlases()
+        {
+            WeaponAtlas right = weaponAtlasCache[0], left = weaponAtlasCache[1];
+            weaponAtlasCache[0] = weaponAtlasCache[1] = null;
+            VitaReleaseAtlas(right);
+            VitaReleaseAtlas(left);
+            if (weaponAtlas != null)
+            {
+                LoadWeaponAtlas();
+                UpdateWeapon();   // frame rects belong to the atlas layout
+            }
+        }
+
+        public int VitaShowFrame(WeaponStates state, int frame)
+        {
+            if (weaponAnims == null)
+                return 0;
+            weaponState = state;
+            currentFrame = frame;
+            UpdateWeapon();
+            return weaponAnims[(int)state].NumFrames;
+        }
+
+        public string VitaAtlasInfo()
+        {
+            if (weaponAtlas == null || !weaponAtlas.AtlasTexture)
+                return "no atlas";
+            Texture2D t = weaponAtlas.AtlasTexture;
+            return string.Format("{0} {1} {2}x{3} {4} palette={5} rect={6} custom={7} tint={8} weaponRect={9}", weaponAtlas.FileName, t.format, t.width, t.height,
+                t.filterMode, weaponAtlas.PaletteTexture != null, curAnimRect, curCustomTexture != null, Tint, GetWeaponRect());
+        }
+#endif
 
         private CustomWeaponAnimation GetCachedCustomWeaponAnimation(string fileName, MetalTypes metalType)
         {

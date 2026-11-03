@@ -82,7 +82,11 @@ namespace DaggerfallWorkshop.Game
         /// </summary>
         /// <param name="location">Source location data.</param>
         /// <param name="blocks">Exterior blocks.</param>
+#if UNITY_PSP2
+        public void SetLocation(DFLocation location, out DFBlock[] blocks)
+#else
         public void SetLocation(in DFLocation location, out DFBlock[] blocks)
+#endif
         {
             // Clear existing buildings
             buildingDict.Clear();

@@ -2772,11 +2772,19 @@ namespace DaggerfallWorkshop.Game
             {
                 for (int x = 0; x < width; ++x, ++index)
                 {
+#if UNITY_PSP2
+                    DFBlock block = blocks[index];
+#else
                     ref readonly DFBlock block = ref blocks[index];
+#endif
                     BuildingSummary[] buildingsInBlock = RMBLayout.GetBuildingData(block, x, y);
                     for (int i = 0; i < buildingsInBlock.Length; ++i)
                     {
+#if UNITY_PSP2
+                        BuildingSummary buildingSummary = buildingsInBlock[i];
+#else
                         ref readonly BuildingSummary buildingSummary = ref buildingsInBlock[i];
+#endif
                         try
                         {
                             BuildingInfo item;
@@ -2806,10 +2814,18 @@ namespace DaggerfallWorkshop.Game
                         // Populate potential questors in this building
                         if (populateQuestors)
                         {
+#if UNITY_PSP2
+                            DFBlock.RmbBlockPeopleRecord[] buildingNpcs = block.RmbBlock.SubRecords[i].Interior.BlockPeopleRecords;
+#else
                             ref readonly DFBlock.RmbBlockPeopleRecord[] buildingNpcs = ref block.RmbBlock.SubRecords[i].Interior.BlockPeopleRecords;
+#endif
                             for (int p = 0; p < buildingNpcs.Length; ++p)
                             {
+#if UNITY_PSP2
+                                DFBlock.RmbBlockPeopleRecord npc = buildingNpcs[p];
+#else
                                 ref readonly DFBlock.RmbBlockPeopleRecord npc = ref buildingNpcs[p];
+#endif
 
                                 FactionFile.FactionData factionData;
                                 GetStaticNPCFactionData(npc.FactionID, buildingSummary.BuildingType, out factionData);

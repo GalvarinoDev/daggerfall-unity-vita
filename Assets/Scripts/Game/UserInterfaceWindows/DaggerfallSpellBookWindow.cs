@@ -259,7 +259,11 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             {
                 // Get spell costs
                 // Costs can change based on player skills and stats so must be calculated each time
+#if UNITY_PSP2
+                int spellPointCost = FormulaHelper.CalculateTotalEffectCosts(spell.Effects, spell.TargetType, null, spell.MinimumCastingCost).spellPointCost;
+#else
                 (int _, int spellPointCost) = FormulaHelper.CalculateTotalEffectCosts(spell.Effects, spell.TargetType, null, spell.MinimumCastingCost);
+#endif
 
                 // Lycanthropy is a free spell, even though it shows a cost in classic
                 // Setting cost to 0 so it displays correctly in spellbook
@@ -518,7 +522,11 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
                 spellSettings = offeredSpells[spellsListBox.SelectedIndex];
 
                 // The price shown in buy mode is the player casting cost * 4                
+#if UNITY_PSP2
+                int spellPointCost = FormulaHelper.CalculateTotalEffectCosts(spellSettings.Effects, spellSettings.TargetType).spellPointCost;
+#else
                 (int _, int spellPointCost) = FormulaHelper.CalculateTotalEffectCosts(spellSettings.Effects, spellSettings.TargetType);
+#endif
                 presentedCost = spellPointCost * 4;
 
                 // Presented cost is halved on Witches Festival holiday

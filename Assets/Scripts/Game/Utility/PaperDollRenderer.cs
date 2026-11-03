@@ -81,6 +81,14 @@ namespace DaggerfallWorkshop.Game.Utility
             get { return paperDollTexture; }
         }
 
+#if UNITY_PSP2
+        /// <summary>The render itself: PaperDoll draws it directly on the Vita (no PaperDollTexture copy).</summary>
+        public RenderTexture VitaTarget
+        {
+            get { return target; }
+        }
+#endif
+
         #endregion
 
         #region Constructors
@@ -128,9 +136,16 @@ namespace DaggerfallWorkshop.Game.Utility
             // Create scaled render texture
             target = new RenderTexture((int)(paperDollWidth * scale), (int)(paperDollHeight * scale), 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear);
 
+#if UNITY_PSP2
+            // No CPU copy on the Vita: each Refresh read the render back (ReadPixels waits for the GPU) and uploaded it again (inventory opens
+            // and equip changes), and the copy was a second texture of the same size. PaperDoll draws the render texture itself
+            target.filterMode = DaggerfallUI.Instance.GlobalFilterMode;
+            target.wrapMode = TextureWrapMode.Clamp;
+#else
             // Create output texture
             paperDollTexture = new Texture2D(target.width, target.height, TextureFormat.ARGB32, false, true);
             paperDollTexture.filterMode = DaggerfallUI.Instance.GlobalFilterMode;
+#endif
         }
 
         /// <summary>
@@ -177,9 +192,11 @@ namespace DaggerfallWorkshop.Game.Utility
                     BlitItems(playerEntity);
             }
 
+#if !UNITY_PSP2
             // Copy render to new output
             paperDollTexture.ReadPixels(new Rect(0, 0, target.width, target.height), 0, 0);
             paperDollTexture.Apply();
+#endif
 
             // Switch back to previous render target
             GL.PopMatrix();
@@ -309,11 +326,33 @@ namespace DaggerfallWorkshop.Game.Utility
             {
                 default:
                 case Genders.Male:
+#if UNITY_PSP2
+                    return VitaBodyImage(entity.RaceTemplate.PaperDollHeadsMale, entity.FaceIndex);
+#else
                     return ImageReader.GetImageData(entity.RaceTemplate.PaperDollHeadsMale, entity.FaceIndex, 0, true);
+#endif
                 case Genders.Female:
+#if UNITY_PSP2
+                    return VitaBodyImage(entity.RaceTemplate.PaperDollHeadsFemale, entity.FaceIndex);
+#else
                     return ImageReader.GetImageData(entity.RaceTemplate.PaperDollHeadsFemale, entity.FaceIndex, 0, true);
+#endif
             }
         }
+
+#if UNITY_PSP2
+        // decoded 3 of them into new textures that nothing freed. The paper doll only draws them.
+        static readonly Dictionary<string, ImageData> vitaBodyImages = new Dictionary<string, ImageData>();
+
+        static ImageData VitaBodyImage(string filename, int record)
+        {
+            string key = filename + "/" + record;
+            ImageData data;
+            if (!vitaBodyImages.TryGetValue(key, out data) || data.texture == null)
+                vitaBodyImages[key] = data = ImageReader.GetImageData(filename, record, 0, true);
+            return data;
+        }
+#endif
 
         void BlitBody(PlayerEntity entity)
         {
@@ -323,13 +362,23 @@ namespace DaggerfallWorkshop.Game.Utility
             ImageData head = GetHeadImageData(entity);
             if (entity.Gender == Genders.Male)
             {
+#if UNITY_PSP2
+                nudeBody = VitaBodyImage(entity.RaceTemplate.PaperDollBodyMaleUnclothed, 0);
+                clothedBody = VitaBodyImage(entity.RaceTemplate.PaperDollBodyMaleClothed, 0);
+#else
                 nudeBody = ImageReader.GetImageData(entity.RaceTemplate.PaperDollBodyMaleUnclothed, 0, 0, true);
                 clothedBody = ImageReader.GetImageData(entity.RaceTemplate.PaperDollBodyMaleClothed, 0, 0, true);
+#endif
             }
             else if (entity.Gender == Genders.Female)
             {
+#if UNITY_PSP2
+                nudeBody = VitaBodyImage(entity.RaceTemplate.PaperDollBodyFemaleUnclothed, 0);
+                clothedBody = VitaBodyImage(entity.RaceTemplate.PaperDollBodyFemaleClothed, 0);
+#else
                 nudeBody = ImageReader.GetImageData(entity.RaceTemplate.PaperDollBodyFemaleUnclothed, 0, 0, true);
                 clothedBody = ImageReader.GetImageData(entity.RaceTemplate.PaperDollBodyFemaleClothed, 0, 0, true);
+#endif
             }
             else
             {

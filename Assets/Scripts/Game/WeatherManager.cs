@@ -13,7 +13,9 @@ using DaggerfallWorkshop.Game.Serialization;
 using DaggerfallWorkshop.Game.Weather;
 using DaggerfallWorkshop.Utility;
 using UnityEngine;
+#if !UNITY_PSP2
 using UnityEngine.Rendering.PostProcessing;
+#endif
 using DaggerfallConnect;
 using DaggerfallConnect.Arena2;
 
@@ -90,7 +92,9 @@ namespace DaggerfallWorkshop.Game
         DFLocation.ClimateBaseType lastRespawnClimate = DFLocation.ClimateBaseType.None;
 
         // used to set post processing fog settings (excludeSkybox setting)
+#if !UNITY_PSP2
         private PostProcessLayer postProcessLayer;
+#endif
 
         public bool IsRaining { get; private set; }
 
@@ -130,11 +134,13 @@ namespace DaggerfallWorkshop.Game
             _dfUnity = DaggerfallUnity.Instance;
             _weatherTable = WeatherTable.ParseJsonTable();
 
+#if !UNITY_PSP2
             postProcessLayer = Camera.main.GetComponent<PostProcessLayer>();
             if (postProcessLayer != null)
             {
                 postProcessLayer.fog.excludeSkybox = true;
             }
+#endif
             
             if (DaggerfallUnity.Settings.AssetInjection)
                 AddWindZone();
@@ -185,6 +191,22 @@ namespace DaggerfallWorkshop.Game
                 RenderSettings.fogColor = Color.black;
             }
 
+#if UNITY_PSP2
+            // Vita: outdoors, fog at least ~90% thick by VitaFogDistance so the town cutoff (VitaCulling) fades out instead of popping.
+            // Thicker weather fog is kept; currentOutdoorFogSettings keeps the weather's own values.
+            int fogDistance = DaggerfallUnity.Settings.VitaFogDistance;
+            const float thick = 1f;
+            if (!isInteriorOrDungeonFog && fogDistance > 0 && thick > 0)
+            {
+                if (fogSettings.fogMode == FogMode.Linear)
+                {
+                    fogSettings.endDistance = Mathf.Min(fogSettings.endDistance, fogDistance / thick);
+                    fogSettings.startDistance = fogSettings.endDistance * 0.4f;     // clear up close, fading towards the cut
+                }
+                else
+                    fogSettings.density = Mathf.Max(fogSettings.density, thick * (fogSettings.fogMode == FogMode.Exponential ? 2.3f : 1.52f) / fogDistance);
+            }
+#endif
             // set fog mode first
             RenderSettings.fogMode = fogSettings.fogMode;
             RenderSettings.fogDensity = fogSettings.density;
@@ -198,10 +220,12 @@ namespace DaggerfallWorkshop.Game
             {
                 //                RenderSettings.fogColor = Color.gray;
 
+#if !UNITY_PSP2
                 if (postProcessLayer != null)
                 {
                     postProcessLayer.fog.excludeSkybox = false;
                 }
+#endif
             }
             else
             {
@@ -210,10 +234,12 @@ namespace DaggerfallWorkshop.Game
                 // also blend with climate so climates end up having faint 'tints' to them
                 //                RenderSettings.fogColor = Color.clear;
 
+#if !UNITY_PSP2
                 if (postProcessLayer != null)
                 {
                     postProcessLayer.fog.excludeSkybox = true;
                 }
+#endif
             }
         }
 
@@ -528,6 +554,11 @@ namespace DaggerfallWorkshop.Game
             {
                 // Clear weather when starting up world
                 ClearAllWeather();
+#if UNITY_PSP2
+                // 2363 rain particles with IsRaining false, exterior 135 ms at every resolution), and SetWeatherFromWeatherClimateArray
+                // then skips that same type. Reset it so the climate's weather is applied in full (or not at all).
+                PlayerWeather.WeatherType = WeatherType.Sunny;
+#endif
 
                 // Set weather in case we have loaded from a classic save.
                 // Currently loading a Unity save will replace this with its own weather value after this.

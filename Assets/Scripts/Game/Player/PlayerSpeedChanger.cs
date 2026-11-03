@@ -108,7 +108,12 @@ namespace DaggerfallWorkshop.Game
             if (playerMotor.IsGrounded)
             {
                 isRunning = CanRun() && runningMode;
+#if UNITY_PSP2
+                // Vita: crouching is sneaking (no free button for Sneak; same rule as the "Sneak and Crouch Combined" mod)
+                isSneaking = !isRunning && (sneakingMode || playerMotor.IsCrouching);
+#else
                 isSneaking = !isRunning && sneakingMode;
+#endif
             }
             else
             {

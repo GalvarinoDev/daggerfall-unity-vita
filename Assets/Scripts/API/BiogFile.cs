@@ -51,6 +51,11 @@ namespace DaggerfallConnect.Arena2
 
             // Load text file
             string fileName = $"BIOG{characterDocument.classIndex:D2}T{characterDocument.biographyIndex}.TXT";
+#if UNITY_PSP2 && !UNITY_EDITOR
+            // Baked by VitaBiogBaker (VitaBiogs, item 12): questions, answers and backstory id without the text parse
+            if (VitaLoad(fileName))
+                return;
+#endif
             FileProxy txtFile = new FileProxy(Path.Combine(BiogFile.BIOGSourceFolder, fileName), FileUsage.UseDisk, true);
             questionsStr = System.Text.Encoding.UTF8.GetString(txtFile.GetBytes());
 

@@ -49,10 +49,14 @@ namespace DaggerfallWorkshop.Utility.AssetInjection
         [Tooltip("Index of emissive material for the MeshRender.")]
         public uint materialIndex;
 
+#if !UNITY_PSP2
         [ColorUsage(false, true)]
+#endif
         public Color dayColor;
 
+#if !UNITY_PSP2
         [ColorUsage(false, true)]
+#endif
         public Color nightColor;
 
         DaggerfallUnity dfUnity;

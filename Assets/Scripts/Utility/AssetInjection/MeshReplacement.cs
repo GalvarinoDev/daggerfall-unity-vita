@@ -38,7 +38,11 @@ namespace DaggerfallWorkshop.Utility.AssetInjection
         static Action<Terrain> setTreesSettingsCallback = SetTreesSettings;
 
         static readonly HashSet<Vector2Int> triedBillboards = new HashSet<Vector2Int>();
+#if UNITY_PSP2
+        static readonly HashSet<System.Tuple<uint, ClimateBases, DaggerfallDateTime.Seasons>> triedModels = new HashSet<System.Tuple<uint, ClimateBases, DaggerfallDateTime.Seasons>>();
+#else
         static readonly HashSet<(uint, ClimateBases, DaggerfallDateTime.Seasons)> triedModels = new HashSet<(uint, ClimateBases, DaggerfallDateTime.Seasons)>();
+#endif
 
         #endregion
 
@@ -118,6 +122,20 @@ namespace DaggerfallWorkshop.Utility.AssetInjection
 
             return modelGO;
         }
+
+#if UNITY_PSP2
+        public static System.Func<uint, Transform, Matrix4x4, GameObject> VitaBakeImport;
+
+        /// <summary>
+        /// True when ImportCustomGameobject would replace this model (VitaBlockBake falls back to DFU's path then). Loads, doesn't clone.
+        /// </summary>
+        public static bool VitaHasCustomGameobject(uint modelID)
+        {
+
+            GameObject go;
+            return TryImportGameObject(modelID, false, out go);
+        }
+#endif
 
         public static string GetFlatReplacementName(int archive, int record)
         {
@@ -315,20 +333,42 @@ namespace DaggerfallWorkshop.Utility.AssetInjection
         /// </summary>
         /// <param name="modelID">Id of target model.</param>
         /// <returns>Unique key for model variant.</returns>
+#if UNITY_PSP2
+        private static System.Tuple<uint, ClimateBases, DaggerfallDateTime.Seasons> MakeModelKey(uint modelID)
+#else
         private static (uint modelID, ClimateBases climateBase, DaggerfallDateTime.Seasons season) MakeModelKey(uint modelID)
+#endif
         {
             if (!GameManager.HasInstance)
+#if UNITY_PSP2
+                return System.Tuple.Create(modelID, (ClimateBases)(-1), (DaggerfallDateTime.Seasons)(-1));
+#else
                 return (modelID, (ClimateBases)(-1), (DaggerfallDateTime.Seasons)(-1));
+#endif
 
+#if UNITY_PSP2
+            return System.Tuple.Create(modelID, ClimateSwaps.FromAPIClimateBase(GameManager.Instance.PlayerGPS.ClimateSettings.ClimateType), DaggerfallUnity.Instance.WorldTime.Now.SeasonValue);
+#else
             return (modelID, ClimateSwaps.FromAPIClimateBase(GameManager.Instance.PlayerGPS.ClimateSettings.ClimateType), DaggerfallUnity.Instance.WorldTime.Now.SeasonValue);
+#endif
         }
 
         ///<summary>
         /// Get all accepted names for a model ordered by priority.
         ///</summary>
+#if UNITY_PSP2
+        private static string[] GetName(System.Tuple<uint, ClimateBases, DaggerfallDateTime.Seasons> key)
+#else
         private static string[] GetName((uint modelID, ClimateBases climateBase, DaggerfallDateTime.Seasons season) key)
+#endif
         {
+#if UNITY_PSP2
+            uint modelID = key.Item1;
+            ClimateBases climateBase = key.Item2;
+            DaggerfallDateTime.Seasons season = key.Item3;
+#else
             (uint modelID, ClimateBases climateBase, DaggerfallDateTime.Seasons season) = key;
+#endif
 
             if ((int)climateBase == -1)
                 return new string[] { modelID.ToString() };

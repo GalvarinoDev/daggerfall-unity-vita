@@ -101,7 +101,9 @@ namespace DaggerfallWorkshop.Utility.AssetInjection
                         return false;
                     }
                     
+#if !UNITY_PSP2
                     downloadHandler.streamAudio = streaming;
+#endif
 
                     request.SendWebRequest();
 

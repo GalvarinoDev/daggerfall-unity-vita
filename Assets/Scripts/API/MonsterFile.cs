@@ -163,6 +163,15 @@ namespace DaggerfallConnect.Arena2
             // Generate name from index
             string name = string.Format("ENEMY{0:000}.CFG", monster);
 
+#if UNITY_PSP2 && !UNITY_EDITOR
+            // Baked by VitaCareerBaker (VitaCareers, item 12): the finished career
+            DFCareer vitaCareer = VitaCareers.Read(name);
+            if (vitaCareer != null)
+            {
+                monsterClassOut = vitaCareer;
+                return true;
+            }
+#endif
             // Attempt to load record
             int index = bsaFile.GetRecordIndex(name);
             if (index == -1)

@@ -324,7 +324,11 @@ namespace DaggerfallWorkshop.Game.MagicAndEffects
             DaggerfallEntity casterEntity = UsePlayerCharacterSkillsForEnemyMagicCost ? null : entityBehaviour.Entity;
 
             // Get spellpoint costs of this spell
+#if UNITY_PSP2
+            int spellPointCost = FormulaHelper.CalculateTotalEffectCosts(spell.Settings.Effects, spell.Settings.TargetType, casterEntity, spell.Settings.MinimumCastingCost).spellPointCost;
+#else
             (int _, int spellPointCost) = FormulaHelper.CalculateTotalEffectCosts(spell.Settings.Effects, spell.Settings.TargetType, casterEntity, spell.Settings.MinimumCastingCost);
+#endif
             readySpellCastingCost = spellPointCost;
 
             // Allow casting spells of any cost if entity is player and godmode enabled
@@ -1271,7 +1275,11 @@ namespace DaggerfallWorkshop.Game.MagicAndEffects
 
         int GetEffectCastingCost(IEntityEffect effect, TargetTypes targetType, DaggerfallEntity casterEntity)
         {            
+#if UNITY_PSP2
+            int spellPointCost = FormulaHelper.CalculateEffectCosts(effect, effect.Settings, casterEntity).spellPointCost;
+#else
             (int _, int spellPointCost) = FormulaHelper.CalculateEffectCosts(effect, effect.Settings, casterEntity);
+#endif
             spellPointCost = FormulaHelper.ApplyTargetCostMultiplier(spellPointCost, targetType);
 
             // Spells always cost at least 5 spell points

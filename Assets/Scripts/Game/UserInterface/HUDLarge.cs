@@ -254,6 +254,40 @@ namespace DaggerfallWorkshop.Game.UserInterface
             // Large HUD exists in screen space not in native 320x200 UI space so scale needs to be amended
             if (lastCustomScale != CustomScale)
             {
+#if UNITY_PSP2
+                Position = Vector2.Scale(mainPanelRect.position, CustomScale);
+                Size = Vector2.Scale(mainPanelRect.size, CustomScale);
+                mainColorBackgroundPanel.Position = Vector2.Scale(mainColorBackgroundPanelRect.position, CustomScale);
+                mainColorBackgroundPanel.Size = Vector2.Scale(mainColorBackgroundPanelRect.size, CustomScale);
+                compassPanel.Position = Vector2.Scale(compassPanelRect.position, CustomScale);
+                compassPanel.Size = Vector2.Scale(compassPanelRect.size, CustomScale);
+                headPanel.Position = Vector2.Scale(headPanelRect.position, CustomScale);
+                headPanel.Size = Vector2.Scale(headPanelRect.size, CustomScale);
+                vitals.CustomHealthBarPosition = Vector2.Scale(healthPanelRect.position, CustomScale);
+                vitals.CustomHealthBarSize = Vector2.Scale(healthPanelRect.size, CustomScale);
+                vitals.CustomFatigueBarPosition = Vector2.Scale(fatiguePanelRect.position, CustomScale);
+                vitals.CustomFatigueBarSize = Vector2.Scale(fatiguePanelRect.size, CustomScale);
+                vitals.CustomMagickaBarPosition = Vector2.Scale(magickaPanelRect.position, CustomScale);
+                vitals.CustomMagickaBarSize = Vector2.Scale(magickaPanelRect.size, CustomScale);
+                interactionModePanel.Position = Vector2.Scale(interactionModePanelRect.position, CustomScale);
+                interactionModePanel.Size = Vector2.Scale(interactionModePanelRect.size, CustomScale);
+                optionsPanel.Position = Vector2.Scale(optionsPanelRect.position, CustomScale);
+                optionsPanel.Size = Vector2.Scale(optionsPanelRect.size, CustomScale);
+                spellbookPanel.Position = Vector2.Scale(spellbookPanelRect.position, CustomScale);
+                spellbookPanel.Size = Vector2.Scale(spellbookPanelRect.size, CustomScale);
+                inventoryPanel.Position = Vector2.Scale(inventoryPanelRect.position, CustomScale);
+                inventoryPanel.Size = Vector2.Scale(inventoryPanelRect.size, CustomScale);
+                sheathPanel.Position = Vector2.Scale(sheathPanelRect.position, CustomScale);
+                sheathPanel.Size = Vector2.Scale(sheathPanelRect.size, CustomScale);
+                useMagicItemPanel.Position = Vector2.Scale(useMagicItemPanelRect.position, CustomScale);
+                useMagicItemPanel.Size = Vector2.Scale(useMagicItemPanelRect.size, CustomScale);
+                transportModePanel.Position = Vector2.Scale(transportModePanelRect.position, CustomScale);
+                transportModePanel.Size = Vector2.Scale(transportModePanelRect.size, CustomScale);
+                mapPanel.Position = Vector2.Scale(mapPanelRect.position, CustomScale);
+                mapPanel.Size = Vector2.Scale(mapPanelRect.size, CustomScale);
+                restPanel.Position = Vector2.Scale(restPanelRect.position, CustomScale);
+                restPanel.Size = Vector2.Scale(restPanelRect.size, CustomScale);
+#else
                 Position = mainPanelRect.position * CustomScale;
                 Size = mainPanelRect.size * CustomScale;
                 mainColorBackgroundPanel.Position = mainColorBackgroundPanelRect.position * CustomScale;
@@ -286,6 +320,7 @@ namespace DaggerfallWorkshop.Game.UserInterface
                 mapPanel.Size = mapPanelRect.size * CustomScale;
                 restPanel.Position = restPanelRect.position * CustomScale;
                 restPanel.Size = restPanelRect.size * CustomScale;
+#endif
 
                 lastCustomScale = CustomScale;
             }
@@ -387,6 +422,11 @@ namespace DaggerfallWorkshop.Game.UserInterface
 
         private bool IsLargeHUDInteractable()
         {
+#if UNITY_PSP2
+            // Touch screen: a tap is a click, no cursor mode needed
+            if (Input.touchCount > 0)
+                return !GameManager.IsGamePaused;
+#endif
             return GameManager.Instance.PlayerMouseLook.cursorActive && !GameManager.IsGamePaused;
         }
 

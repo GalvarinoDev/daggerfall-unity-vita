@@ -500,6 +500,46 @@ namespace DaggerfallWorkshop.Game.UserInterface
             }
         }
 
+#if UNITY_PSP2
+        // Every scroller cut the same 36 pieces from the same 3 images (two per inventory window, new ones per trade/loot window:
+        static Texture2D[] vitaArrows, vitaItemListTextures;
+
+        void LoadTextures(bool enhanced)
+        {
+            FilterMode filter = DaggerfallUI.Instance.GlobalFilterMode;
+            if (scroller)
+            {
+                if (vitaArrows == null)
+                {
+                    Texture2D red = ImageReader.GetTexture(redArrowsTextureName);
+                    Texture2D green = ImageReader.GetTexture(greenArrowsTextureName);
+                    vitaArrows = new[] {
+                        ImageReader.GetSubTexture(red, upArrowRect, arrowsFullSize), ImageReader.GetSubTexture(red, downArrowRect, arrowsFullSize),
+                        ImageReader.GetSubTexture(green, upArrowRect, arrowsFullSize), ImageReader.GetSubTexture(green, downArrowRect, arrowsFullSize) };
+                }
+                foreach (Texture2D t in vitaArrows)
+                    t.filterMode = filter;
+                redUpArrow = vitaArrows[0];
+                redDownArrow = vitaArrows[1];
+                greenUpArrow = vitaArrows[2];
+                greenDownArrow = vitaArrows[3];
+            }
+            if (enhanced)
+            {
+                if (vitaItemListTextures == null)
+                {
+                    vitaItemListTextures = new Texture2D[itemCutoutRects16.Length];
+                    Texture2D baseInvTexture = ImageReader.GetTexture(baseInvTextureName);
+                    for (int i = 0; i < itemCutoutRects16.Length; i++)
+                        vitaItemListTextures[i] = ImageReader.GetSubTexture(baseInvTexture, itemCutoutRects16[i], new DFSize(320, 200));
+                }
+                foreach (Texture2D t in vitaItemListTextures)
+                    t.filterMode = filter;
+                itemListTextures = new Texture2D[listDisplayTotal];
+                Array.Copy(vitaItemListTextures, itemListTextures, Math.Min(listDisplayTotal, vitaItemListTextures.Length));
+            }
+        }
+#else
         void LoadTextures(bool enhanced)
         {
             if (scroller)
@@ -522,6 +562,7 @@ namespace DaggerfallWorkshop.Game.UserInterface
                     itemListTextures[i] = ImageReader.GetSubTexture(baseInvTexture, itemCutoutRects16[i], new DFSize(320, 200));
             }
         }
+#endif
 
         private int GetScrollIndex()
         {

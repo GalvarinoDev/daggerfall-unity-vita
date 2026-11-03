@@ -42,7 +42,54 @@ namespace DaggerfallWorkshop.Game
             if (RainParticles) RainParticles.SetActive(false);
             if (SnowParticles) SnowParticles.SetActive(false);
             ClimateWeathers = new byte[6];
+#if UNITY_PSP2
+            Lighten(RainParticles);
+            Lighten(SnowParticles);
+            if (VitaGroundPlane)
+            {
+                Transform ground = new GameObject("VitaWeatherGround").transform;
+                ground.SetParent(transform, false);
+                CharacterController controller = GetComponent<CharacterController>();
+                ground.localPosition = controller ? controller.center + Vector3.down * (controller.height * 0.5f) : Vector3.down * 0.9f;
+                foreach (GameObject weather in new[] { RainParticles, SnowParticles })
+                    if (weather)
+                        foreach (ParticleSystem particles in weather.GetComponentsInChildren<ParticleSystem>(true))
+                        {
+                            var collision = particles.collision;
+                            if (!collision.enabled)
+                                continue;
+                            collision.type = ParticleSystemCollisionType.Planes;
+                            collision.SetPlane(0, ground);
+                        }
+            }
+#endif
         }
+#if UNITY_PSP2
+
+        // Kept on purpose: rain emits 2000 drops/s and snow 1000 flakes/s (5 s
+        // lifetime), each colliding with the world at High quality, a physics query per particle per frame. That ran the exterior at
+        // 6.9 fps in rain and 5.3 in snow vs 34 dry, at every resolution; with this, 26-27 fps. Low quality collides
+        // against a cached voxel approximation instead (splashes land less exactly).
+        const float density = 0.3f;
+        public static bool VitaGroundPlane = true;
+        const int maxParticles = 1500;
+
+        static void Lighten(GameObject weather)
+        {
+            if (!weather)
+                return;
+            foreach (ParticleSystem particles in weather.GetComponentsInChildren<ParticleSystem>(true))
+            {
+                var emission = particles.emission;
+                emission.rateOverTimeMultiplier *= density;
+                var main = particles.main;
+                main.maxParticles = Mathf.Min(main.maxParticles, maxParticles);
+                var collision = particles.collision;
+                if (collision.enabled)
+                    collision.quality = ParticleSystemCollisionQuality.Low;
+            }
+        }
+#endif
 
         void Update()
         {

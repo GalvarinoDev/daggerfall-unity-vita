@@ -27,6 +27,9 @@ namespace DaggerfallWorkshop.Game
         PlayerEnterExit playerEnterExit;
         PlayerEntity playerEntity;
         Light torchLight;
+#if UNITY_PSP2
+        float vitaStockRange;     // the torch prefab's range (6 m)
+#endif
         float torchIntensity;
         float defaultTorchIntensity = 1.0f;
         float itemBasedTorchIntensity = 1.25f;
@@ -106,6 +109,17 @@ namespace DaggerfallWorkshop.Game
             }
             if (torchLight)
                 torchLight.intensity = torchIntensity * DaggerfallUnity.Settings.PlayerTorchLightScale * intensityMod;
+#if UNITY_PSP2
+            // Pause menu "Torch reach" (stock 6 m): scales the item's range, or replaces the default torch's
+            if (torchLight)
+            {
+                if (vitaStockRange == 0)
+                    vitaStockRange = torchLight.range;
+                float baseRange = DaggerfallUnity.Settings.PlayerTorchFromItems && playerEntity.LightSource != null ?
+                    playerEntity.LightSource.ItemTemplate.capacityOrTarget : vitaStockRange;
+                torchLight.range = baseRange * DaggerfallUnity.Settings.VitaTorchReach / 6f;
+            }
+#endif
 
             PlayerTorch.SetActive(enableTorch);
         }

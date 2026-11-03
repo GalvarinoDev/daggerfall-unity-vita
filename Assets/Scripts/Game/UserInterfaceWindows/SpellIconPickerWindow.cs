@@ -177,7 +177,11 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             if (pack == null)
                 texture = iconCollection.GetSpellIcon(index);
             else
+#if UNITY_PSP2
+                texture = iconCollection.VitaGetPackIcon(pack, index);
+#else
                 texture = pack.icons[index].texture;
+#endif
 
             // Add image panel
             Panel panel = new Panel();

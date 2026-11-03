@@ -455,7 +455,12 @@ namespace DaggerfallWorkshop.Utility
 
                             // Evaluate macro
                             string macroName = tokenText.Substring(macroPos, endPos - macroPos);
+#if UNITY_PSP2
+                            string macroValue;
+                            if (!macroCache.TryGetValue(macroName, out macroValue))
+#else
                             if (!macroCache.TryGetValue(macroName, out string macroValue))
+#endif
                             {
                                 macroValue = GetValue(macroName, mcp);
                                 macroCache[macroName] = macroValue;

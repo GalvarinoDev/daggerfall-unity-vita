@@ -1,0 +1,5 @@
+<!-- IL2CPP stripping (PS Vita): keep types found by reflection (effects, quest actions, mods) and FullSerializer save data. -->
+<linker>
+  <assembly fullname="Assembly-CSharp" preserve="all"/>
+  <assembly fullname="FullSerializer - Unity" preserve="all"/>
+</linker>

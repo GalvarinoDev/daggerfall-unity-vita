@@ -110,6 +110,11 @@ namespace DaggerfallWorkshop.Game.UserInterface
                             data[pos++] = (vidFile.AudioBuffer[i] - 128) * divisor;
                         }
                         clip.SetData(data, 0);
+#if UNITY_PSP2
+                        // One clip per audio block: free the one this slot held, or they pile up (native memory) for the whole video
+                        if (clips[flip] != null)
+                            GameObject.Destroy(clips[flip]);
+#endif
                         clips[flip] = clip;
 
                         // Schedule clip
@@ -171,6 +176,13 @@ namespace DaggerfallWorkshop.Game.UserInterface
         {
             base.Dispose();
             GameObject.Destroy(audioPlayer);
+#if UNITY_PSP2
+            foreach (AudioClip clip in clips)
+                if (clip != null)
+                    GameObject.Destroy(clip);
+            if (vidTexture != null)
+                GameObject.Destroy(vidTexture);
+#endif
         }
     }
 }

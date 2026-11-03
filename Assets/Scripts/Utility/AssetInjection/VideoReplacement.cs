@@ -12,7 +12,9 @@
 using System.IO;
 using UnityEngine;
 using DaggerfallWorkshop.Game.Utility.ModSupport;
+#if !UNITY_PSP2
 using UnityEngine.Video;
+#endif
 using DaggerfallWorkshop.Game.UserInterface;
 
 namespace DaggerfallWorkshop.Utility.AssetInjection
@@ -48,6 +50,7 @@ namespace DaggerfallWorkshop.Utility.AssetInjection
         /// <returns>True if movie is found.</returns>
         public static bool TryImportMovie(string name, out VideoPlayerDrawer videoPlayerDrawer)
         {
+#if !UNITY_PSP2 // no VideoPlayer on Vita
             if (DaggerfallUnity.Settings.AssetInjection)
             {
                 // Remove VID extension
@@ -71,6 +74,7 @@ namespace DaggerfallWorkshop.Utility.AssetInjection
                     return true;
                 }
             }
+#endif
 
             videoPlayerDrawer = null;
             return false;

@@ -77,6 +77,42 @@ namespace DaggerfallWorkshop
             player = GameObject.FindGameObjectWithTag("Player");
         }
 
+#if UNITY_PSP2
+        // Vita: ~385 of these in the Palace, each called every fixed step. An idle one (clip loaded, no player
+        // check) has nothing left to do, so it stops updating until Apply sets a player-check preset; the player only moves in Update,
+        // so the range check runs once per frame (random play stays per step). VitaIdleSkip = false is upstream's.
+        public static bool VitaIdleSkip = true;
+        int playerCheckFrame = -1;
+
+        void FixedUpdate()
+        {
+            if (audioClip == null && SoundIndex >= minIndex && SoundIndex < maxIndex)
+                Apply();
+
+            if (VitaIdleSkip && audioClip != null && !playerCheck)
+            {
+                enabled = false;
+                return;
+            }
+
+            if (playerCheck && audioSource && player)
+            {
+                if (!VitaIdleSkip || playerCheckFrame != Time.frameCount)
+                {
+                    playerCheckFrame = Time.frameCount;
+                    bool playerInRange = (Vector3.Distance(transform.position, player.transform.position) <= audioSource.maxDistance);
+                    // Engine property writes only on change (same values, fewer native calls for ~300 torches)
+                    if (audioSource.enabled != playerInRange)
+                        audioSource.enabled = playerInRange;
+                    if (playerInRange && audioSource.volume != DaggerfallUnity.Settings.SoundVolume)
+                        audioSource.volume = DaggerfallUnity.Settings.SoundVolume;
+                }
+
+                if (audioSource.enabled && playRandomly && Game.GameManager.ClassicUpdate && DFRandom.rand() <= 100)
+                    audioSource.Play();
+            }
+        }
+#else
         void FixedUpdate()
         {
             // Clip needs to be loaded before it can be played.
@@ -98,6 +134,7 @@ namespace DaggerfallWorkshop
                     audioSource.Play();
             }
         }
+#endif
 
 #if UNITY_EDITOR
         public void EditorPreviewByIndex()
@@ -323,6 +360,10 @@ namespace DaggerfallWorkshop
             // Assign clip to Unity AudioSource only if app playing
             if (Application.isPlaying)
                 audioSource.clip = audioClip;
+#if UNITY_PSP2
+            if (playerCheck)
+                enabled = true;     // FixedUpdate may have switched an idle source off
+#endif
 
             // Manually start sound if playOnAwake true.
             // This is necessary as sound is procedurally created after awake.

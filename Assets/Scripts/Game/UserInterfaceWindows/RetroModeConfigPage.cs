@@ -48,13 +48,19 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             StyleIndicator(modeSlider);
 
             // PostProcess Slider
+#if UNITY_PSP2
+            if (DaggerfallUnity.Settings.PostProcessingInRetroMode > 2)     // from an old settings file
+                DaggerfallUnity.Settings.PostProcessingInRetroMode = 0;
+#endif
             string[] postProcessModes = new string[]
             {
                 TextManager.Instance.GetLocalizedText("off"),
                 TextManager.Instance.GetLocalizedText("posterizationFull"),
                 TextManager.Instance.GetLocalizedText("posterizationMinusSky"),
+#if !UNITY_PSP2     // its shader needs 3D textures
                 TextManager.Instance.GetLocalizedText("palettizationFull"),
                 TextManager.Instance.GetLocalizedText("palettizationMinusSky"),
+#endif
             };
             postProcessSlider = AddSlider(parent, TextManager.Instance.GetLocalizedText("postProcess"), postProcessModes.Length, ref pos);
             postProcessSlider.OnScroll += PostProcessSlider_OnScroll;

@@ -178,11 +178,36 @@ namespace DaggerfallWorkshop.Utility.AssetInjection
         /// </summary>
         /// <param name="path">Path to xml.</param>
         /// <returns>True if xml file exists.</returns>
+#if UNITY_PSP2
+        // StreamingAssets is read-only app0:, so list each folder's xml once instead of a card lookup per call: billboard scales asked
+        // for every record of every enemy/NPC archive.
+        static readonly System.Collections.Generic.Dictionary<string, System.Collections.Generic.HashSet<string>> vitaXmlFolders =
+            new System.Collections.Generic.Dictionary<string, System.Collections.Generic.HashSet<string>>();
+
+        public static bool XmlFileExists(string path)
+        {
+            AddExtensionIfMissing(ref path);
+            string folder = Path.GetDirectoryName(path);
+            if (!folder.StartsWith(Application.streamingAssetsPath))
+                return File.Exists(path);
+            System.Collections.Generic.HashSet<string> names;
+            if (!vitaXmlFolders.TryGetValue(folder, out names))
+            {
+                names = new System.Collections.Generic.HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
+                if (Directory.Exists(folder))
+                    foreach (string file in Directory.GetFiles(folder, "*.xml"))
+                        names.Add(Path.GetFileName(file));
+                vitaXmlFolders[folder] = names;
+            }
+            return names.Contains(Path.GetFileName(path));
+        }
+#else
         public static bool XmlFileExists(string path)
         {
             AddExtensionIfMissing(ref path);
             return File.Exists(path);
         }
+#endif
 
         /// <summary>
         /// Seek xml from modding locations.
@@ -194,6 +219,7 @@ namespace DaggerfallWorkshop.Utility.AssetInjection
         public static bool TryReadXml(string directory, string name, out XMLManager xml)
         {
             AddExtensionIfMissing(ref name);
+
 
             // Seek from loose files
             string path = Path.Combine(directory, name);

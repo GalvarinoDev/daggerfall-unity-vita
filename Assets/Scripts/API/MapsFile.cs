@@ -655,12 +655,49 @@ namespace DaggerfallConnect.Arena2
             if (region < 0 || region >= RegionCount)
                 return false;
 
+#if UNITY_PSP2
+            // Vita: every GetRegion/GetLocation re-read and re-parsed the region's 4 MAPS.BSA records, 100-450 ms each on hardware (travel map
+            // re-read of the loaded region gives the same data: keep it. DiscardRegion (also another region's load) clears MapNames.
+            if (region == lastRegion && regions[region].DFRegion.MapNames != null)
+                return true;
+#endif
+
             // Auto discard previous record
             if (autoDiscardValue && lastRegion != -1)
                 DiscardRegion(lastRegion);
 
             // Load record data
             int record = region * 4;
+#if UNITY_PSP2
+            // Vita: the region itself needs only the map table and names (~100 KB); MapPItem/MapDItem (up to 2 MB) are read from disk
+            // when a location is first read (VitaLoadItems). Region loads took 100-460 ms, scaling with MapPItem.
+            regions[region].MapPItem = null;
+            regions[region].MapDItem = null;
+#if !UNITY_EDITOR
+            // Baked (VitaMaps.cs): ReadRegion's names and map table without a MAPS.BSA read; the records load only on a location miss
+            regions[region].MapTable = null;
+            regions[region].MapNames = null;
+            regions[region].DFRegion.Name = regionNames[region];
+            bool vitaEmpty;
+            if (VitaMaps.ReadRegion(region, ref regions[region].DFRegion, out vitaEmpty))
+            {
+                regions[region].Name = regionNames[region];
+                WorldDataReplacement.GetDFRegionAdditionalLocationData(region, ref regions[region].DFRegion);
+                lastRegion = region;
+                return true;
+            }
+            if (vitaEmpty)
+                return false;
+#endif
+            record += 2;
+            regions[region].MapTable = bsaFile.GetRecordProxy(record++);
+            regions[region].MapNames = bsaFile.GetRecordProxy(record);
+            if (regions[region].MapNames.Length == 0 ||
+                regions[region].MapTable.Length == 0 ||
+                bsaFile.GetRecordLength(region * 4) == 0 ||
+                bsaFile.GetRecordLength(region * 4 + 1) == 0)
+                return false;
+#else
             regions[region].MapPItem = bsaFile.GetRecordProxy(record++);
             regions[region].MapDItem = bsaFile.GetRecordProxy(record++);
             regions[region].MapTable = bsaFile.GetRecordProxy(record++);
@@ -670,6 +707,7 @@ namespace DaggerfallConnect.Arena2
                 regions[region].MapPItem.Length == 0 ||
                 regions[region].MapDItem.Length == 0)
                 return false;
+#endif
 
             // Set region name
             regions[region].Name = regionNames[region];
@@ -773,7 +811,11 @@ namespace DaggerfallConnect.Arena2
             return dfLocation;
         }
 
+#if UNITY_PSP2
+        private bool UseSmallerDungeon(DFLocation dfLocation)
+#else
         private bool UseSmallerDungeon(in DFLocation dfLocation)
+#endif
         {
             // Do nothing if location has no dungeon or if a main story dungeon - these are never made smaller
             if (!dfLocation.HasDungeon || DaggerfallDungeon.IsMainStoryDungeon(dfLocation.MapTableData.MapId))
@@ -826,7 +868,11 @@ namespace DaggerfallConnect.Arena2
         /// <param name="x">Block X coordinate.</param>
         /// <param name="y">Block Y coordinate.</param>
         /// <returns>Block name.</returns>
+#if UNITY_PSP2
+        public string GetRmbBlockName(DFLocation dfLocation, int x, int y)
+#else
         public string GetRmbBlockName(in DFLocation dfLocation, int x, int y)
+#endif
         {
             int index = y * dfLocation.Exterior.ExteriorData.Width + x;
             return dfLocation.Exterior.ExteriorData.BlockNames[index];
@@ -839,7 +885,11 @@ namespace DaggerfallConnect.Arena2
         /// <param name="x">Block X coordinate.</param>
         /// <param name="y">Block Y coordinate.</param>
         /// <returns>Block name.</returns>
+#if UNITY_PSP2
+        public string ResolveRmbBlockName(DFLocation dfLocation, int x, int y)
+#else
         public string ResolveRmbBlockName(in DFLocation dfLocation, int x, int y)
+#endif
         {
             // Get indices
             int offset = y * dfLocation.Exterior.ExteriorData.Width + x;
@@ -858,7 +908,11 @@ namespace DaggerfallConnect.Arena2
         /// <param name="blockNumber">Block number.</param>
         /// <param name="blockCharacter">Block character.</param>
         /// <returns>Block name.</returns>
+#if UNITY_PSP2
+        public string ResolveRmbBlockName(DFLocation dfLocation, byte blockIndex, byte blockNumber, byte blockCharacter)
+#else
         public string ResolveRmbBlockName(in DFLocation dfLocation, byte blockIndex, byte blockNumber, byte blockCharacter)
+#endif
         {
             string letter1 = string.Empty;
             string letter2 = string.Empty;
@@ -998,6 +1052,15 @@ namespace DaggerfallConnect.Arena2
             // Check for replacement location data and use it if found
             if (WorldDataReplacement.GetDFLocationReplacementData(region, location, out dfLocation))
                 return true;
+#if UNITY_PSP2 && !UNITY_EDITOR
+            // Baked (VitaMaps.cs): the classic location as parsed below, no MAPS.BSA read; climate/politic still from the PAK buffers
+            if (VitaMaps.ReadLocation(region, location, ref dfLocation))
+            {
+                dfLocation.MapTableData = regions[region].DFRegion.MapTable[location];
+                ReadClimatePoliticData(ref dfLocation);
+                return true;
+            }
+#endif
 
             try
             {
@@ -1006,6 +1069,9 @@ namespace DaggerfallConnect.Arena2
                 //            Anywhere using this for display to player should use TextProvider.GetLocalizedRegionName() instead.
                 dfLocation.RegionName = RegionNames[region];
 
+#if UNITY_PSP2
+                VitaLoadItems(region);
+#endif
                 // Read MapPItem for this location
                 BinaryReader reader = regions[region].MapPItem.GetReader();
                 ReadMapPItem(ref reader, region, location, ref dfLocation);
@@ -1118,6 +1184,9 @@ namespace DaggerfallConnect.Arena2
         /// classic datafiles only, excluding added locations. </summary>
         private uint ReadLocationCount(int region)
         {
+#if UNITY_PSP2
+            VitaLoadItems(region);
+#endif
             BinaryReader reader = regions[region].MapNames.GetReader();
             reader.BaseStream.Position = 0;
             return reader.ReadUInt32();
@@ -1140,6 +1209,9 @@ namespace DaggerfallConnect.Arena2
             uint locationCount = ReadLocationCount(region);
 
             // Get reader
+#if UNITY_PSP2
+            VitaLoadItems(region);
+#endif
             BinaryReader reader = regions[region].MapPItem.GetReader();
 
             // Position reader at location record by reading offset and adding to end of offset table
@@ -1158,6 +1230,20 @@ namespace DaggerfallConnect.Arena2
 
             return locationId;
         }
+
+#if UNITY_PSP2
+        // Reads the region's MapPItem/MapDItem records on first use (LoadRegion leaves them null), and MapNames for a baked region
+        private void VitaLoadItems(int region)
+        {
+            if (regions[region].MapNames == null)
+                regions[region].MapNames = bsaFile.GetRecordProxy(region * 4 + 3);
+            if (regions[region].MapPItem == null)
+            {
+                regions[region].MapPItem = bsaFile.GetRecordProxy(region * 4);
+                regions[region].MapDItem = bsaFile.GetRecordProxy(region * 4 + 1);
+            }
+        }
+#endif
 
         /// <summary>
         /// Reads MapPItem data.
@@ -1409,7 +1495,11 @@ namespace DaggerfallConnect.Arena2
         /// <param name="startingBlock">True to make this a starting block (must only be one).</param>
         /// <param name="dfLocation">Reference location to select a random block from.</param>
         /// <returns>DFLocation.DungeonBlock</returns>
+#if UNITY_PSP2
+        DFLocation.DungeonBlock GenerateRDBBlock(sbyte x, sbyte z, bool borderBlock, bool startingBlock, DFLocation dfLocation)
+#else
         DFLocation.DungeonBlock GenerateRDBBlock(sbyte x, sbyte z, bool borderBlock, bool startingBlock, in DFLocation dfLocation)
+#endif
         {
             // Get random block from reference location and overwrite some properties
             DFLocation.DungeonBlock block = GetRandomBlock(borderBlock, dfLocation);
@@ -1426,7 +1516,11 @@ namespace DaggerfallConnect.Arena2
         /// <param name="borderBlock">True to select a border block, false to select an interior block.</param>
         /// <param name="dfLocation">Reference location to select a random block from.</param>
         /// <returns>DFLocation.DungeonBlock</returns>
+#if UNITY_PSP2
+        DFLocation.DungeonBlock GetRandomBlock(bool borderBlock, DFLocation dfLocation)
+#else
         DFLocation.DungeonBlock GetRandomBlock(bool borderBlock, in DFLocation dfLocation)
+#endif
         {
             List<DFLocation.DungeonBlock> filteredBlocks = new List<DFLocation.DungeonBlock>();
             foreach (DFLocation.DungeonBlock block in dfLocation.Dungeon.Blocks)

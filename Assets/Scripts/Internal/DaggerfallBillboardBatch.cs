@@ -42,9 +42,20 @@ namespace DaggerfallWorkshop
         CachedMaterial cachedMaterial;
         [SerializeField, HideInInspector]
         Mesh billboardMesh;
+#if UNITY_PSP2
+        Material atlasMaterial;             // Local material made by SetMaterial(); textures it points to are shared, not ours
+#endif
 
         byte isUnmanagedMemoryAllocated;// 0 - not allocated or disposed, 1 - allocated
         NativeList<BillboardItem> billboardData;
+#if UNITY_PSP2
+        // Reused mesh lists: arrays sized to each rebuild's count were new garbage every time
+        // Static: filled and passed to the Mesh in the same call, main thread only
+        static readonly System.Collections.Generic.List<Vector3> vitaVertices = new System.Collections.Generic.List<Vector3>(), vitaNormals = new System.Collections.Generic.List<Vector3>();
+        static readonly System.Collections.Generic.List<Vector4> vitaTangents = new System.Collections.Generic.List<Vector4>();
+        static readonly System.Collections.Generic.List<Vector2> vitaUVs = new System.Collections.Generic.List<Vector2>();
+        static readonly System.Collections.Generic.List<int> vitaTriangles = new System.Collections.Generic.List<int>();
+#endif
         NativeArray<float3> meshVertices;
         NativeArray<float3> meshNormals;
         NativeArray<ushort> meshIndices;
@@ -137,8 +148,13 @@ namespace DaggerfallWorkshop
 
 #if UNITY_EDITOR
         // fixes an editor-only issue #2455 https://github.com/Interkarma/daggerfall-unity/issues/2455
+#if UNITY_PSP2
+        DaggerfallBillboardBatch() { UnityEditor.EditorApplication.playModeStateChanged += OnEditorPlayModeStateChanged; }
+        ~DaggerfallBillboardBatch() { UnityEditor.EditorApplication.playModeStateChanged -= OnEditorPlayModeStateChanged; }
+#else
         DaggerfallBillboardBatch() => UnityEditor.EditorApplication.playModeStateChanged += OnEditorPlayModeStateChanged;
         ~DaggerfallBillboardBatch() => UnityEditor.EditorApplication.playModeStateChanged -= OnEditorPlayModeStateChanged;
+#endif
         void OnEditorPlayModeStateChanged(UnityEditor.PlayModeStateChange stateChange)
         {
             if (stateChange == UnityEditor.PlayModeStateChange.ExitingPlayMode)
@@ -158,6 +174,12 @@ namespace DaggerfallWorkshop
             UvAnimationDependency.Complete();
 
             if (isUnmanagedMemoryAllocated == 1) DeallocateUnmanagedMemory();
+#if UNITY_PSP2
+
+            // Mesh and local material are ours: free them or every batch leaks both (native memory) on each scene/block unload
+            if (billboardMesh != null) DestroyImmediate(billboardMesh);
+            if (atlasMaterial != null) DestroyImmediate(atlasMaterial);
+#endif
         }
 
         void OnDisable()
@@ -234,7 +256,11 @@ namespace DaggerfallWorkshop
 
             Assert.AreEqual(expected: (byte)0, actual: isUnmanagedMemoryAllocated);
 
+#if UNITY_PSP2
+            billboardData = new NativeList<BillboardItem>(64, Allocator.Persistent);   // grows on Add (VitaJobsShim); 16250 x 56 B = 0.9 MB per batch otherwise, even when nearly empty
+#else
             billboardData = new NativeList<BillboardItem>(initialCapacity: maxBillboardCount, Allocator.Persistent);
+#endif
             meshVertices = new NativeArray<float3>(0, Allocator.Persistent);
             meshNormals = new NativeArray<float3>(0, Allocator.Persistent);
             meshIndices = new NativeArray<ushort>(0, Allocator.Persistent);
@@ -284,15 +310,28 @@ namespace DaggerfallWorkshop
                 return;
 
             // Get atlas size
+#if UNITY_PSP2
+            // 4096x4096 + mips is 44.7 MB even at 16-bit: the Vita ran out of memory creating it on the first dungeon exit
+            int size = 2048;
+#else
             int size = DaggerfallUnity.Settings.AssetInjection ? 4096 : 2048;
+#endif
 
             // Get standard atlas material
             ___getMaterialAtlas.Begin();
             // Just going to steal texture and settings
             // TODO: Revise material loading for custom shaders
+#if UNITY_PSP2
+            Rect[] atlasRects;
+            RecordIndex[] atlasIndices;
+#endif
             Material material = dfUnity.MaterialReader.GetMaterialAtlas(
                 archive, 0, 4, size,
+#if UNITY_PSP2
+                out atlasRects, out atlasIndices,
+#else
                 out Rect[] atlasRects, out RecordIndex[] atlasIndices,
+#endif
                 4, true, 0, false, true
             );
             ___getMaterialAtlas.End();
@@ -315,7 +354,19 @@ namespace DaggerfallWorkshop
             Shader shader = (DaggerfallUnity.Settings.NatureBillboardShadows) ?
                 Shader.Find(MaterialReader._DaggerfallBillboardBatchShaderName) :
                 Shader.Find(MaterialReader._DaggerfallBillboardBatchNoShadowsShaderName);
+#if UNITY_PSP2
+            // 8-bit palette sprite atlas (VitaPalette): the same batch shaders with the palette lookup
+            Texture paletteMap = material.HasProperty(VitaPalette.PaletteTex) ? material.GetTexture(VitaPalette.PaletteTex) : null;
+            if (paletteMap != null)
+                shader = Shader.Find(DaggerfallUnity.Settings.NatureBillboardShadows ?
+                    VitaPalette.BillboardBatchShaderName : VitaPalette.BillboardBatchNoShadowsShaderName);
+            if (atlasMaterial != null) DestroyImmediate(atlasMaterial);
+            atlasMaterial = new Material(shader);
+            if (paletteMap != null)
+                atlasMaterial.SetTexture(VitaPalette.PaletteTex, paletteMap);
+#else
             Material atlasMaterial = new Material(shader);
+#endif
             atlasMaterial.mainTexture = albedoMap;
             ___createLocalMaterial.End();
 
@@ -379,7 +430,12 @@ namespace DaggerfallWorkshop
             Shader shader = (DaggerfallUnity.Settings.NatureBillboardShadows) ?
                 Shader.Find(MaterialReader._DaggerfallBillboardBatchShaderName) :
                 Shader.Find(MaterialReader._DaggerfallBillboardBatchNoShadowsShaderName);
+#if UNITY_PSP2
+            if (atlasMaterial != null) DestroyImmediate(atlasMaterial);
+            atlasMaterial = new Material(shader);
+#else
             Material atlasMaterial = new Material(shader);
+#endif
             atlasMaterial.mainTexture = customMaterial.mainTexture;
 
             // Assign renderer properties
@@ -473,7 +529,11 @@ namespace DaggerfallWorkshop
         /// Schedules a job that queues an array of billboard items.
         /// Call <see cref="Apply"/> once there is no more entries to add.
         /// </summary>
+#if UNITY_PSP2
+        public JobHandle AddItemsAsync(NativeArray<BasicInfo> items, JobHandle dependency = default(JobHandle))
+#else
         public JobHandle AddItemsAsync(NativeArray<BasicInfo> items, JobHandle dependency = default)
+#endif
         {
             ___AddItemsAsync.Begin();
 
@@ -489,7 +549,11 @@ namespace DaggerfallWorkshop
             {
                 DaggerfallUnity.LogMessage("DaggerfallBillboardBatch: Must call SetMaterial() before adding items.", true);
                 ___AddItemsAsync.End();
+#if UNITY_PSP2
+                return default(JobHandle);
+#else
                 return default;
+#endif
             }
 
             // make sure unmanaged memory is allocated
@@ -521,7 +585,11 @@ namespace DaggerfallWorkshop
             return Dependency;
         }
         /// <inheritdoc />
+#if UNITY_PSP2
+        public JobHandle AddItemsAsync(BasicInfo[] items, JobHandle dependency = default(JobHandle))
+#else
         public JobHandle AddItemsAsync(BasicInfo[] items, JobHandle dependency = default)
+#endif
         {
             ___AddItemsAsync.Begin();
 
@@ -574,7 +642,11 @@ namespace DaggerfallWorkshop
         /// Schedules a job that queues an array of billboard items.
         /// Call <see cref="Apply"/> once there is no more entries to add.
         /// </summary>
+#if UNITY_PSP2
+        public JobHandle AddItemsAsync(NativeArray<CustomInfo> items, JobHandle dependency = default(JobHandle))
+#else
         public JobHandle AddItemsAsync(NativeArray<CustomInfo> items, JobHandle dependency = default)
+#endif
         {
             ___AddItemsAsync.Begin();
 
@@ -602,7 +674,11 @@ namespace DaggerfallWorkshop
             return jobHandle;
         }
         /// <inheritdoc />
+#if UNITY_PSP2
+        public JobHandle AddItemsAsync(CustomInfo[] items, JobHandle dependency = default(JobHandle))
+#else
         public JobHandle AddItemsAsync(CustomInfo[] items, JobHandle dependency = default)
+#endif
         {
             ___AddItemsAsync.Begin();
 
@@ -688,6 +764,15 @@ namespace DaggerfallWorkshop
             int numBillboards = billboardData.Length;
             int numVertices = numBillboards * vertsPerQuad;
             int numIndices = numBillboards * indicesPerQuad;
+#if UNITY_PSP2
+            // Vita: the stand-in arrays are managed, so a new set per rebuild (the count changes with every layout) was ~1 MB of garbage
+            // per batch and GCs while walking. Reuse the storage; every job below writes all items of its array.
+            meshVertices = meshVertices.VitaReuse(numVertices);
+            meshNormals = meshNormals.VitaReuse(numVertices);
+            meshIndices = meshIndices.VitaReuse(numIndices);
+            meshTangents = meshTangents.VitaReuse(numVertices);
+            meshUVs = meshUVs.VitaReuse(numVertices);
+#else
             if (meshVertices.Length != numVertices)
             {
                 new DeallocateArrayJob<float3>(meshVertices).Schedule(Dependency);
@@ -713,6 +798,7 @@ namespace DaggerfallWorkshop
                 new DeallocateArrayJob<float2>(meshUVs).Schedule(Dependency);
                 meshUVs = new NativeArray<float2>(numVertices, Allocator.Persistent);
             }
+#endif
 
             ___ResizeMeshBuffers.End();
         }
@@ -850,8 +936,13 @@ namespace DaggerfallWorkshop
             GetBatchDataJob getBatchDataJob = new GetBatchDataJob
             {
                 billboards = billboardData,
+#if UNITY_PSP2
+                recordSize = cachedMaterial.recordSizes.ToFloat2s(Allocator.TempJob),
+                recordScale = cachedMaterial.recordScales.ToFloat2s(Allocator.TempJob),
+#else
                 recordSize = new NativeArray<Vector2>(cachedMaterial.recordSizes, Allocator.TempJob).Reinterpret<float2>(),
                 recordScale = new NativeArray<Vector2>(cachedMaterial.recordScales, Allocator.TempJob).Reinterpret<float2>(),
+#endif
                 atlasRects = new NativeArray<Rect>(cachedMaterial.atlasRects, Allocator.TempJob),
                 atlasIndices = new NativeArray<RecordIndex>(cachedMaterial.atlasIndices, Allocator.TempJob),
                 scaleDivisor = BlocksFile.ScaleDivisor,
@@ -959,20 +1050,45 @@ namespace DaggerfallWorkshop
             // Assign mesh data
             ___assignMeshData.Begin();
             {
+#if UNITY_PSP2
+                // Unity 2017 mesh API: arrays only (no NativeArray / index buffer API)
+#else
                 const MeshUpdateFlags flags = MeshUpdateFlags.DontRecalculateBounds | MeshUpdateFlags.DontNotifyMeshUsers | MeshUpdateFlags.DontValidateIndices | MeshUpdateFlags.DontResetBoneBounds;
 
+#endif
                 ___vertexBuffer.Begin();
+#if UNITY_PSP2
+                billboardMesh.Clear();
+                // Octagons around the sprites' opaque pixels instead of quads where possible (VitaBillboardTrim sets the whole mesh)
+                int[] vitaTrimRecords = VitaTrimRecords();
+                bool vitaTrimmed = vitaTrimRecords != null && VitaBillboardTrim.Set(billboardMesh, currentArchive, vitaTrimRecords, meshVertices, meshTangents, meshUVs);
+                if (!vitaTrimmed)
+                {
+                    billboardMesh.SetVertices(meshVertices.ToList(vitaVertices));
+                    billboardMesh.SetNormals(meshNormals.ToList(vitaNormals));
+                    billboardMesh.SetTangents(meshTangents.ToList(vitaTangents));
+                    billboardMesh.SetUVs(0, meshUVs.ToList(vitaUVs));
+                }
+#else
                 billboardMesh.SetVertices(meshVertices);// Each vertex is positioned at billboard origin
                 billboardMesh.SetNormals(meshNormals);// Standard normals
                 billboardMesh.SetTangents(meshTangents);// Tangent stores corners and size
                 billboardMesh.SetUVs(channel: 0, meshUVs);// Standard uv coordinates into atlas
+#endif
                 ___vertexBuffer.End();
 
                 ___indexBuffer.Begin();
+#if UNITY_PSP2
+                if (!vitaTrimmed)
+                {
+                    billboardMesh.SetTriangles(meshIndices.ToList(vitaTriangles), 0, false);
+                }
+#else
                 billboardMesh.SetIndexBufferParams(meshIndices.Length, IndexFormat.UInt16);
                 billboardMesh.SetIndexBufferData(meshIndices, 0, 0, meshIndices.Length, flags);
                 billboardMesh.subMeshCount = 1;
                 billboardMesh.SetSubMesh(0, new SubMeshDescriptor(0, meshIndices.Length, MeshTopology.Triangles), flags);
+#endif
                 ___indexBuffer.End();
 
                 billboardMesh.bounds = meshAABB[0];// Manually update bounds to account for max billboard height
@@ -982,6 +1098,23 @@ namespace DaggerfallWorkshop
             ___PushNewMeshData.End();
         }
 
+#if UNITY_PSP2
+        // Each billboard's record for VitaBillboardTrim, or null when the batch must keep quads (custom material, animated, too big)
+        int[] VitaTrimRecords()
+        {
+            if (customMaterial != null || currentArchive < 0 || billboardData.Length > VitaBillboardTrim.MaxBillboards)
+                return null;
+            int[] records = new int[billboardData.Length];
+            for (int i = 0; i < records.Length; i++)
+            {
+                if (billboardData[i].totalFrames > 1)
+                    return null;
+                records[i] = billboardData[i].record;
+            }
+            return records;
+        }
+
+#endif
         private void PushUVData()
         {
             ___PushUVData.Begin();
@@ -994,7 +1127,11 @@ namespace DaggerfallWorkshop
             // Store new mesh UV set
             ___setUVs.Begin();
             if (billboardMesh.vertexCount == meshUVs.Length)
+#if UNITY_PSP2
+                billboardMesh.SetUVs(0, meshUVs.ToList(vitaUVs));
+#else
                 billboardMesh.SetUVs(channel: 0, meshUVs);
+#endif
             ___setUVs.End();
 
             ___PushUVData.End();
@@ -1319,10 +1456,18 @@ namespace DaggerfallWorkshop
 
         // @TODO: move this job outside into a dedicated "UniversalJobs.cs" file, later on
         [Unity.Burst.BurstCompile]
+#if UNITY_PSP2
+        struct DeallocateArrayJob<T> : IJob where T : struct
+#else
         struct DeallocateArrayJob<T> : IJob where T : unmanaged
+#endif
         {
             [ReadOnly] [DeallocateOnJobCompletion] NativeArray<T> array;
+#if UNITY_PSP2
+            public DeallocateArrayJob(NativeArray<T> array) { this.array = array; }
+#else
             public DeallocateArrayJob(NativeArray<T> array) => this.array = array;
+#endif
             void IJob.Execute() { }
         }
 

@@ -103,7 +103,12 @@ namespace DaggerfallWorkshop.Game.Utility
                     string numColumnText = $"column#{error.Column}";
                     string lineContentText = string.Empty;
 
+#if UNITY_PSP2
+                    int fileIndex;
+                    if (int.TryParse(error.FileName, out fileIndex) && GetSpecificLine(sources[fileIndex], error.Line, out lineContentText))
+#else
                     if (int.TryParse(error.FileName, out int fileIndex) && GetSpecificLine(sources[fileIndex], error.Line, out lineContentText))
+#endif
                         lineContentText = $"\"{lineContentText}\"";
 
                     msg.AppendLine($"<b>Compilation Error {errorCodeText}</b>: {errorText}");

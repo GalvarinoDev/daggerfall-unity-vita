@@ -279,6 +279,17 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
 
             // Prevent duplicate close calls with base class's exitKey (Escape)
             AllowCancel = false;
+#if UNITY_PSP2
+        }
+
+        /// <summary>
+        /// Call when the owner is destroyed: the static OnNewGame subscription would keep this window,
+        /// and through it the scene's DaggerfallUnity with all its readers, alive.
+        /// </summary>
+        public void ReleaseStaticEvents()
+        {
+            StartGameBehaviour.OnNewGame -= StartGameBehaviour_OnNewGame;
+#endif
         }
 
         #endregion
@@ -999,7 +1010,47 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
 
         #region Private Methods
 
+#if UNITY_PSP2
+        // Trade windows are new per use: each decoded INVE00I0/INVE01I0/ITEM00I0 again and cut the same 19 pieces (~150-250 ms of a
+        static Texture2D[] vitaTextures;
+        static ImageData vitaCoinsAnimation, vitaMagicAnimation;
+
         protected virtual void LoadTextures()
+        {
+            if (vitaTextures == null)
+            {
+                VitaLoadTexturesUncached();
+                vitaTextures = new[] {
+                    baseTexture, goldTexture,
+                    weaponsAndArmorNotSelected, magicItemsNotSelected, clothingAndMiscNotSelected, ingredientsNotSelected,
+                    weaponsAndArmorSelected, magicItemsSelected, clothingAndMiscSelected, ingredientsSelected,
+                    wagonNotSelected, infoNotSelected, equipNotSelected, removeNotSelected, useNotSelected,
+                    wagonSelected, infoSelected, equipSelected, removeSelected, useSelected, infoTexture };
+                vitaCoinsAnimation = coinsAnimation;
+                vitaMagicAnimation = magicAnimation;
+                return;
+            }
+            FilterMode filter = DaggerfallUI.Instance.GlobalFilterMode;
+            foreach (Texture2D t in vitaTextures)
+                t.filterMode = filter;
+            int i = 0;
+            baseTexture = vitaTextures[i++]; goldTexture = vitaTextures[i++];
+            weaponsAndArmorNotSelected = vitaTextures[i++]; magicItemsNotSelected = vitaTextures[i++];
+            clothingAndMiscNotSelected = vitaTextures[i++]; ingredientsNotSelected = vitaTextures[i++];
+            weaponsAndArmorSelected = vitaTextures[i++]; magicItemsSelected = vitaTextures[i++];
+            clothingAndMiscSelected = vitaTextures[i++]; ingredientsSelected = vitaTextures[i++];
+            wagonNotSelected = vitaTextures[i++]; infoNotSelected = vitaTextures[i++]; equipNotSelected = vitaTextures[i++];
+            removeNotSelected = vitaTextures[i++]; useNotSelected = vitaTextures[i++];
+            wagonSelected = vitaTextures[i++]; infoSelected = vitaTextures[i++]; equipSelected = vitaTextures[i++];
+            removeSelected = vitaTextures[i++]; useSelected = vitaTextures[i++]; infoTexture = vitaTextures[i++];
+            coinsAnimation = vitaCoinsAnimation;
+            magicAnimation = vitaMagicAnimation;
+        }
+
+        void VitaLoadTexturesUncached()
+#else
+        protected virtual void LoadTextures()
+#endif
         {
             // Load source textures
             baseTexture = ImageReader.GetTexture(baseTextureName);

@@ -379,7 +379,12 @@ public class ModLoaderInterfaceWindow : DaggerfallPopupWindow
             modsett.modInfo = mods[i].ModInfo;
             modsett.enabled = mods[i].Enabled;
             modSettings[i] = modsett;
+#if UNITY_PSP2
+            ListBox.ListItem item;
+            modList.AddItem(modsett.modInfo.ModTitle, out item);
+#else
             modList.AddItem(modsett.modInfo.ModTitle, out ListBox.ListItem item);
+#endif
             item.textColor = modsett.enabled ? unselectedTextColor : disabledModTextColor;
         }
 

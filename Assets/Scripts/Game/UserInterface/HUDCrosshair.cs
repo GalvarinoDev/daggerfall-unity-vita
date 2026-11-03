@@ -41,9 +41,16 @@ namespace DaggerfallWorkshop.Game.UserInterface
                 Size = crosshairSize * CrosshairScale;
 
                 // Adjust crosshair position when large HUD is docked to match new viewport size
+#if UNITY_PSP2
+                // Vita: Select shows/hides the large HUD without the setting, so follow what is on screen
+                if (DaggerfallUI.Instance.DaggerfallHUD != null &&
+                    DaggerfallUI.Instance.DaggerfallHUD.LargeHUD.Enabled &&
+                    DaggerfallUnity.Settings.LargeHUDDocked)
+#else
                 if (DaggerfallUI.Instance.DaggerfallHUD != null &&
                     DaggerfallUnity.Settings.LargeHUD &&
                     DaggerfallUnity.Settings.LargeHUDDocked)
+#endif
                 {
                     VerticalAlignment = VerticalAlignment.None;
                     HUDLarge largeHUD = DaggerfallUI.Instance.DaggerfallHUD.LargeHUD;

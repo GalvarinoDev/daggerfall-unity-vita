@@ -18,6 +18,7 @@
            #pragma target 3.0
 			#pragma vertex vert
 			#pragma fragment frag
+			#pragma exclude_renderers psp2 // needs 3D textures, which the Vita doesn't have
             #pragma multi_compile __ EXCLUDE_SKY
 
 			

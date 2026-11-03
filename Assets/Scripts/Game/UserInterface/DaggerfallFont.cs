@@ -18,7 +18,9 @@ using DaggerfallConnect;
 using DaggerfallConnect.Arena2;
 using DaggerfallWorkshop.Game.Utility.ModSupport;
 using DaggerfallWorkshop.Utility;
+#if !UNITY_PSP2
 using TMPro;
+#endif
 
 namespace DaggerfallWorkshop.Game.UserInterface
 {
@@ -53,7 +55,9 @@ namespace DaggerfallWorkshop.Game.UserInterface
         protected Rect[] atlasRects;
         protected int asciiStart = defaultAsciiStart;
 
+#if !UNITY_PSP2
         TMP_FontAsset runtimeFontAsset = null;
+#endif
         Dictionary<uint, uint> missingCharacters = new Dictionary<uint, uint>();
 
         protected SDFFontInfo? sdfFontInfo;
@@ -500,6 +504,7 @@ namespace DaggerfallWorkshop.Game.UserInterface
         /// <returns>True if successful.</returns>
         public bool LoadSDFFontAsset(string path)
         {
+#if !UNITY_PSP2
             // Attempt to load a TextMeshPro font asset
             TMP_FontAsset tmpFont = Resources.Load<TMP_FontAsset>(path);
             if (!tmpFont)
@@ -516,12 +521,16 @@ namespace DaggerfallWorkshop.Game.UserInterface
             UseSDFFontAsset(tmpFont);
 
             return true;
+#else
+            return false; // no TextMeshPro on Vita: classic pixel fonts only
+#endif
         }
 
         /// <summary>
         /// Use provided TextMeshPro 2.0.x font asset for SDF rendering.
         /// </summary>
         /// <param name="tmpFont">TMP font asset to use for this font.</param>
+#if !UNITY_PSP2
         public void UseSDFFontAsset(TMP_FontAsset tmpFont)
         {
             // Create font info
@@ -559,6 +568,7 @@ namespace DaggerfallWorkshop.Game.UserInterface
             // Set live font info
             sdfFontInfo = fi;
         }
+#endif
 
         /// <summary>
         /// Gets array of unicode values from currently loaded SDF font.
@@ -611,7 +621,15 @@ namespace DaggerfallWorkshop.Game.UserInterface
             GlyphHeight = fntFile.FixedHeight;
 
             // Create font atlas
+#if UNITY_PSP2 && !UNITY_EDITOR
+            // Baked by VitaFontBaker (VitaFonts, item 21); ReloadFont used to orphan the previous atlas
+            if (atlasTexture != null)
+                UnityEngine.Object.Destroy(atlasTexture);
+            if (!VitaFonts.Load((int)font, out atlasTexture, out atlasRects))
+                ImageProcessing.CreateFontAtlas(fntFile, Color.clear, Color.white, out atlasTexture, out atlasRects);
+#else
             ImageProcessing.CreateFontAtlas(fntFile, Color.clear, Color.white, out atlasTexture, out atlasRects);
+#endif
             atlasTexture.filterMode = FilterMode;
 
             // Load an SDF font variant if one is available
@@ -640,7 +658,11 @@ namespace DaggerfallWorkshop.Game.UserInterface
         GlyphInfo CreateGlyph(int index)
         {
             GlyphInfo glyph = new GlyphInfo();
+#if UNITY_PSP2
+            // Nothing reads a classic glyph's colours (the atlas is what's drawn): 240 Color32[256] of garbage per font load
+#else
             glyph.colors = ImageProcessing.GetProportionalGlyphColors(fntFile, index, backgroundColor, textColor, true);
+#endif
             glyph.width = fntFile.GetGlyphWidth(index);
 
             return glyph;
@@ -658,6 +680,7 @@ namespace DaggerfallWorkshop.Game.UserInterface
         /// <param name="source">Source TMP font for initial character table population.</param>
         /// <param name="replacement">Replacement TMP font output.</param>
         /// <returns>True is successfully created replacement TMP font.</returns>
+#if !UNITY_PSP2
         bool ReplaceTMPFontFromFile(string filename, TMP_FontAsset source, out TMP_FontAsset replacement)
         {
             const string ttfExt = ".ttf";
@@ -737,6 +760,7 @@ namespace DaggerfallWorkshop.Game.UserInterface
 
             return true;
         }
+#endif
 
         /// <summary>
         /// Attempt to add specific font characters to SDF font loaded from a .txt file with same name as font.
@@ -748,6 +772,7 @@ namespace DaggerfallWorkshop.Game.UserInterface
         /// </summary>
         /// <param name="filename"></param>
         /// <param name="replacement"></param>
+#if !UNITY_PSP2
         void LoadCustomFontChars(string filename, TMP_FontAsset replacement)
         {
             // Compose path to character file
@@ -789,6 +814,7 @@ namespace DaggerfallWorkshop.Game.UserInterface
                 }
             }
         }
+#endif
 
         /// <summary>
         /// Attempt to load a missing glyph into dynamic font asset at runtime.
@@ -800,6 +826,7 @@ namespace DaggerfallWorkshop.Game.UserInterface
         /// <returns>True if successful, otherwise false.</returns>
         bool TryAddCharacter(uint code)
         {
+#if !UNITY_PSP2
             // Do nothing if font asset null or this character is missing
             if (runtimeFontAsset == null || missingCharacters.ContainsKey(code))
                 return false;
@@ -835,6 +862,9 @@ namespace DaggerfallWorkshop.Game.UserInterface
             //Debug.LogFormat("Added code: {0}", code);
 
             return true;
+#else
+            return false;
+#endif
         }
 
         #endregion

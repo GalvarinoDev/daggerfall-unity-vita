@@ -113,6 +113,18 @@ namespace DaggerfallWorkshop.Game.UserInterface
             CheckTargetTexture();
         }
 
+#if UNITY_PSP2
+        private void OnDestroy()
+        {
+            // RenderTexture is native memory: free it or each scene change (title -> game) strands a screen-sized target
+            if (targetTexture != null)
+            {
+                targetTexture.Release();
+                Destroy(targetTexture);
+            }
+        }
+
+#endif
         private void Update()
         {
             CheckTargetTexture();
@@ -211,7 +223,16 @@ namespace DaggerfallWorkshop.Game.UserInterface
             // Just return same texture if still valid
             if (!IsReady() || targetTexture.width != width || targetTexture.height != height)
             {
+#if UNITY_PSP2
+                // Create target texture matching screen dimensions (free the old one first)
+                if (targetTexture != null)
+                {
+                    targetTexture.Release();
+                    Destroy(targetTexture);
+                }
+#else
                 // Create target texture matching screen dimensions
+#endif
                 targetTexture = new RenderTexture(width, height, 0, RenderTextureFormat.ARGB32);
                 targetTexture.filterMode = filterMode;
                 targetTexture.name = string.Format("DaggerfallUI RenderTexture {0}", createCount++);

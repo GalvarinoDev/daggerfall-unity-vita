@@ -23,8 +23,21 @@ namespace DaggerfallWorkshop
     public class GenerateDiagLog
     {
 
+#if UNITY_PSP2
+        static bool printed;
+#endif
+
         public static void PrintInfo(string path)
         {
+#if UNITY_PSP2
+            // DaggerfallUnity validates the path once per scene (3x per boot) and each pass took ~4.7 s on hardware: write it once per launch
+            if (printed)
+                return;
+            printed = true;
+            // Several random seeds use DateTime.Now.Millisecond: if Now never moves, they always seed the same
+            DaggerfallUnity.LogMessage(string.Format("VITACLOCK DateTime.Now {0:yyyy-MM-dd HH:mm:ss.fff}, Vita clock {1:yyyy-MM-dd HH:mm:ss.fff}",
+                DateTime.Now, VitaClock.Now), true);
+#endif
             string fileName = "DFTFU_Environment.log";
             StringBuilder builder = new StringBuilder();
             bool check = false;
@@ -44,12 +57,20 @@ namespace DaggerfallWorkshop
             if (!check)
                 builder.AppendLine(string.Format("!!! error in GetSystemInfo !!! ")).AppendLine(Environment.NewLine);
 
+#if UNITY_PSP2
+            // Real Vita: listing ARENA2 (1441 files) takes ~100 s per pass (~70 ms per entry), this walk needs several
+            DaggerfallUnity.LogMessage("GetDirs skipped on Vita");
+#else
             check = GetDirs(path, builder);
 
             if (!check)
                 builder.AppendLine(string.Format("!!! error in GetDirs !!! ")).AppendLine(Environment.NewLine);
+#endif
 
 
+#if UNITY_PSP2
+            DaggerfallUnity.LogMessage("Environment:\n" + builder.ToString().Replace(Environment.NewLine + Environment.NewLine, Environment.NewLine));
+#endif
             OutPutToFile(builder, fileName);
 
 
@@ -74,7 +95,9 @@ namespace DaggerfallWorkshop
                 try
                 {
                     var value = prop.GetValue(DaggerfallUnity.Settings, null);
+#if !UNITY_PSP2   // one block at the end instead: each Debug.Log line cost 7-14 ms on hardware
                     DaggerfallUnity.LogMessage(string.Format("{0} | {1}", prop.Name, value));
+#endif
                     builder.AppendLine(string.Format("{0} | {1} ", prop.Name, value)).AppendLine(Environment.NewLine);
 
                 }
@@ -138,7 +161,9 @@ namespace DaggerfallWorkshop
                     var value = prop.GetValue(currentCult, null);
                     if (value.ToString() == Environment.UserName || value.ToString() == Environment.UserDomainName || prop.Name == "StackTrace")
                         continue;
+#if !UNITY_PSP2   // one block at the end instead: each Debug.Log line cost 7-14 ms on hardware
                     DaggerfallUnity.LogMessage(string.Format("{0} | {1}", prop.Name, value));
+#endif
                     builder.AppendLine(string.Format("{0} | {1} ", prop.Name, value)).AppendLine(Environment.NewLine);
 
                 }
@@ -146,7 +171,9 @@ namespace DaggerfallWorkshop
                 builder.Append(string.Format("### Start Culture Info ###")).AppendLine(Environment.NewLine).AppendLine(Environment.NewLine);
                 foreach (var prop in cultProps)
                 {
+#if !UNITY_PSP2   // one block at the end instead: each Debug.Log line cost 7-14 ms on hardware
                     DaggerfallUnity.LogMessage(string.Format("{0} | {1}", prop.Name, prop.GetValue(currentCult, null)));
+#endif
 
                     builder.AppendLine(string.Format("{0} | {1}", prop.Name, prop.GetValue(currentCult, null))).AppendLine(Environment.NewLine);
 
@@ -181,7 +208,9 @@ namespace DaggerfallWorkshop
                     var value = prop.GetValue(sysInfo, null);
                     if (value.ToString() == SystemInfo.deviceName || value.ToString() == SystemInfo.deviceUniqueIdentifier)
                         continue;
+#if !UNITY_PSP2   // one block at the end instead: each Debug.Log line cost 7-14 ms on hardware
                     DaggerfallUnity.LogMessage(string.Format("{0} | {1}", prop.Name, value));
+#endif
                     builder.AppendLine(string.Format("{0} | {1} ", prop.Name, value)).AppendLine(Environment.NewLine);
                 }
 

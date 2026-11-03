@@ -115,6 +115,11 @@ namespace DaggerfallWorkshop
             // Perform layout
             startMarker = null;
             LayoutDungeon(location, importEnemies);
+#if UNITY_PSP2
+            VitaAtlas.Build(gameObject);
+            VitaFlatBatch.Build(gameObject);
+            VitaModelBatch.Build(gameObject);
+#endif
 
             // Seal location
             isSet = true;
@@ -283,7 +288,11 @@ namespace DaggerfallWorkshop
 
         #region Private Methods
 
+#if UNITY_PSP2
+        private void LayoutDungeon(DFLocation location, bool importEnemies = true)
+#else
         private void LayoutDungeon(in DFLocation location, bool importEnemies = true)
+#endif
         {
 #if SHOW_LAYOUT_TIMES
             // Start timing
@@ -382,7 +391,12 @@ namespace DaggerfallWorkshop
                 {
                     if (Vector3.Distance(actionDoor.transform.position, pos) < tolerance)
                     {
+#if UNITY_PSP2
+                        // Destroy rather than keep a hidden door for the whole visit (idea from Vwing's DFU Android port)
+                        Destroy(actionDoor.gameObject);
+#else
                         actionDoor.gameObject.SetActive(false);
+#endif
                         duplicateFound = true;
                         Debug.Log(">Disabled overlapping action door");
                         break;

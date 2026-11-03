@@ -80,6 +80,15 @@ namespace DaggerfallConnect.Arena2
                 return false;
             }
 
+#if UNITY_PSP2 && !UNITY_EDITOR
+            // Baked by VitaCareerBaker (VitaCareers, item 12): the finished career
+            DFCareer vitaCareer = VitaCareers.Read(filename);
+            if (vitaCareer != null)
+            {
+                career = vitaCareer;
+                return true;
+            }
+#endif
             // Load file
             if (!file.Load(filePath, usage, readOnly))
                 return false;

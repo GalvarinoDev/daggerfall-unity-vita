@@ -34,7 +34,11 @@ namespace DaggerfallWorkshop
         #region Fields
 
         DaggerfallUnity dfUnity = null;
+#if UNITY_PSP2
+        static Arch3dFile arch3dFile = null; // one 27 MB in-memory ARCH3D for every MeshReader (title + game scene)
+#else
         Arch3dFile arch3dFile = null;
+#endif
 
         Dictionary<int, ModelData> modelDict = new Dictionary<int, ModelData>();
 
@@ -100,6 +104,16 @@ namespace DaggerfallWorkshop
                 modelData = modelDict[(int)id];
                 return true;
             }
+
+#if UNITY_PSP2
+
+            // Baked ARCH3D models (VitaModelPack): no card read, plane parse or triangulation per level load
+            if (VitaModelPack.TryGetModelData(id, out modelData))
+            {
+                modelDict.Add((int)id, modelData);
+                return true;
+            }
+#endif
 
             // Find mesh index
             int index = arch3dFile.GetRecordIndex(id);
@@ -603,7 +617,17 @@ namespace DaggerfallWorkshop
             // Ensure reader is created
             if (arch3dFile == null)
             {
+#if UNITY_PSP2
+                VitaMemory.Mark("before ARCH3D");
+                // Read models per record from disk (one read each, BsaFile patches them) instead of keeping the 27 MB file in
+                // the managed heap for the whole game; built meshes are cached by MeshReader anyway
+                arch3dFile = new Arch3dFile(Path.Combine(dfUnity.Arena2Path, Arch3dFile.Filename), FileUsage.UseDisk, true);
+#else
                 arch3dFile = new Arch3dFile(Path.Combine(dfUnity.Arena2Path, Arch3dFile.Filename), FileUsage.UseMemory, true);
+#endif
+#if UNITY_PSP2
+                VitaMemory.Mark("ARCH3D");
+#endif
             }
 
             return true;

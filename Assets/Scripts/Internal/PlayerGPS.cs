@@ -325,6 +325,13 @@ namespace DaggerfallWorkshop
             // Do nothing if not ready
             if (!ReadyCheck())
                 return;
+#if UNITY_PSP2
+            // The Vita title shows a picture, not PC's live town: its first world update built the whole location index (MAPS.BSA, all
+            // regions) and loaded the title town's models for nothing, ~7 s of boot. The world loader updates world info itself
+            // (StreamingWorld), and the first Update in game raises OnMapPixelChanged as upstream's first frame did (lastMapPixel stays -1)
+            if (GameManager.Instance.StateManager.CurrentState == StateManager.StateTypes.Start)
+                return;
+#endif
 
             // Update local world information whenever player map pixel changes
             DFPosition pos = CurrentMapPixel;

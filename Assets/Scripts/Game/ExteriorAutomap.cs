@@ -636,6 +636,13 @@ namespace DaggerfallWorkshop.Game
             }
         }
 
+#if UNITY_PSP2
+        // blocks at each level change, so the first automap open after any transition took 1.04 s in Daggerfall. The
+        // summaries (position, key, type, faction, name seed) don't change for a location.
+        int vitaSummariesMapId = -1;
+        BuildingSummary[][] vitaSummaries;
+
+#endif
         private void CreateBuildingNameplates()
         {
             DeleteBuildingNameplates();
@@ -645,9 +652,23 @@ namespace DaggerfallWorkshop.Game
             gameObjectBuildingNameplates = new GameObject("building name plates");
             gameObjectBuildingNameplates.transform.SetParent(gameobjectExteriorAutomap.transform);
 
+#if UNITY_PSP2
+            int width = location.Exterior.ExteriorData.Width;
+            int height = location.Exterior.ExteriorData.Height;
+            if (vitaSummaries == null || vitaSummariesMapId != location.MapTableData.MapId)
+            {
+                DFBlock[] blocks = RMBLayout.GetLocationBuildingData(location);
+                vitaSummaries = new BuildingSummary[width * height][];
+                for (int y = 0, i = 0; y < height; ++y)
+                    for (int x = 0; x < width; ++x, ++i)
+                        vitaSummaries[i] = RMBLayout.GetBuildingData(blocks[i], x, y);
+                vitaSummariesMapId = location.MapTableData.MapId;
+            }
+#else
             DFBlock[] blocks = RMBLayout.GetLocationBuildingData(location);
             int width = location.Exterior.ExteriorData.Width;
             int height = location.Exterior.ExteriorData.Height;
+#endif
             int uniqueIndex = 0;
 
             int index = 0;
@@ -655,7 +676,11 @@ namespace DaggerfallWorkshop.Game
             {
                 for (int x = 0; x < width; ++x, ++index)
                 {
+#if UNITY_PSP2
+                    BuildingSummary[] buildingsInBlock = vitaSummaries[index];
+#else
                     BuildingSummary[] buildingsInBlock = RMBLayout.GetBuildingData(blocks[index], x, y);
+#endif
                     BlockLayout layout = exteriorLayout[index];
 
                     foreach (BuildingSummary buildingSummary in buildingsInBlock)
@@ -1464,7 +1489,11 @@ namespace DaggerfallWorkshop.Game
             // Render map layout
             foreach (var layout in exteriorLayout)
             {
+#if UNITY_PSP2
+                DFBlock block = blocks[layout.blockIndex];
+#else
                 ref readonly DFBlock block = ref blocks[layout.blockIndex];
+#endif
 
                 // Get block automap image
                 DFBitmap dfBitmap = BlocksFile.GetBlockAutoMap(block, removeGroundFlats);

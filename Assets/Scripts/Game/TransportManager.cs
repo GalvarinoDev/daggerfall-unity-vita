@@ -305,9 +305,16 @@ namespace DaggerfallWorkshop.Game
                     // Allow horse to be offset when large HUD enabled
                     // This is enabled by default to match classic but can be toggled for either docked/undocked large HUD
                     float horseOffsetHeight = 0;
+#if UNITY_PSP2
+                    // Vita: Select shows/hides the large HUD without the setting, so offset only while it is on screen
+                    if (DaggerfallUI.Instance.DaggerfallHUD != null &&
+                        DaggerfallUI.Instance.DaggerfallHUD.LargeHUD.Enabled &&
+                        DaggerfallUnity.Settings.LargeHUDOffsetHorse)
+#else
                     if (DaggerfallUI.Instance.DaggerfallHUD != null &&
                         DaggerfallUnity.Settings.LargeHUD &&
                         DaggerfallUnity.Settings.LargeHUDOffsetHorse)
+#endif
                     {
                         horseOffsetHeight = (int)DaggerfallUI.Instance.DaggerfallHUD.LargeHUD.ScreenHeight;
                     }

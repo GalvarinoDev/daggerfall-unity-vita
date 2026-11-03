@@ -48,7 +48,22 @@ namespace DaggerfallWorkshop.Game
             entityBehaviour = GetComponent<DaggerfallEntityBehaviour>();
         }
 
+#if UNITY_PSP2
+        // Vita probes: upstream's FixedUpdate/Update, timed
         void FixedUpdate()
+        {
+            AttackFixedUpdate();
+        }
+
+        void Update()
+        {
+            AttackUpdate();
+        }
+
+        void AttackFixedUpdate()
+#else
+        void FixedUpdate()
+#endif
         {
             const int speedFloor = 8;
 
@@ -87,7 +102,11 @@ namespace DaggerfallWorkshop.Game
             }
         }
 
+#if UNITY_PSP2
+        void AttackUpdate()
+#else
         void Update()
+#endif
         {
             // Unable to attack if paralyzed
             if (entityBehaviour.Entity.IsParalyzed)

@@ -95,9 +95,16 @@ namespace DaggerfallWorkshop.Game
             // This helps user avoid such misconfiguration or it might be interpreted as a bug
             // Same logic as in FPSWeapon
             offsetHeight = 0;
+#if UNITY_PSP2
+            // Vita: Select shows/hides the large HUD without the setting (as FPSWeapon, check what is on screen)
+            if (DaggerfallUI.Instance.DaggerfallHUD != null &&
+                DaggerfallUI.Instance.DaggerfallHUD.LargeHUD.Enabled &&
+                (DaggerfallUnity.Settings.LargeHUDUndockedOffsetWeapon || DaggerfallUnity.Settings.LargeHUDDocked))
+#else
             if (DaggerfallUI.Instance.DaggerfallHUD != null &&
                 DaggerfallUnity.Settings.LargeHUD &&
                 (DaggerfallUnity.Settings.LargeHUDUndockedOffsetWeapon || DaggerfallUnity.Settings.LargeHUDDocked))
+#endif
             {
                 offsetHeight = (int)DaggerfallUI.Instance.DaggerfallHUD.LargeHUD.ScreenHeight;
             }

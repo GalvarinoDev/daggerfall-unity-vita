@@ -45,6 +45,21 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         HUDLarge largeHUD = new HUDLarge();
         Panel debugPanel = null;
         bool renderHUD = true;
+#if UNITY_PSP2
+        // Vita: Select cycles the HUD: 0 = none (vitals still come up in combat or at
+        // low health), 1 = full (large HUD), 2 = minimal (vitals + compass); holding Select opens the spellbook
+        const float vitaSelectHoldSeconds = 0.5f;
+        int vitaHudMode = 0;
+        float vitaSelectDownTime;
+        bool vitaSelectHeld;
+        // Circle: tap = inventory, hold = transport (horse/cart). Rear touch pad: a quick tap on the left half toggles sneak, both halves
+        // held (two fingers) crouch until released
+        float vitaCircleDownTime;
+        bool vitaCircleHeld;
+        bool vitaRearActive, vitaRearMulti;
+        Vector2 vitaRearStart, vitaRearLast;
+        float vitaRearStartTime;
+#endif
         bool startupComplete = false;
 
         float midScreenTextTimer = -1;
@@ -193,6 +208,51 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             ParentPanel.Components.Add(arrowCountTextLabel);
         }
 
+#if UNITY_PSP2
+        // Vita: while the large HUD is hidden, the small bars show once the player is hit (health drops while a hostile
+        // enemy targets the player) and stay until no hostile enemy targets the player (+3 s), or while health is low. Being stalked
+        // shows nothing, so the bars don't give the stalker away.
+        const float vitaCombatCheckInterval = 0.5f, vitaCombatLinger = 3f, vitaLowHealth = 0.35f;
+        float vitaNextCombatCheck, vitaCombatUntil;
+        bool vitaHunted, vitaInCombat;
+        int vitaLastHealth = -1;
+
+        bool VitaWantVitals()
+        {
+            if (!GameManager.Instance.IsPlayingGame())
+                return false;
+
+            int health = GameManager.Instance.PlayerEntity.CurrentHealth;
+            bool hit = vitaLastHealth >= 0 && health < vitaLastHealth;
+            vitaLastHealth = health;
+            if (hit || Time.time >= vitaNextCombatCheck)
+            {
+                vitaNextCombatCheck = Time.time + vitaCombatCheckInterval;
+                vitaHunted = VitaHostileTargetsPlayer();
+            }
+            if (hit && vitaHunted)
+                vitaInCombat = true;
+            if (vitaInCombat && vitaHunted)
+                vitaCombatUntil = Time.time + vitaCombatLinger;
+            else if (Time.time >= vitaCombatUntil)
+                vitaInCombat = false;
+
+            return vitaInCombat || GameManager.Instance.PlayerEntity.CurrentHealthPercent < vitaLowHealth;
+        }
+
+        static bool VitaHostileTargetsPlayer()
+        {
+            foreach (Entity.DaggerfallEntityBehaviour enemy in ActiveGameObjectDatabase.GetActiveEnemyBehaviours())
+            {
+                EnemySenses senses = enemy.GetComponent<EnemySenses>();
+                EnemyMotor motor = enemy.GetComponent<EnemyMotor>();
+                if (senses && motor && motor.IsHostile && senses.Target == GameManager.Instance.PlayerEntityBehaviour)
+                    return true;
+            }
+            return false;
+        }
+
+#endif
         public override void Update()
         {
             // Update HUD visibility
@@ -211,6 +271,16 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             // Large HUD will force certain other HUD elements off as they conflict in space or utility
             bool largeHUDwasEnabled = largeHUD.Enabled;
             bool largeHUDEnabled = DaggerfallUnity.Settings.LargeHUD;
+#if UNITY_PSP2
+            largeHUDEnabled = vitaHudMode == 1;
+            if (vitaHudMode == 0)
+            {
+                // Hide the small vitals/compass too, so the screen is clear (bars come back in combat or at low health)
+                vitals.Enabled = ShowVitals && VitaWantVitals();
+                compass.Enabled = false;
+                interactionModeIcon.Enabled = false;
+            }
+#endif
             if (largeHUDEnabled)
             {
                 largeHUD.Enabled = true;
@@ -311,6 +381,65 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
                 DaggerfallUnity.Settings.LargeHUD = !DaggerfallUnity.Settings.LargeHUD;
             }
 
+#if UNITY_PSP2
+            // Select: tap = next HUD mode, hold = spellbook (GameManager leaves a Select-bound CastSpell to this). Only while the HUD is on top.
+            if (Input.GetKeyDown(KeyCode.JoystickButton6))
+            {
+                vitaSelectHeld = true;
+                vitaSelectDownTime = Time.unscaledTime;
+            }
+            if (vitaSelectHeld && Time.unscaledTime - vitaSelectDownTime >= vitaSelectHoldSeconds)
+            {
+                vitaSelectHeld = false;
+                DaggerfallUI.PostMessage(DaggerfallUIMessages.dfuiOpenSpellBookWindow);
+            }
+            else if (vitaSelectHeld && Input.GetKeyUp(KeyCode.JoystickButton6))
+            {
+                vitaSelectHeld = false;
+                vitaHudMode = (vitaHudMode + 1) % 3;
+            }
+
+            if (Input.GetKeyDown(KeyCode.JoystickButton1))
+            {
+                vitaCircleHeld = true;
+                vitaCircleDownTime = Time.unscaledTime;
+            }
+            if (vitaCircleHeld && Time.unscaledTime - vitaCircleDownTime >= vitaSelectHoldSeconds)
+            {
+                vitaCircleHeld = false;
+                InputManager.Instance.VitaIgnoreBackRelease = true;
+                DaggerfallUI.PostMessage(DaggerfallUIMessages.dfuiOpenTransportWindow);
+            }
+            else if (vitaCircleHeld && Input.GetKeyUp(KeyCode.JoystickButton1))
+            {
+                vitaCircleHeld = false;
+                DaggerfallUI.PostMessage(DaggerfallUIMessages.dfuiOpenInventoryWindow);
+            }
+#endif
+#if UNITY_PSP2 && !UNITY_EDITOR
+            UnityEngine.PSVita.PSVitaInput.secondaryTouchIsScreenSpace = true;
+            Touch[] rear = UnityEngine.PSVita.PSVitaInput.touchesSecondary;
+            if (rear.Length > 0)
+            {
+                if (!vitaRearActive)
+                {
+                    vitaRearActive = true;
+                    vitaRearMulti = false;
+                    vitaRearStart = rear[0].position;
+                    vitaRearStartTime = Time.unscaledTime;
+                }
+                vitaRearMulti |= rear.Length > 1;
+                vitaRearLast = rear[0].position;
+            }
+            else if (vitaRearActive)
+            {
+                vitaRearActive = false;
+                // One quick tap in the top-middle third toggles crouch (and crouching sneaks, PlayerSpeedChanger)
+                if (!vitaRearMulti && Time.unscaledTime - vitaRearStartTime < 0.5f && vitaRearStart.y > Screen.height / 2f &&
+                    Mathf.Abs(vitaRearStart.x - Screen.width / 2f) < Screen.width / 6f && (vitaRearLast - vitaRearStart).magnitude < Screen.height / 10f)
+                    PlayerHeightChanger.VitaRearCrouchPressed = true;
+            }
+#endif
             // Toggle HUD rendering
             if (DaggerfallShortcut.GetBinding(DaggerfallShortcut.Buttons.HUDToggle).IsDownWith(keyModifiers))
             {

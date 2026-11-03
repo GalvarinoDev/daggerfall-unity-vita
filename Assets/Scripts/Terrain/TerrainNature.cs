@@ -10,6 +10,9 @@
 //
 
 using UnityEngine;
+#if UNITY_PSP2
+using System.Collections;
+#endif
 using DaggerfallConnect.Arena2;
 using DaggerfallConnect;
 using DaggerfallWorkshop.Utility.AssetInjection;
@@ -52,9 +55,44 @@ namespace DaggerfallWorkshop
         protected const int natureClearance = 4;
 
         public bool NatureMeshUsed { get; protected set; }
+#if UNITY_PSP2
+
+        /// nature class rejects at the same point of the loop), so its sites keep this class's slicing and tree models.</summary>
+        public static System.Func<DaggerfallTerrain, System.Collections.Generic.List<Rect>> VitaClearRects;
+
+        static bool VitaInside(System.Collections.Generic.List<Rect> rects, Vector2 pos)
+        {
+            for (int i = 0; i < rects.Count; i++)
+                if (rects[i].Contains(pos))
+                    return true;
+            return false;
+        }
+#endif
 
         public virtual void LayoutNature(DaggerfallTerrain dfTerrain, DaggerfallBillboardBatch dfBillboardBatch, float terrainScale, int terrainDist)
         {
+#if UNITY_PSP2
+            IEnumerator layout = VitaLayoutNature(dfTerrain, dfBillboardBatch, terrainScale, terrainDist, 0);
+            while (layout.MoveNext()) { }
+        }
+
+        // Swaps Unity's global Random state between the layout and everyone else across a yield
+        sealed class VitaRandomSwap
+        {
+            public Random.State other;
+            public void Swap() { Random.State s = Random.state; Random.state = other; other = s; }
+        }
+
+        /// <summary>
+        /// LayoutNature in steps: with budgetMs > 0 it yields when a tile row ends past the budget and before each batch Apply,
+        /// so a new tile in play costs a few ms per frame instead of one 160-460 ms frame. Random draws are exactly LayoutNature's:
+        /// the layout's Random state is swapped out while other code runs.
+        /// </summary>
+        public IEnumerator VitaLayoutNature(DaggerfallTerrain dfTerrain, DaggerfallBillboardBatch dfBillboardBatch, float terrainScale, int terrainDist, float budgetMs)
+        {
+            var vitaWatch = System.Diagnostics.Stopwatch.StartNew();
+            var vitaRandom = new VitaRandomSwap();
+#endif
             // Location Rect is expanded slightly to give extra clearance around locations
             Rect rect = dfTerrain.MapData.locationRect;
             if (rect.x > 0 && rect.y > 0)
@@ -86,18 +124,29 @@ namespace DaggerfallWorkshop
             // Get terrain
             Terrain terrain = dfTerrain.gameObject.GetComponent<Terrain>();
             if (!terrain)
+#if UNITY_PSP2
+                yield break;
+#else
                 return;
+#endif
 
             // Get terrain data
             TerrainData terrainData = terrain.terrainData;
             if (!terrainData)
+#if UNITY_PSP2
+                yield break;
+#else
                 return;
+#endif
 
             // Remove exiting billboards
             dfBillboardBatch.Clear();
             MeshReplacement.ClearNatureGameObjects(terrain);
 
             // Seed random with terrain key
+#if UNITY_PSP2
+            vitaRandom.other = Random.state;
+#endif
             Random.InitState(TerrainHelper.MakeTerrainKey(dfTerrain.MapPixelX, dfTerrain.MapPixelY));
 
             // Just layout some random flats spread evenly across entire map pixel area
@@ -108,6 +157,9 @@ namespace DaggerfallWorkshop
             float scale = terrainData.heightmapScale.x * (float)(hDim - 1) / (float)tDim;
             float maxTerrainHeight = DaggerfallUnity.Instance.TerrainSampler.MaxTerrainHeight;
             float beachLine = DaggerfallUnity.Instance.TerrainSampler.BeachElevation;
+#if UNITY_PSP2
+            System.Collections.Generic.List<Rect> vitaClearRects = VitaClearRects != null ? VitaClearRects(dfTerrain) : null;
+#endif
 
             for (int y = 0; y < tDim; y++)
             {
@@ -123,6 +175,10 @@ namespace DaggerfallWorkshop
                     tilePos.y = y;
                     if (rect.x > 0 && rect.y > 0 && rect.Contains(tilePos))
                         continue;
+#if UNITY_PSP2
+                    if (vitaClearRects != null && VitaInside(vitaClearRects, tilePos))
+                        continue;
+#endif
 
                     // Chance also determined by tile type
                     int tile = dfTerrain.MapData.tilemapSamples[x, y] & 0x3F;
@@ -166,8 +222,26 @@ namespace DaggerfallWorkshop
                     else if (!NatureMeshUsed)
                         NatureMeshUsed = true;  // Signal that nature mesh has been used to initiate extra terrain updates
                 }
+#if UNITY_PSP2
+                if (budgetMs > 0 && vitaWatch.Elapsed.TotalMilliseconds >= budgetMs)
+                {
+                    vitaRandom.Swap();
+                    yield return null;
+                    vitaRandom.Swap();
+                    vitaWatch.Reset();
+                    vitaWatch.Start();
+                }
+#endif
             }
 
+#if UNITY_PSP2
+            if (budgetMs > 0)
+            {
+                vitaRandom.Swap();
+                yield return null;
+                vitaRandom.Swap();
+            }
+#endif
             // Apply new batch
             dfBillboardBatch.Apply();
         }

@@ -92,6 +92,27 @@ namespace DaggerfallConnect.Arena2
                 return false;
             }
 
+#if UNITY_PSP2 && !UNITY_EDITOR
+            // Baked by VitaBookBaker (VitaBooks, item 12): ReadHeader's fields, then its seeded price draw
+            VitaBooks.Book vitaBook = VitaBooks.Read(name);
+            if (vitaBook != null)
+            {
+                bookFile.Load(vitaBook.File, Path.Combine(Path.Combine(arena2, books), name));
+                header = new BookHeader();
+                header.Title = vitaBook.Title;
+                header.Author = vitaBook.Author;
+                header.IsNaughty = vitaBook.IsNaughty;
+                header.NullValues = vitaBook.NullValues;
+                header.Unknown1 = vitaBook.Unknown1;
+                header.Unknown2 = vitaBook.Unknown2;
+                header.Unknown3 = vitaBook.Unknown3;
+                header.PageCount = (UInt16)vitaBook.PageOffsets.Length;
+                header.PageOffsets = vitaBook.PageOffsets;
+                DFRandom.Seed = vitaBook.Seed;
+                header.Price = (uint)DFRandom.random_range_inclusive(300, 800);
+                return true;
+            }
+#endif
             // Load book file
             string booksPath = Path.Combine(arena2, books);
             if (!bookFile.Load(Path.Combine(booksPath, name), fileUsage, readOnly))

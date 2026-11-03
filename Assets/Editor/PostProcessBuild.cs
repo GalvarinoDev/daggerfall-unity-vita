@@ -48,8 +48,15 @@ public class PostProcessBuild
             // Copy manual
             //FileUtil.CopyFileOrDirectory(Path.Combine("Assets/Docs", manualFileName), Path.Combine(pureBuildPath, manualFileName));
         }
+#if UNITY_PSP2
+    }
+#endif
 
+#if UNITY_PSP2
+        static void RemoveFilePattern(string pureBuildPath, string pattern, SearchOption option = SearchOption.TopDirectoryOnly)
+#else
         void RemoveFilePattern(string pureBuildPath, string pattern, SearchOption option = SearchOption.TopDirectoryOnly)
+#endif
         {
             foreach (string file in Directory.GetFiles(pureBuildPath, pattern, option))
             {
@@ -58,7 +65,11 @@ public class PostProcessBuild
             }
         }
 
+#if UNITY_PSP2
+        static void RemoveDirectoryPattern(string pureBuildPath, string pattern, SearchOption option = SearchOption.TopDirectoryOnly)
+#else
         void RemoveDirectoryPattern(string pureBuildPath, string pattern, SearchOption option = SearchOption.TopDirectoryOnly)
+#endif
         {
             foreach (string directory in Directory.GetDirectories(pureBuildPath, pattern, option))
             {
@@ -66,5 +77,7 @@ public class PostProcessBuild
                 Debug.Log(directory + " deleted!");
             }
         }
+#if !UNITY_PSP2
     }
+#endif
 }

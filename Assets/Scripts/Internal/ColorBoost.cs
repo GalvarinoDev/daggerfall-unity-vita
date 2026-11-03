@@ -1,3 +1,4 @@
+#if !UNITY_PSP2 // Post Processing v2 effect, not on Vita
 using System;
 using UnityEngine;
 using UnityEngine.Rendering.PostProcessing;
@@ -55,3 +56,4 @@ public sealed class ColorBoostRenderer : PostProcessEffectRenderer<ColorBoost>
         context.command.BlitFullscreenTriangle(context.source, context.destination, sheet, 0);
     }
 }
+#endif

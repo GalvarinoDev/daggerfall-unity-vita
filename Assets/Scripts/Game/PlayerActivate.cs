@@ -212,6 +212,11 @@ namespace DaggerfallWorkshop.Game
             playerLayerMask = ~(1 << LayerMask.NameToLayer("Player"));
         }
 
+#if UNITY_PSP2
+        float vitaActivateDownTime;
+        bool vitaModeCycled;
+
+#endif
         void Update()
         {
             if (mainCamera == null)
@@ -226,6 +231,22 @@ namespace DaggerfallWorkshop.Game
                 ChangeInteractionMode(PlayerActivateModes.Info);
             else if (InputManager.Instance.ActionStarted(InputManager.Actions.TalkMode))
                 ChangeInteractionMode(PlayerActivateModes.Talk);
+#if UNITY_PSP2
+            // Vita: hold Cross 0.5 s = next interaction mode (Steal, Grab, Info, Talk); that press's release doesn't activate.
+            // Not while a spell is ready (Cross casts it).
+            if (InputManager.Instance.ActionStarted(InputManager.Actions.ActivateCenterObject))
+            {
+                vitaActivateDownTime = Time.unscaledTime;
+                vitaModeCycled = false;
+            }
+            if (InputManager.Instance.HasAction(InputManager.Actions.ActivateCenterObject) && !vitaModeCycled &&
+                Time.unscaledTime - vitaActivateDownTime >= 0.5f &&
+                !(GameManager.Instance.PlayerEffectManager && GameManager.Instance.PlayerEffectManager.HasReadySpell))
+            {
+                vitaModeCycled = true;
+                ChangeInteractionMode((PlayerActivateModes)(((int)CurrentMode + 1) % 4));
+            }
+#endif
 
             // Do not do scene activation if player has cursor active over large HUD
             if (GameManager.Instance.PlayerMouseLook.cursorActive &&
@@ -277,7 +298,11 @@ namespace DaggerfallWorkshop.Game
             }
 
             // Player activates object
+#if UNITY_PSP2
+            if (InputManager.Instance.ActionComplete(InputManager.Actions.ActivateCenterObject) && !vitaModeCycled)
+#else
             if (InputManager.Instance.ActionComplete(InputManager.Actions.ActivateCenterObject))
+#endif
             {
                 // Fire ray into scene from active mouse cursor or camera
                 Ray ray = new Ray();
@@ -506,8 +531,17 @@ namespace DaggerfallWorkshop.Game
 
                 // Play sound when bashing.
                 if (isBash && door.doorType != DoorTypes.DungeonExit)
+#if UNITY_PSP2
+                {
+                    DaggerfallAudioSource dfAudioSource = GetComponent<DaggerfallAudioSource>();
+                    if (dfAudioSource)
+#else
                     if (TryGetComponent<DaggerfallAudioSource>(out var dfAudioSource))
+#endif
                         dfAudioSource.PlayOneShot(SoundClips.PlayerDoorBash);
+#if UNITY_PSP2
+                }
+#endif
 
                 if (door.doorType == DoorTypes.Building && !playerEnterExit.IsPlayerInside)
                 {
@@ -1055,21 +1089,38 @@ namespace DaggerfallWorkshop.Game
 
         public bool AttemptExteriorDoorBash(RaycastHit hit)
         {
+#if UNITY_PSP2
+            Transform doorOwner;
+            var doors = GetDoors(hit.transform, out doorOwner);
+            StaticDoor door;
+            if (!doors || !doors.HasHit(hit.point, out door) || !playerEnterExit)
+#else
             var doors = GetDoors(hit.transform, out Transform doorOwner);
             if (!doors || !doors.HasHit(hit.point, out var door) || !playerEnterExit)
+#endif
                 return false;
             var hitBuilding = false;
             var buildingType = DFLocation.BuildingTypes.AllValid;
             var buildingUnlocked = false;
             var buildingLockValue = 0;
             var building = new StaticBuilding();
+#if UNITY_PSP2
+            Transform buildingOwner;
+            DaggerfallStaticBuildings buildings = GetBuildings(hit.transform, out buildingOwner);
+#else
             DaggerfallStaticBuildings buildings = GetBuildings(hit.transform, out Transform buildingOwner);
+#endif
             if (buildings && buildings.HasHit(hit.point, out building))
             {
                 var buildingDirectory = GameManager.Instance.StreamingWorld.GetCurrentBuildingDirectory();
                 if (!buildingDirectory)
                     return false;
+#if UNITY_PSP2
+                BuildingSummary buildingSummary;
+                if (!buildingDirectory.GetBuildingSummary(building.buildingKey, out buildingSummary))
+#else
                 if (!buildingDirectory.GetBuildingSummary(building.buildingKey, out BuildingSummary buildingSummary))
+#endif
                     return false;
 
                 buildingUnlocked = BuildingIsUnlocked(buildingSummary);

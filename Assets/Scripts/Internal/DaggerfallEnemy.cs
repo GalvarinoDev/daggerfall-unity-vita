@@ -74,7 +74,12 @@ namespace DaggerfallWorkshop
         {
             var mobileUnit = GetComponentInChildren<MobileUnit>();
 
+#if UNITY_PSP2
+            GameObject customMobileUnitGo;
+            if (ModManager.Instance && ModManager.Instance.TryGetAsset("DaggerfallMobileUnit", true, out customMobileUnitGo))
+#else
             if (ModManager.Instance && ModManager.Instance.TryGetAsset("DaggerfallMobileUnit", true, out GameObject customMobileUnitGo))
+#endif
             {
                 var customMobileUnit = customMobileUnitGo.GetComponent<MobileUnit>();
                 if (customMobileUnit)

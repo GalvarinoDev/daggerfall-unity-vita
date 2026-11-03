@@ -152,7 +152,17 @@ namespace DaggerfallWorkshop.Game
             CanCastTouchSpellHandler = CanCastTouchSpell;
         }
 
+#if UNITY_PSP2
         void FixedUpdate()
+        {
+            MotorFixedUpdate();
+        }
+
+        // Vita probes: upstream's FixedUpdate, timed
+        void MotorFixedUpdate()
+#else
+        void FixedUpdate()
+#endif
         {
             if (GameManager.Instance.DisableAI)
                 return;
@@ -322,7 +332,17 @@ namespace DaggerfallWorkshop.Game
         /// <summary>
         /// Apply gravity to ground-based enemies and paralyzed flyers.
         /// </summary>
+#if UNITY_PSP2
         void ApplyGravity()
+        {
+            ApplyGravityUpstream();
+        }
+
+        // Vita probes: upstream's ApplyGravity, timed
+        void ApplyGravityUpstream()
+#else
+        void ApplyGravity()
+#endif
         {
             // Apply gravity
             if (entity.IsSlowFalling && !flies && !swims && !controller.isGrounded && !IsLevitating)
@@ -427,7 +447,17 @@ namespace DaggerfallWorkshop.Game
         /// <summary>
         /// Make decision about what action to take.
         /// </summary>
+#if UNITY_PSP2
         void TakeAction()
+        {
+            TakeActionUpstream();
+        }
+
+        // Vita probes: upstream's TakeAction, timed
+        void TakeActionUpstream()
+#else
+        void TakeAction()
+#endif
         {
             // Monster speed of movement follows the same formula as for when the player walks
             float moveSpeed = (entity.Stats.LiveSpeed + PlayerSpeedChanger.dfWalkBase) * MeshReader.GlobalScale;
@@ -527,7 +557,17 @@ namespace DaggerfallWorkshop.Game
         /// <summary>
         /// Get the destination to move towards.
         /// </summary>
+#if UNITY_PSP2
         void GetDestination()
+        {
+            GetDestinationUpstream();
+        }
+
+        // Vita probes: upstream's GetDestination, timed
+        void GetDestinationUpstream()
+#else
+        void GetDestination()
+#endif
         {
             CharacterController targetController = senses.Target.GetComponent<CharacterController>();
             // If detouring around an obstacle or fall, use the detour position
@@ -879,7 +919,17 @@ namespace DaggerfallWorkshop.Game
         /// <summary>
         /// Try to move in given direction.
         /// </summary>
+#if UNITY_PSP2
         void AttemptMove(Vector3 direction, float moveSpeed, bool backAway = false, bool strafe = false, float strafeDist = 0)
+        {
+            AttemptMoveUpstream(direction, moveSpeed, backAway, strafe, strafeDist);
+        }
+
+        // Vita probes: upstream's AttemptMove, timed
+        void AttemptMoveUpstream(Vector3 direction, float moveSpeed, bool backAway, bool strafe, float strafeDist)
+#else
+        void AttemptMove(Vector3 direction, float moveSpeed, bool backAway = false, bool strafe = false, float strafeDist = 0)
+#endif
         {
             // Set whether pursuing or retreating, for bypassing changeStateTimer delay when continuing these actions
             if (!backAway && !strafe)
@@ -999,7 +1049,17 @@ namespace DaggerfallWorkshop.Game
         /// <summary>
         /// Try to find a way around an obstacle or fall.
         /// </summary>
+#if UNITY_PSP2
         void FindDetour(Vector3 direction2d)
+        {
+            FindDetourUpstream(direction2d);
+        }
+
+        // Vita probes: upstream's FindDetour, timed
+        void FindDetourUpstream(Vector3 direction2d)
+#else
+        void FindDetour(Vector3 direction2d)
+#endif
         {
             float angle;
             Vector3 testMove = Vector3.zero;
@@ -1137,7 +1197,17 @@ namespace DaggerfallWorkshop.Game
             lastTimeWasStuck = Time.time;
         }
 
+#if UNITY_PSP2
         void ObstacleCheck(Vector3 direction)
+        {
+            ObstacleCheckUpstream(direction);
+        }
+
+        // Vita probes: upstream's ObstacleCheck, timed
+        void ObstacleCheckUpstream(Vector3 direction)
+#else
+        void ObstacleCheck(Vector3 direction)
+#endif
         {
             ObstacleDetected = false;
             // Rationale: follow walls at 45° incidence; is that optimal? At least it seems very good
@@ -1201,7 +1271,17 @@ namespace DaggerfallWorkshop.Game
             }
         }
 
+#if UNITY_PSP2
         void FallCheck(Vector3 direction)
+        {
+            FallCheckUpstream(direction);
+        }
+
+        // Vita probes: upstream's FallCheck, timed
+        void FallCheckUpstream(Vector3 direction)
+#else
+        void FallCheck(Vector3 direction)
+#endif
         {
             if (flies || IsLevitating || swims || ObstacleDetected || foundUpwardSlope || foundDoor)
             {

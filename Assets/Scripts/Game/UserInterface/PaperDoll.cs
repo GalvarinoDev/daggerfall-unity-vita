@@ -44,6 +44,9 @@ namespace DaggerfallWorkshop.Game.UserInterface
 
         readonly Panel backgroundPanel = new Panel();
         readonly Panel characterPanel = new Panel();
+#if UNITY_PSP2
+        readonly VitaRenderPanel characterRender = new VitaRenderPanel();   // the render itself, under the armour labels as the background was
+#endif
 
         readonly TextLabel[] armourLabels = new TextLabel[DaggerfallEntity.NumberBodyParts];
         readonly Vector2[] armourLabelPos = new Vector2[] { new Vector2(70, 12), new Vector2(20, 38), new Vector2(86, 38), new Vector2(12, 58), new Vector2(6, 90), new Vector2(18, 120), new Vector2(22, 168) };
@@ -69,6 +72,10 @@ namespace DaggerfallWorkshop.Game.UserInterface
             // Setup panels
             Size = new Vector2(paperDollWidth, paperDollHeight);
             characterPanel.Size = new Vector2(paperDollWidth, paperDollHeight);
+#if UNITY_PSP2
+            characterRender.Size = characterPanel.Size;
+            characterPanel.Components.Add(characterRender);   // first child: drawn before the armour labels
+#endif
 
             // Add panels
             Components.Add(backgroundPanel);
@@ -129,7 +136,11 @@ namespace DaggerfallWorkshop.Game.UserInterface
 
             // Display paper doll render
             DaggerfallUI.Instance.PaperDollRenderer.Refresh(PaperDollRenderer.LayerFlags.All, playerEntity);
+#if UNITY_PSP2
+            characterRender.Texture = DaggerfallUI.Instance.PaperDollRenderer.VitaTarget;
+#else
             characterPanel.BackgroundTexture = DaggerfallUI.Instance.PaperDollRenderer.PaperDollTexture;
+#endif
 
             // Update armour values
             RefreshArmourValues(playerEntity, suppressBody);

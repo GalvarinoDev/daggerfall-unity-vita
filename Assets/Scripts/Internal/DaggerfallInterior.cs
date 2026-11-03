@@ -217,7 +217,12 @@ namespace DaggerfallWorkshop
             if (!interiorDoors)
                 return false;
 
+#if UNITY_PSP2
+            int doorIndex;
+            if (interiorDoors.FindLowestOutermostDoor(-1, out lowestDoorPositionOut, out doorIndex))
+#else
             if (interiorDoors.FindLowestOutermostDoor(-1, out lowestDoorPositionOut, out int doorIndex))
+#endif
             {
                 lowestDoorNormalOut = interiorDoors.GetDoorNormal(doorIndex);
                 return true;

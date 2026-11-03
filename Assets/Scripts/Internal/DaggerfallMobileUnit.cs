@@ -57,6 +57,19 @@ namespace DaggerfallWorkshop
         bool shootArrow = false;
         bool restartAnims = true;
         bool freezeAnims = false;
+#if UNITY_PSP2
+        // VitaManualAnim: AnimateEnemy is stepped from LateUpdate (right after the coroutine phase it ran in) instead of as a coroutine, so its
+        // ticks allocate no WaitForSeconds and skip the coroutine scheduler, and the camera facing is computed once per frame for every enemy.
+        // Same frames, same timing. false = upstream.
+        public static bool VitaManualAnim = true;
+        static int vitaFacingFrame = -1;
+        static Camera vitaFacingCamera;
+        static bool vitaFacingValid;
+        static Quaternion vitaFacingRotation;
+        IEnumerator vitaAnim;
+        float vitaAnimWait, vitaAnimNext;
+        bool vitaAnimManual;
+#endif
         bool animReversed = false;
         int frameSpeedDivisor = 1;
 
@@ -142,12 +155,54 @@ namespace DaggerfallWorkshop
 
         void Update()
         {
+#if UNITY_PSP2
+            if (vitaAnimManual != VitaManualAnim && !restartAnims)
+            {
+                // Mode switched: drop the running loop and start it again in the new mode
+                StopAllCoroutines();
+                vitaAnim = null;
+                restartAnims = true;
+            }
+            if (restartAnims)
+            {
+                vitaAnimManual = VitaManualAnim;
+                if (vitaAnimManual)
+                {
+                    // StartCoroutine runs the loop to its first yield at once, inside Update: so does this
+                    vitaAnim = AnimateEnemy();
+                    vitaAnim.MoveNext();
+                    vitaAnimNext = Time.time + vitaAnimWait;
+                }
+                else
+                    StartCoroutine(AnimateEnemy());
+                restartAnims = false;
+            }
+
+            if (VitaManualAnim && mainCamera && Application.isPlaying)
+            {
+                cameraPosition = mainCamera.transform.position;
+                if (vitaFacingFrame != Time.frameCount || vitaFacingCamera != mainCamera)
+                {
+                    vitaFacingFrame = Time.frameCount;
+                    vitaFacingCamera = mainCamera;
+                    Vector3 view = -new Vector3(mainCamera.transform.forward.x, 0, mainCamera.transform.forward.z);
+                    vitaFacingValid = view != Vector3.zero;
+                    if (vitaFacingValid)
+                        vitaFacingRotation = Quaternion.LookRotation(view);   // what LookAt(position + view) sets
+                }
+                if (vitaFacingValid)
+                    transform.rotation = vitaFacingRotation;
+                UpdateOrientation();
+                return;
+            }
+#else
             // Restart animation coroutine if not running
             if (restartAnims)
             {
                 StartCoroutine(AnimateEnemy());
                 restartAnims = false;
             }
+#endif
 
             // Rotate to face camera in game
             if (mainCamera && Application.isPlaying)
@@ -587,9 +642,31 @@ namespace DaggerfallWorkshop
                     }
                 }
 
+#if UNITY_PSP2
+                if (vitaAnimManual)
+                {
+                    vitaAnimWait = 1f / fps;
+                    yield return null;
+                }
+                else
+                    yield return new WaitForSeconds(1f / fps);
+#else
                 yield return new WaitForSeconds(1f / fps);
+#endif
             }
         }
+
+#if UNITY_PSP2
+        void LateUpdate()
+        {
+            // WaitForSeconds resumes in the first frame whose time reaches the wait, after Update: so does this
+            if (vitaAnim != null && vitaAnimManual && Time.time >= vitaAnimNext)
+            {
+                vitaAnim.MoveNext();
+                vitaAnimNext = Time.time + vitaAnimWait;
+            }
+        }
+#endif
 
         /// <summary>
         /// Gets the next state after finished playing current oneshot state
@@ -644,7 +721,39 @@ namespace DaggerfallWorkshop
         /// </summary>
         /// <param name="dfUnity">DaggerfallUnity singleton. Required for content readers and settings.</param>
         /// <param name="archive">Texture archive index derived from type and gender.</param>
+#if UNITY_PSP2
+        // Every enemy loaded its whole TEXTURE file again just for the record sizes: 5.6 s of the Palace's 128 enemies.
+        static readonly Dictionary<int, KeyValuePair<Vector2[], int[]>> vitaRecordSizes = new Dictionary<int, KeyValuePair<Vector2[], int[]>>();
+
         private void CacheRecordSizesAndFrames(DaggerfallUnity dfUnity, int archive)
+        {
+            KeyValuePair<Vector2[], int[]> cached;
+            if (vitaRecordSizes.TryGetValue(archive, out cached))
+            {
+                summary.RecordSizes = cached.Key;
+                summary.RecordFrames = cached.Value;
+                return;
+            }
+            Vector2[] before = summary.RecordSizes;
+            int[] beforeFrames = summary.RecordFrames;
+            Vector2[] sizes;
+            int[] frames;
+            if (VitaTextureInfo.RecordSizes(archive, out sizes, out frames))
+            {
+                summary.RecordSizes = sizes;
+                summary.RecordFrames = frames;
+                vitaRecordSizes[archive] = new KeyValuePair<Vector2[], int[]>(sizes, frames);
+                return;
+            }
+            VitaCacheRecordSizesAndFrames(dfUnity, archive);   // not baked: the file as upstream
+            if (summary.RecordSizes != before)  // loaded (left unchanged when the file is missing)
+                vitaRecordSizes[archive] = new KeyValuePair<Vector2[], int[]>(summary.RecordSizes, summary.RecordFrames);
+        }
+
+        private void VitaCacheRecordSizesAndFrames(DaggerfallUnity dfUnity, int archive)
+#else
+        private void CacheRecordSizesAndFrames(DaggerfallUnity dfUnity, int archive)
+#endif
         {
             // Open texture file
             string path = Path.Combine(dfUnity.Arena2Path, TextureFile.IndexToFileName(archive));

@@ -204,7 +204,82 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             get { return identifying && findingLocation && RegionSelected; }
         }
 
+#if UNITY_PSP2
+        public ContentReader.MapSummary LocationSummary { get { return locationSummary; } }
+
+        // Vita: in a region, R/L zoom in/out (off, 2x, 4x), the D-pad moves the cursor one map pixel (repeats while
+        // held), and the cursor at an edge of the zoomed map pans it. VitaMenuNav leaves the D-pad alone while a region is open.
+        public bool VitaRegionSelected { get { return RegionSelected; } }
+        const float vitaNudgeDelay = 0.35f, vitaNudgeInterval = 0.06f, vitaPanSpeed = 90f, vitaPanEdge = 10f;
+        static readonly KeyCode[] vitaDpad = { KeyCode.JoystickButton8, KeyCode.JoystickButton9, KeyCode.JoystickButton10, KeyCode.JoystickButton11 };
+        static readonly Vector2[] vitaDpadDirs = { Vector2.up, Vector2.right, Vector2.down, Vector2.left };   // Input.mousePosition space (y up)
+        int vitaNudgeKey = -1;
+        float vitaNextNudge;
+
+        void VitaMapInput(Vector2 cursor)
+        {
+            // Zoom steps: off -> 2x -> 4x on R, back on L
+            int step = Input.GetKeyDown(KeyCode.JoystickButton5) ? 1 : Input.GetKeyDown(KeyCode.JoystickButton4) ? -1 : 0;
+            if (step != 0)
+            {
+                int level = !zoom ? 0 : zoomfactor >= 4 ? 2 : 1;
+                int next = Mathf.Clamp(level + step, 0, 2);
+                if (next != level)
+                {
+                    if (level == 0)
+                        zoomPosition = cursor;
+                    zoom = next > 0;
+                    zoomfactor = next == 2 ? 4 : 2;
+                    VitaZoomTo(zoomPosition);
+                }
+            }
+
+            // Pan while the cursor sits at an edge of the zoomed map
+            if (zoom)
+            {
+                Rect r = regionTextureOverlayPanelRect;
+                Vector2 pan = Vector2.zero;
+                if (cursor.x < r.xMin + vitaPanEdge) pan.x = -1;
+                else if (cursor.x > r.xMax - vitaPanEdge) pan.x = 1;
+                if (cursor.y < r.yMin + vitaPanEdge) pan.y = -1;
+                else if (cursor.y > r.yMax - vitaPanEdge) pan.y = 1;
+                if (pan != Vector2.zero)
+                    VitaZoomTo(zoomPosition + pan * vitaPanSpeed / zoomfactor * Time.unscaledDeltaTime);
+            }
+
+            // D-pad: one map pixel per press, repeating while held
+            int held = -1;
+            for (int i = 0; i < vitaDpad.Length; i++)
+                if (Input.GetKey(vitaDpad[i]))
+                    held = i;
+            if (held < 0)
+            {
+                vitaNudgeKey = -1;
+                return;
+            }
+            if (held == vitaNudgeKey && Time.unscaledTime < vitaNextNudge)
+                return;
+            vitaNextNudge = Time.unscaledTime + (held == vitaNudgeKey ? vitaNudgeInterval : vitaNudgeDelay);
+            vitaNudgeKey = held;
+            float mapPixel = (zoom ? zoomfactor : 1) / GetRegionMapScale(selectedRegion);
+            Vector3 mouse = InputManager.Instance.MousePosition;
+            Vector2 move = vitaDpadDirs[held] * mapPixel;
+            InputManager.Instance.SetControllerCursor(new Vector2(mouse.x + move.x * NativePanel.LocalScale.x, mouse.y + move.y * NativePanel.LocalScale.y));
+        }
+
+        // Centres the zoomed view on centre (panel coordinates), kept inside the map
+        void VitaZoomTo(Vector2 centre)
+        {
+            int width = (int)regionTextureOverlayPanelRect.width, height = (int)regionTextureOverlayPanelRect.height;
+            float halfW = width / (zoomfactor * 2f), halfH = height / (zoomfactor * 2f);
+            zoomPosition = new Vector2(Mathf.Clamp(centre.x, halfW, width - halfW),
+                Mathf.Clamp(centre.y, halfH + regionPanelOffset, height - halfH + regionPanelOffset));
+            ZoomMapTextures();
+            UpdateMouseOverLocation();
+        }
+#else
         public ContentReader.MapSummary LocationSummary { get => locationSummary; }
+#endif
 
         public void ActivateTeleportationTravel()
         {
@@ -377,7 +452,12 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             base.Update();
 
             // Toggle window closed with same hotkey used to open it
+#if UNITY_PSP2
+            // Vita: in a region the D-pad (Right = the travel map hotkey) moves the cursor, so only Circle backs out there
+            if ((InputManager.Instance.GetKeyUp(toggleClosedBinding) && !RegionSelected) || InputManager.Instance.GetBackButtonUp())
+#else
             if (InputManager.Instance.GetKeyUp(toggleClosedBinding) || InputManager.Instance.GetBackButtonUp())
+#endif
             {
                 if (RegionSelected)
                     CloseRegionPanel();
@@ -400,6 +480,10 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
 
             UpdateRegionLabel();
 
+#if UNITY_PSP2
+            if (RegionSelected)
+                VitaMapInput(currentMousePos);
+#endif
             if (RegionSelected)
             {
                 if (InputManager.Instance.GetMouseButtonUp(1))
@@ -1123,10 +1207,22 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             // Check location MapTableData.Discovered flag in world replacement data then cached MAPS.BSA data
             bool discovered = false;
             DFLocation location;
+#if UNITY_PSP2
+            // 0 differ), and loading every override of a region just for this flag took 13-15 s at a big region's first map open
+            // map took 52 s for Daggerfall's region). With other mods loaded, look it up as upstream does.
+            var mods = DaggerfallWorkshop.Game.Utility.ModSupport.ModManager.Instance;
+            if (mods == null || mods.LoadedModCount == mods.VitaBuiltInModCount)
+                discovered = summary.Discovered;
+            else if (WorldDataReplacement.GetDFLocationReplacementData(summary.RegionIndex, summary.MapIndex, out location))
+                discovered = location.MapTableData.Discovered;
+            else
+                discovered = summary.Discovered;
+#else
             if (WorldDataReplacement.GetDFLocationReplacementData(summary.RegionIndex, summary.MapIndex, out location))
                 discovered = location.MapTableData.Discovered;
             else
                 discovered = summary.Discovered;
+#endif
 
             return GameManager.Instance.PlayerGPS.HasDiscoveredLocation(summary.ID) || discovered || revealUndiscoveredLocations == true;
         }

@@ -49,7 +49,12 @@ namespace DaggerfallWorkshop.Utility.AssetInjection
 
                 // Find the closest static door
                 DaggerfallStaticDoors staticDoors = interiorParent.GetComponentInChildren<DaggerfallStaticDoors>();
+#if UNITY_PSP2
+                Vector3 closestStaticDoorPos;
+                if (staticDoors.FindClosestDoorToPlayer(transform.position, -1, out closestStaticDoorPos, out closestStaticDoorIdx, DoorTypes.Building))
+#else
                 if (staticDoors.FindClosestDoorToPlayer(transform.position, -1, out Vector3 closestStaticDoorPos, out closestStaticDoorIdx, DoorTypes.Building))
+#endif
                 {
                     closestDoorDistance = Vector3.Distance(transform.position, closestStaticDoorPos);
 

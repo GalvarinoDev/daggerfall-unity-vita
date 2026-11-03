@@ -79,7 +79,12 @@ namespace DaggerfallWorkshop.Game
             DaggerfallUnity dfUnity = DaggerfallUnity.Instance;
             Dictionary<int, MobileEnemy> enemyDict = GameObjectHelper.EnemyDict;
 
+#if UNITY_PSP2
+            MobileEnemy mobileEnemy;
+            if (!enemyDict.TryGetValue((int)EnemyType, out mobileEnemy))
+#else
             if (!enemyDict.TryGetValue((int)EnemyType, out MobileEnemy mobileEnemy))
+#endif
                 return;
 
             if (AlliedToPlayer)
@@ -131,8 +136,25 @@ namespace DaggerfallWorkshop.Game
                 {
                     if (dfMobile.Enemy.Behaviour == MobileBehaviour.Spectral)
                     {
+#if UNITY_PSP2
+                        // Palette atlas (VitaPalette.Spectral): the ghost shader with palette lookups; a shader swap drops the
+                        // textures the new shader doesn't declare, so take them first (UNITY_VITA_GUIDE §3)
+                        Material vitaGhost = meshRenderer.material;
+                        Texture vitaEmission = vitaGhost.HasProperty(VitaPalette.EmissionPaletteTex) ? vitaGhost.GetTexture(VitaPalette.EmissionPaletteTex) : null;
+                        if (vitaEmission)
+                        {
+                            Texture vitaPalette = vitaGhost.GetTexture(VitaPalette.PaletteTex);
+                            vitaGhost.shader = Shader.Find(VitaPalette.GhostShaderName);
+                            vitaGhost.SetTexture(VitaPalette.PaletteTex, vitaPalette);
+                            vitaGhost.SetTexture(VitaPalette.EmissionPaletteTex, vitaEmission);
+                        }
+                        else
+                            vitaGhost.shader = Shader.Find(MaterialReader._DaggerfallGhostShaderName);
+                        vitaGhost.SetFloat("_Cutoff", 0.1f);
+#else
                         meshRenderer.material.shader = Shader.Find(MaterialReader._DaggerfallGhostShaderName);
                         meshRenderer.material.SetFloat("_Cutoff", 0.1f);
+#endif
                     }
                     if (dfMobile.Enemy.NoShadow)
                     {

@@ -753,8 +753,14 @@ namespace DaggerfallConnect.Arena2
 
             // Parse faction file
             byte[] buffer = factionFile.Buffer;
+#if UNITY_PSP2
+            // Baked on the PC (VitaLoadBakedFactions); the text only if the bake is missing or stale
+            if (!VitaLoadBakedFactions(buffer.Length))
+                ParseFactions(Encoding.UTF8.GetString(buffer, 0, buffer.Length));
+#else
             string txt = Encoding.UTF8.GetString(buffer, 0, buffer.Length);
             ParseFactions(txt);
+#endif
             RelinkChildren(factionDict);
         }
 
@@ -948,8 +954,14 @@ namespace DaggerfallConnect.Arena2
                     }
 
                     // Ignore comment lines and empty lines
+#if UNITY_PSP2
+                    // Ordinal: culture-aware StartsWith is slow under IL2CPP (~5,000 lines per boot)
+                    if (string.IsNullOrEmpty(line) || line[0] == ';')
+                        continue;
+#else
                     if (line.StartsWith(";") || string.IsNullOrEmpty(line))
                         continue;
+#endif
 
                     // All factions blocks start with a '#' character
                     if (line.Contains("#"))
@@ -1030,6 +1042,80 @@ namespace DaggerfallConnect.Arena2
             }
         }
 
+#if UNITY_PSP2
+        // Factions baked on the PC by vita/tools/faction_bake.sh with ParseFactions/ParseFactionData's own code: parsing the ~6,000 lines
+        // took 311 ms per boot on the Vita, the bake 32 ms. The ruler seeds are drawn in ParseFactions' order, so DFRandom ends in
+        // the same state.
+        // False = the bake is missing or was made from another FACTION.TXT: parse the text.
+        bool VitaLoadBakedFactions(int textLength)
+        {
+            string bakedPath = Path.Combine(Path.Combine(UnityEngine.Application.streamingAssetsPath, "VitaNative"), "factions.bin");
+            uint seed = DFRandom.Seed;
+            try
+            {
+                using (BinaryReader reader = new BinaryReader(new MemoryStream(File.ReadAllBytes(bakedPath))))   // one card read, ~10,000 small reads from memory
+                {
+                    if (new string(reader.ReadChars(4)) != "VFAC" || reader.ReadInt32() != 1 || reader.ReadInt32() != textLength)
+                        return false;
+                    factionDict.Clear();
+                    factionNameToIDDict.Clear();
+                    for (int count = reader.ReadInt32(); count > 0; count--)
+                    {
+                        FactionData faction = new FactionData();
+                        faction.id = reader.ReadInt32();
+                        faction.parent = reader.ReadInt32();
+                        faction.type = reader.ReadInt32();
+                        int nameLength = reader.ReadInt32();
+                        faction.name = nameLength < 0 ? null : Encoding.UTF8.GetString(reader.ReadBytes(nameLength));
+                        faction.rep = reader.ReadInt32();
+                        faction.summon = reader.ReadInt32();
+                        faction.region = reader.ReadInt32();
+                        faction.power = reader.ReadInt32();
+                        faction.flags = reader.ReadInt32();
+                        faction.ruler = reader.ReadInt32();
+                        faction.ally1 = reader.ReadInt32();
+                        faction.ally2 = reader.ReadInt32();
+                        faction.ally3 = reader.ReadInt32();
+                        faction.enemy1 = reader.ReadInt32();
+                        faction.enemy2 = reader.ReadInt32();
+                        faction.enemy3 = reader.ReadInt32();
+                        faction.face = reader.ReadInt32();
+                        faction.race = reader.ReadInt32();
+                        faction.flat1 = reader.ReadInt32();
+                        faction.flat2 = reader.ReadInt32();
+                        faction.sgroup = reader.ReadInt32();
+                        faction.ggroup = reader.ReadInt32();
+                        faction.minf = reader.ReadInt32();
+                        faction.maxf = reader.ReadInt32();
+                        faction.vam = reader.ReadInt32();
+                        faction.rank = reader.ReadInt32();
+
+                        // Ids are already unique (resolved at bake); names keep the first id, as in ParseFactions
+                        factionDict.Add(faction.id, faction);
+                        if (!factionNameToIDDict.ContainsKey(faction.name))
+                            factionNameToIDDict.Add(faction.name, faction.id);
+
+                        // As ParseFactions: drawn after the struct was copied into the dictionary, so the stored faction keeps 0 for
+                        // both; only the draws matter
+                        uint random = DFRandom.rand() << 16;
+                        faction.rulerNameSeed = DFRandom.rand() | random;
+                        faction.rulerPowerBonus = DFRandom.random_range_inclusive(0, 50) + 20;
+                    }
+                }
+                return true;
+            }
+            catch (Exception e)
+            {
+                UnityEngine.Debug.LogWarningFormat("VitaLoadBakedFactions: {0}, parsing FACTION.TXT", e.Message);
+                // A half-read bake must not leave draws or names behind for the text parse
+                DFRandom.Seed = seed;
+                factionNameToIDDict.Clear();
+                return false;
+            }
+        }
+
+#endif
+
         void ParseFactionData(ref string[] block, ref FactionData faction)
         {
             string[] parts;
@@ -1065,7 +1151,11 @@ namespace DaggerfallConnect.Arena2
                 }
 
                 // Get tag and value strings
+#if UNITY_PSP2
+                string tag = parts[0].Trim().ToLowerInvariant();
+#else
                 string tag = parts[0].Trim().ToLower();
+#endif
                 string value = parts[1].Trim();
 
                 // Set tag value in faction

@@ -51,7 +51,13 @@ namespace DaggerfallWorkshop.Utility
 
             // Change viewport when large HUD is docked
             // When not using docked the large HUD is just an overlay of variable size and main viewport does not change
+#if UNITY_PSP2
+            // The Vita keeps the large HUD hidden until a rear swipe (DaggerfallHUD): shrink only while it shows, or the strip under
+            // the camera is never redrawn (the damage flash left a red bar there)
+            if (DaggerfallUnity.Settings.LargeHUD && DaggerfallUnity.Settings.LargeHUDDocked && DaggerfallUI.Instance.DaggerfallHUD.LargeHUD.Enabled)
+#else
             if (DaggerfallUnity.Settings.LargeHUD && DaggerfallUnity.Settings.LargeHUDDocked)
+#endif
             {
                 // Shrink viewport to area not occupied by docked large HUD
                 // Check size every frame as HUD height can change (e.g. resizing window, changing resolution)

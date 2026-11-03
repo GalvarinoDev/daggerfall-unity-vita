@@ -12,6 +12,9 @@
 using UnityEngine;
 using System.IO;
 using System.Collections.Generic;
+#if UNITY_PSP2
+using System.Linq;
+#endif
 using DaggerfallConnect;
 using DaggerfallConnect.Utility;
 using DaggerfallConnect.Arena2;
@@ -191,6 +194,11 @@ namespace DaggerfallWorkshop.Utility
         {
             GetTextureResults results = new GetTextureResults();
 
+#if UNITY_PSP2
+            // Atlas sources need no mips: the atlas makes its own (and mipmapped NPOT frames may be padded to POT in VRAM)
+            bool mipMaps = MipMaps && !settings.atlasSource;
+
+#endif
             // Check if window, spectral, or auto-emissive
             bool isWindow = ClimateSwaps.IsExteriorWindow(settings.archive, settings.record);
             bool isSpectral = TextureFile.IsSpectralArchive(settings.archive);
@@ -206,6 +214,14 @@ namespace DaggerfallWorkshop.Utility
             if (DaggerfallUnity.Settings.RetroRenderingMode > 0 && !DaggerfallUnity.Settings.UseMipMapsInRetroMode)
                 mipMaps = false;
 
+#if UNITY_PSP2
+            // What the palette path below makes for world textures, baked on the PC (VitaWorldTextures, textures.pak): no TEXTURE read
+            int vitaEmission = VitaEmissionKind(settings, isWindow, isEmissive);
+            if (VitaWorldTextures.Covers(settings) && VitaWorldTextures.BakeSink == null &&
+                VitaWorldTextures.TryLoad(settings, vitaEmission, mipMaps, settings.stayReadable, ref results))
+                return results;
+
+#endif
             bool hasReferenceTexture;
 
             // Assign texture file
@@ -228,8 +244,22 @@ namespace DaggerfallWorkshop.Utility
             // Get albedo Color32 array
             Color32[] albedoColors = null;
 
+#if UNITY_PSP2
+            // Plain textures stay 8-bit palette indices (exact colours, a quarter of ARGB32); anything that reshapes the albedo pixels
+            // (normals, borders, sharpening, spectral) or isn't point-filtered keeps ARGB32. Emission that is a function of the palette index
+            // (windows, self-lit, fire walls: VitaEmissionKind) is a second palette. The palette path never reads the ARGB32 copy, so it
+            // isn't made (a Color32 array per texture, garbage on every city/dungeon load)
+            bool vitaPalettePath = settings.vitaPalette && srcBitmap != null &&
+                !settings.createNormalMap && settings.borderSize == 0 && !settings.sharpen &&
+                !settings.atlasSource && DaggerfallUnity.Instance.MaterialReader.MainFilterMode == FilterMode.Point;
+#endif
             if (hasReferenceTexture)
             {                
+#if UNITY_PSP2
+                if (vitaPalettePath)
+                    sz = new DFSize(srcBitmap.Width, srcBitmap.Height);
+                else
+#endif
                 if (isSpectral)
                 {
                     // Adjust source bitmap to set spectral grays
@@ -262,9 +292,46 @@ namespace DaggerfallWorkshop.Utility
             if (!albedoImported && hasReferenceTexture)
             {
                 // Create albedo texture
+#if UNITY_PSP2
+                if (vitaPalettePath)
+                {
+                    byte[] vitaRaw;
+                    int vitaWidth, vitaHeight;
+                    DFBitmap vitaBitmap = srcBitmap;
+                    if (isSpectral)
+                    {
+                        // Spectral indices (SetSpectral) on a copy: GetDFBitmap hands out the file's own frame
+                        vitaBitmap = new DFBitmap(srcBitmap.Width, srcBitmap.Height) { Data = (byte[])srcBitmap.Data.Clone() };
+                        SetSpectral(ref vitaBitmap);
+                    }
+                    albedoMap = VitaPalette.IndexTexture(vitaBitmap, textureFile.Palette, mipMaps, settings.stayReadable, out vitaRaw, out vitaWidth, out vitaHeight);
+                    if (albedoMap)
+                    {
+                        Texture2D vitaSpectralGlow;
+                        results.vitaPalette = isSpectral ? VitaPalette.Spectral(textureFile.Palette, settings.alphaIndex, out vitaSpectralGlow) :
+                            VitaPalette.Palette(textureFile.Palette, settings.alphaIndex);
+                        if (VitaWorldTextures.BakeSink != null && mipMaps)
+                            VitaWorldTextures.Save(settings, textureFile, vitaBitmap, vitaRaw, vitaWidth, vitaHeight);
+                    }
+                    else if (VitaWorldTextures.Covers(settings))
+                        Debug.LogFormat("VITANATIVE miss texture {0} {1} {2}: palette upload failed", settings.archive, settings.record, settings.frame);
+                }
+                else
+                    albedoMap = null;
+                if (!albedoMap)
+                {
+                if (albedoColors == null)
+                    albedoColors = textureFile.GetColor32(srcBitmap, settings.alphaIndex, settings.borderSize, out sz);
+                albedoMap = new Texture2D(sz.Width, sz.Height, ParseTextureFormat(alphaTextureFormat), mipMaps);
+                albedoMap.SetPixels32(albedoColors);
+                Upload(albedoMap, settings);
+                }
+                VitaMemory.CountTexture(settings.archive, settings.record, settings.frame, settings.stayReadable);
+#else
                 albedoMap = new Texture2D(sz.Width, sz.Height, ParseTextureFormat(alphaTextureFormat), MipMaps);
                 albedoMap.SetPixels32(albedoColors);
                 albedoMap.Apply(true, !settings.stayReadable);
+#endif
             }
 
             // Adjust mipmap bias of albedo map when retro mode rendering is enabled
@@ -283,14 +350,40 @@ namespace DaggerfallWorkshop.Utility
                 Color32[] normalColors;
                 normalColors = ImageProcessing.GetBumpMap(ref albedoColors, sz.Width, sz.Height);
                 normalColors = ImageProcessing.ConvertBumpToNormals(ref normalColors, sz.Width, sz.Height, settings.normalStrength);
+#if UNITY_PSP2
+                normalMap = new Texture2D(sz.Width, sz.Height, TextureFormat.ARGB32, mipMaps);
+#else
                 normalMap = new Texture2D(sz.Width, sz.Height, TextureFormat.ARGB32, MipMaps);
+#endif
                 normalMap.SetPixels32(normalColors);
+#if UNITY_PSP2
+                Upload(normalMap, settings);
+#else
                 normalMap.Apply(true, !settings.stayReadable);
+#endif
             }
 
             // Import emission map or create basic emissive texture
             Texture2D emissionMap = null;
             bool resultEmissive = false;
+#if UNITY_PSP2
+            // Palette texture: its emission map as a palette (VitaPalette.WorldEmission), what the branches below give each index
+            if (vitaPalettePath && results.vitaPalette && vitaEmission > 0)
+            {
+                Texture2D vitaSpectralGlow;
+                if (vitaEmission == VitaWorldTextures.EmitSpectral)
+                    VitaPalette.Spectral(textureFile.Palette, settings.alphaIndex, out vitaSpectralGlow);
+                else
+                    vitaSpectralGlow = VitaPalette.WorldEmission(textureFile.Palette, vitaEmission);
+                results.vitaEmissionPalette = vitaSpectralGlow;
+                resultEmissive = true;
+            }
+            else if (vitaPalettePath && results.vitaPalette)
+            {
+                // no emission
+            }
+            else
+#endif
             if (TextureReplacement.TryImportTexture(settings.archive, settings.record, settings.frame, TextureMap.Emission, textureImport, !settings.stayReadable, out emissionMap))
             {
                 // Always import emission if present on disk
@@ -313,9 +406,17 @@ namespace DaggerfallWorkshop.Utility
                         // Color fireColor = new Color(0.773f, 0.38f, 0.122f); // Average of average frames (1 and 3)
                         // Color fireColor = new Color(0.851f, 0.506f, 0.165f); // Average of bright frame (2)
                         Color32[] firewallEmissionColors = textureFile.GetFireWallColors32(ref albedoColors, sz.Width, sz.Height, fireColor, 0.3f);
+#if UNITY_PSP2
+                        emissionMap = new Texture2D(sz.Width, sz.Height, ParseTextureFormat(alphaTextureFormat), mipMaps);
+#else
                         emissionMap = new Texture2D(sz.Width, sz.Height, ParseTextureFormat(alphaTextureFormat), MipMaps);
+#endif
                         emissionMap.SetPixels32(firewallEmissionColors);
+#if UNITY_PSP2
+                        Upload(emissionMap, settings);
+#else
                         emissionMap.Apply(true, !settings.stayReadable);
+#endif
                         resultEmissive = true;
                     }                    
                 }
@@ -325,9 +426,17 @@ namespace DaggerfallWorkshop.Utility
                 {
                     // Create custom emission texture for glass area of windows
                     Color32[] emissionColors = textureFile.GetWindowColors32(srcBitmap);
+#if UNITY_PSP2
+                    emissionMap = new Texture2D(sz.Width, sz.Height, ParseTextureFormat(alphaTextureFormat), mipMaps);
+#else
                     emissionMap = new Texture2D(sz.Width, sz.Height, ParseTextureFormat(alphaTextureFormat), MipMaps);
+#endif
                     emissionMap.SetPixels32(emissionColors);
+#if UNITY_PSP2
+                    Upload(emissionMap, settings);
+#else
                     emissionMap.Apply(true, !settings.stayReadable);
+#endif
                     resultEmissive = true;
                 }
 
@@ -337,9 +446,17 @@ namespace DaggerfallWorkshop.Utility
                     Color eyeEmission = Color.red;
                     Color bodyEmission = Color.black;// new Color(0.1f, 0.1f, 0.1f);
                     Color32[] emissionColors = textureFile.GetSpectralEmissionColors32(srcBitmap, albedoColors, settings.borderSize, spectralEyesPatched, eyeEmission, bodyEmission);
+#if UNITY_PSP2
+                    emissionMap = new Texture2D(albedoMap.width, albedoMap.height, ParseTextureFormat(alphaTextureFormat), mipMaps);
+#else
                     emissionMap = new Texture2D(albedoMap.width, albedoMap.height, ParseTextureFormat(alphaTextureFormat), MipMaps);
+#endif
                     emissionMap.SetPixels32(emissionColors);
+#if UNITY_PSP2
+                    Upload(emissionMap, settings);
+#else
                     emissionMap.Apply(true, !settings.stayReadable);
+#endif
                     resultEmissive = true;
                 }
 
@@ -351,9 +468,17 @@ namespace DaggerfallWorkshop.Utility
                     if (!resultEmissive)
                     {
                         Color32[] emissionColors = new Color32[albedoMap.width * albedoMap.height];
+#if UNITY_PSP2
+                        emissionMap = new Texture2D(albedoMap.width, albedoMap.height, ParseTextureFormat(alphaTextureFormat), mipMaps);
+#else
                         emissionMap = new Texture2D(albedoMap.width, albedoMap.height, ParseTextureFormat(alphaTextureFormat), MipMaps);
+#endif
                         emissionMap.SetPixels32(emissionColors);
+#if UNITY_PSP2
+                        Upload(emissionMap, settings);
+#else
                         emissionMap.Apply(true, !settings.stayReadable);
+#endif
                         resultEmissive = true;
                     }
                 }
@@ -421,6 +546,266 @@ namespace DaggerfallWorkshop.Utility
         /// <param name="settings">Get texture settings.</param>
         /// <param name="alphaTextureFormat">Alpha TextureFormat.</param>
         /// <returns>GetTextureResults.</returns>
+#if UNITY_PSP2
+        // Atlas sources are only read on the CPU by PackTextures: uploading each frame to the GPU wastes VRAM, and on Vita
+        // that VRAM is not reusable until the GPU finishes a frame (the dungeon is built within one)
+        static void Upload(Texture2D texture, GetTextureSettings settings)
+        {
+            if (!settings.atlasSource)
+                texture.Apply(true, !settings.stayReadable);
+        }
+
+        // Vita: every Texture2D takes VRAM when created (NPOT frames padded to POT), and freed VRAM is only reusable after the GPU
+        // finishes a frame, so PackTextures' per-frame source textures overflow VRAM while a dungeon is built in one frame.
+        // For atlases without normal/emission maps, decode frames to Color32 arrays and shelf-pack them on the CPU instead.
+        // Returns false (results untouched) to use the normal path.
+        bool VitaAtlasMips
+        {
+            get { return MipMaps && !(DaggerfallUnity.Settings.RetroRenderingMode > 0 && !DaggerfallUnity.Settings.UseMipMapsInRetroMode); }
+        }
+
+        // The emission map GetTexture2D would make, as a VitaWorldTextures.Emit* kind (0 = none); each is a function of the palette index.
+        // Same precedence as below: window, then spectral, then self-lit, then the black map of mixed emissive archives
+        int VitaEmissionKind(GetTextureSettings settings, bool isWindow, bool isEmissive)
+        {
+            if ((settings.createEmissionMap || settings.autoEmissionForWindows) && isWindow)
+                return VitaWorldTextures.EmitWindow;
+            if ((settings.createEmissionMap || settings.autoEmission) && TextureFile.IsSpectralArchive(settings.archive))
+                return VitaWorldTextures.EmitSpectral;
+            if (settings.createEmissionMap || (settings.autoEmission && isEmissive) && !isWindow)
+                return settings.archive == FireWallsArchive ? VitaWorldTextures.EmitFireWall : VitaWorldTextures.EmitAlbedo;
+            if ((settings.createEmissionMap || settings.autoEmission) && IsEmissiveArchive(settings.archive))
+                return VitaWorldTextures.EmitBlack;
+            return 0;
+        }
+
+        bool TryPackAtlasOnCpu(GetTextureSettings settings, TextureFile textureFile, SupportedAlphaTextureFormats alphaTextureFormat, bool stayReadable, ref GetTextureResults results)
+        {
+            // 8-bit palette atlas (exact colours, a quarter of ARGB32) for point-filtered plain sprites; dilate only colours
+            // transparent pixels, which point sampling never shows, and the palette mips skip them instead
+            bool palette = settings.vitaPalette && !settings.sharpen && !settings.copyToOppositeBorder &&
+                DaggerfallUnity.Instance.MaterialReader.MainFilterMode == FilterMode.Point;
+
+            // Auto-emissive records glow in their own colours (GetTexture2D reuses the albedo as emission map): palette atlases get an
+            // Alpha8 mask of those frames instead of a second ARGB32 atlas.
+            // Windows (glass-only emission) and anything else keep the normal path.
+            // Spectral (ghost, wraith, Lysandus): their look is a function of the remapped index (SetSpectral), so palette atlases hold
+            // those indices and VitaPalette.Spectral gives the alpha/emission palettes
+            bool spectral = TextureFile.IsSpectralArchive(settings.archive);
+            if (settings.createNormalMap || settings.createEmissionMap || (spectral && !palette) ||
+                settings.archive == FireWallsArchive || (!palette && IsEmissiveArchive(settings.archive)))
+                return false;
+            var emissiveRecords = new bool[textureFile.RecordCount];
+            bool emissive = false;
+            for (int record = 0; record < textureFile.RecordCount; record++)
+                if (settings.autoEmission && IsEmissive(settings.archive, record))
+                {
+                    if (!palette || ClimateSwaps.IsExteriorWindow(settings.archive, record))
+                        return false;
+                    emissiveRecords[record] = emissive = true;
+                }
+            bool mips = VitaAtlasMips;
+
+            // Decode every frame (same processing as GetTexture2D's albedo path)
+            var pixels = new List<Color32[]>();
+            var indexPixels = new List<byte[]>();
+            var sizes = new List<DFSize>();
+            var indices = new List<RecordIndex>();
+            var recordSizes = new List<Vector2>();
+            var recordScales = new List<Vector2>();
+            var recordOffsets = new List<Vector2>();
+            var frameCounts = new List<int>();
+            var emissiveFrames = new List<bool>();
+            bool hasAnimation = false;
+            for (int record = 0; record < textureFile.RecordCount; record++)
+            {
+                int frames = textureFile.GetFrameCount(record);
+                if (frames > 1)
+                    hasAnimation = true;
+                DFSize size = textureFile.GetSize(record);
+                DFSize scale = textureFile.GetScale(record);
+                DFPosition offset = textureFile.GetOffset(record);
+                indices.Add(new RecordIndex() { startIndex = sizes.Count, frameCount = frames, width = size.Width, height = size.Height });
+                for (int frame = 0; frame < frames; frame++)
+                {
+                    DFSize sz;
+                    if (palette)
+                    {
+                        DFBitmap bitmap = textureFile.GetDFBitmap(record, frame);
+                        if (spectral)
+                        {
+                            // GetDFBitmap hands out the file's own frame: remap a copy
+                            bitmap = new DFBitmap(bitmap.Width, bitmap.Height) { Data = (byte[])bitmap.Data.Clone() };
+                            SetSpectral(ref bitmap);
+                        }
+                        indexPixels.Add(VitaPalette.Frame(bitmap, settings.borderSize, settings.alphaIndex, out sz));
+                        sizes.Add(sz);
+                        emissiveFrames.Add(emissiveRecords[record]);
+                        continue;
+                    }
+                    Color32[] colors = textureFile.GetColor32(textureFile.GetDFBitmap(record, frame), settings.alphaIndex, settings.borderSize, out sz);
+                    if (settings.sharpen)
+                        colors = ImageProcessing.Sharpen(ref colors, sz.Width, sz.Height);
+                    if (settings.borderSize > 0 && settings.dilate && !settings.copyToOppositeBorder)
+                        ImageProcessing.DilateColors(ref colors, sz);
+                    if (settings.borderSize > 0 && settings.copyToOppositeBorder)
+                        ImageProcessing.WrapBorder(ref colors, sz, settings.borderSize);
+                    pixels.Add(colors);
+                    sizes.Add(sz);
+                }
+                recordSizes.Add(new Vector2(size.Width, size.Height));
+                recordScales.Add(new Vector2(scale.Width, scale.Height));
+                recordOffsets.Add(new Vector2(offset.X, offset.Y));
+                frameCounts.Add(frames);
+            }
+
+            // Smallest power-of-two atlas (w x h/2, then w x w) that fits, tallest frames first on shelves.
+            // If nothing fits at atlasMaxSize, scale all frames down uniformly (as PackTextures does; enemies need ~0.85).
+            int pad = settings.atlasPadding;
+            var positions = new Vector2[sizes.Count];
+            int atlasW = 0, atlasH = 0;
+            float packScale = 1f;
+            List<DFSize> packSizes = sizes;
+            while (true)
+            {
+                var order = Enumerable.Range(0, sizes.Count).OrderByDescending(i => packSizes[i].Height).ToList();
+                for (int dim = 32; dim <= settings.atlasMaxSize && atlasW == 0; dim *= 2)
+                    foreach (int h in new[] { dim / 2, dim })
+                        if (atlasW == 0 && ShelfPack(order, packSizes, pad, dim, h, positions))
+                        {
+                            atlasW = dim;
+                            atlasH = h;
+                        }
+                if (atlasW != 0 || packScale < 0.25f)
+                    break;
+                packScale *= 0.95f;
+                float s = packScale;
+                packSizes = sizes.Select(sz => new DFSize(Mathf.Max(1, (int)(sz.Width * s)), Mathf.Max(1, (int)(sz.Height * s)))).ToList();
+            }
+            if (atlasW == 0)
+                return false;
+
+            Color32[] atlasPixels = palette ? null : new Color32[atlasW * atlasH];
+            byte[] atlasIndices = palette ? new byte[atlasW * atlasH] : null;
+            if (palette && settings.alphaIndex != 0)
+                for (int i = 0; i < atlasIndices.Length; i++)
+                    atlasIndices[i] = (byte)settings.alphaIndex;
+            byte[] emissionMask = emissive ? new byte[atlasW * atlasH] : null;
+            var rects = new List<Rect>(sizes.Count);
+            for (int i = 0; i < sizes.Count; i++)
+            {
+                int x = (int)positions[i].x, y = (int)positions[i].y, w = packSizes[i].Width, h = packSizes[i].Height;
+                if (emissive && emissiveFrames[i])
+                    for (int row = 0; row < h; row++)
+                        for (int col = 0; col < w; col++)
+                            emissionMask[(y + row) * atlasW + x + col] = 255;
+                if (palette)
+                {
+                    byte[] src = packScale < 1f ? ResizeNearest(indexPixels[i], sizes[i], packSizes[i]) : indexPixels[i];
+                    for (int row = 0; row < h; row++)
+                        System.Buffer.BlockCopy(src, row * w, atlasIndices, (y + row) * atlasW + x, w);
+                }
+                else
+                {
+                    Color32[] src = packScale < 1f ? ResizeNearest(pixels[i], sizes[i], packSizes[i]) : pixels[i];
+                    for (int row = 0; row < h; row++)
+                        System.Array.Copy(src, row * w, atlasPixels, (y + row) * atlasW + x, w);
+                }
+                rects.Add(new Rect((float)x / atlasW, (float)y / atlasH, (float)w / atlasW, (float)h / atlasH));
+            }
+            Texture2D atlas = null;
+            byte[] atlasRaw = null, maskRaw = null;
+            if (palette)
+            {
+                atlas = VitaPalette.AtlasTexture(atlasIndices, atlasW, atlasH, textureFile.Palette, settings.alphaIndex, mips, stayReadable, out atlasRaw);
+                if (atlas && emissive)
+                {
+                    results.emissionMap = VitaPalette.MaskTexture(emissionMask, atlasW, atlasH, mips, stayReadable, out maskRaw);
+                    if (!results.emissionMap)
+                    {
+                        Object.Destroy(atlas);
+                        return false;
+                    }
+                }
+                if (atlas && spectral)
+                    results.vitaPalette = VitaPalette.Spectral(textureFile.Palette, settings.alphaIndex, out results.vitaEmissionPalette);
+                else if (atlas)
+                    results.vitaPalette = VitaPalette.Palette(textureFile.Palette, settings.alphaIndex);
+                else if (emissive)
+                    return false;
+                else if (spectral)
+                    return false;
+                else
+                    atlasPixels = VitaPalette.ToColor32(atlasIndices, textureFile.Palette, settings.alphaIndex);
+            }
+            if (!atlas)
+            {
+                atlas = new Texture2D(atlasW, atlasH, ParseTextureFormat(alphaTextureFormat), mips);
+                atlas.SetPixels32(atlasPixels);
+                atlas.Apply(true, !stayReadable);
+            }
+
+            // Shrink UV rect to compensate for internal border (as the PackTextures path does)
+            float finalBorder = (settings.borderSize + settings.atlasShrinkUVs) * packScale;
+            for (int i = 0; i < rects.Count; i++)
+            {
+                Rect r = rects[i];
+                r.xMin += finalBorder / (float)atlasW;
+                r.xMax -= finalBorder / (float)atlasW;
+                r.yMin += finalBorder / (float)atlasH;
+                r.yMax -= finalBorder / (float)atlasH;
+                rects[i] = r;
+            }
+
+            results.atlasSizes.AddRange(recordSizes);
+            results.atlasScales.AddRange(recordScales);
+            results.atlasOffsets.AddRange(recordOffsets);
+            results.atlasFrameCounts.AddRange(frameCounts);
+            results.textureFile = textureFile;
+            results.atlasRects = rects;
+            results.atlasIndices = indices;
+            results.albedoMap = atlas;
+            results.isAtlasAnimated = hasAnimation;
+            results.isEmissive = emissive;
+            if (palette && results.vitaPalette)
+                VitaAtlasCache.Save(settings, mips, results, atlasRaw, maskRaw);
+            return true;
+        }
+
+        static T[] ResizeNearest<T>(T[] src, DFSize from, DFSize to)
+        {
+            var dst = new T[to.Width * to.Height];
+            for (int y = 0; y < to.Height; y++)
+            {
+                int sy = y * from.Height / to.Height;
+                for (int x = 0; x < to.Width; x++)
+                    dst[y * to.Width + x] = src[sy * from.Width + x * from.Width / to.Width];
+            }
+            return dst;
+        }
+
+        static bool ShelfPack(List<int> order, List<DFSize> sizes, int pad, int width, int height, Vector2[] positions)
+        {
+            int x = 0, y = 0, shelf = 0;
+            foreach (int i in order)
+            {
+                int w = sizes[i].Width, h = sizes[i].Height;
+                if (x + w > width)
+                {
+                    x = 0;
+                    y += shelf + pad;
+                    shelf = 0;
+                }
+                if (w > width || y + h > height)
+                    return false;
+                positions[i] = new Vector2(x, y);
+                x += w + pad;
+                shelf = Mathf.Max(shelf, h);
+            }
+            return true;
+        }
+
+#endif
         public GetTextureResults GetTexture2DAtlas(
             GetTextureSettings settings,
             SupportedAlphaTextureFormats alphaTextureFormat = SupportedAlphaTextureFormats.ARGB32)
@@ -430,6 +815,14 @@ namespace DaggerfallWorkshop.Utility
             // Individual textures must remain readable to pack into atlas
             bool stayReadable = settings.stayReadable;
             settings.stayReadable = true;
+#if UNITY_PSP2
+            settings.atlasSource = true;
+            // A cached palette atlas needs no TEXTURE file (VitaAtlasCache)
+            if (settings.atlasMaxSize != 4096 && VitaAtlasCache.TryLoad(settings, VitaAtlasMips, stayReadable, ref results))
+            {
+                return results;
+            }
+#endif
 
             // Assign texture file
             TextureFile textureFile;
@@ -446,6 +839,13 @@ namespace DaggerfallWorkshop.Utility
             results.atlasScales = new List<Vector2>(textureFile.RecordCount);
             results.atlasOffsets = new List<Vector2>(textureFile.RecordCount);
             results.atlasFrameCounts = new List<int>(textureFile.RecordCount);
+#if UNITY_PSP2
+
+            if (settings.atlasMaxSize != 4096 && TryPackAtlasOnCpu(settings, textureFile, alphaTextureFormat, stayReadable, ref results))
+            {
+                return results;
+            }
+#endif
 
             // Read every texture in archive
             bool hasNormalMaps = false;
@@ -538,6 +938,19 @@ namespace DaggerfallWorkshop.Utility
                 // Repacking to ensure correct mix of lit and unlit
                 atlasEmissionMap = new Texture2D(settings.atlasMaxSize, settings.atlasMaxSize, ParseTextureFormat(alphaTextureFormat), MipMaps);
                 atlasEmissionMap.PackTextures(emissionTextures.ToArray(), settings.atlasPadding, settings.atlasMaxSize, !stayReadable);
+#if UNITY_PSP2
+            }
+
+            // Free the per-frame source textures now: all were created above (nothing is imported unless atlasMaxSize is 4096).
+            // Left for UnloadUnusedAssets they pile up while a whole dungeon builds (hundreds of textures, the load's memory peak).
+            if (textureImport == TextureImport.None)
+            {
+                var sources = new HashSet<Texture2D>(albedoTextures);
+                sources.UnionWith(normalTextures);
+                sources.UnionWith(emissionTextures);
+                foreach (Texture2D source in sources)
+                    Object.DestroyImmediate(source);
+#endif
             }
 
             // Add to results
@@ -639,6 +1052,15 @@ namespace DaggerfallWorkshop.Utility
             const int gutterSize = 32;
 
             GetTextureResults results = new GetTextureResults();
+#if UNITY_PSP2
+            // Vita: baked on the PC with this code (vita/tools/bake_textures.sh)
+            if (VitaWorldTextures.BakeSink == null && VitaWorldTextures.TryLoadTileset(archive, stayReadable, ref results))
+            {
+                results.albedoMap.wrapMode = TextureWrapMode.Clamp;
+                results.albedoMap.anisoLevel = 8;
+                return results;
+            }
+#endif
 
             // Load texture file and check count matches terrain tiles
             TextureFile textureFile = new TextureFile(Path.Combine(Arena2Path, TextureFile.IndexToFileName(archive)), FileUsage.UseMemory, true);
@@ -650,7 +1072,13 @@ namespace DaggerfallWorkshop.Utility
             // need to be generated once and can be prepared offline where
             // startup time is critical.
             int x = 0, y = 0;
+#if UNITY_PSP2
+            // Vita: an 8-bit palette-index atlas (exact colours, see VitaPalette): 5.6 MB with mips instead of a 16 MB Color32[] plus a 22 MB
+            // ARGB32 texture, which crashed travelling to a new climate (Sentinel, runs 131-133). Daggerfall/Tilemap looks the colour up.
+            byte[] tilesetData = VitaPalette.NewMippedData(atlasDim);
+#else
             Color32[] atlasColors = new Color32[atlasDim * atlasDim];
+#endif
             for (int record = 0; record < textureFile.RecordCount; record++)
             {              
                 // Create base image with gutter
@@ -719,10 +1147,17 @@ namespace DaggerfallWorkshop.Utility
                 Color32[] rotateFlip = ImageProcessing.RotateColors(ref flip, sz.Width, sz.Height);
 
                 // Insert into atlas
+#if UNITY_PSP2
+                VitaPalette.InsertIndices(albedo, sz.Width, sz.Height, tilesetData, atlasDim, x, y, textureFile.Palette);
+                VitaPalette.InsertIndices(rotate, sz.Width, sz.Height, tilesetData, atlasDim, x + sz.Width, y, textureFile.Palette);
+                VitaPalette.InsertIndices(flip, sz.Width, sz.Height, tilesetData, atlasDim, x + sz.Width * 2, y, textureFile.Palette);
+                VitaPalette.InsertIndices(rotateFlip, sz.Width, sz.Height, tilesetData, atlasDim, x + sz.Width * 3, y, textureFile.Palette);
+#else
                 ImageProcessing.InsertColors(ref albedo, ref atlasColors, x, y, sz.Width, sz.Height, atlasDim, atlasDim);
                 ImageProcessing.InsertColors(ref rotate, ref atlasColors, x + sz.Width, y, sz.Width, sz.Height, atlasDim, atlasDim);
                 ImageProcessing.InsertColors(ref flip, ref atlasColors, x + sz.Width * 2, y, sz.Width, sz.Height, atlasDim, atlasDim);
                 ImageProcessing.InsertColors(ref rotateFlip, ref atlasColors, x + sz.Width * 3, y, sz.Width, sz.Height, atlasDim, atlasDim);
+#endif
 
                 // Increment position
                 x += sz.Width * 4;
@@ -733,10 +1168,22 @@ namespace DaggerfallWorkshop.Utility
                 }
             }
 
+#if UNITY_PSP2
+            // The unused slots after the last tile hold index 0; they are never sampled
+            Texture2D albedoAtlas = VitaPalette.MippedTexture(tilesetData, atlasDim, stayReadable);
+            if (albedoAtlas == null)
+            {
+                Debug.LogError("Vita: palette tileset failed for TEXTURE." + archive + ": no terrain tileset");
+                return results;
+            }
+            VitaWorldTextures.SaveTileset(archive, textureFile.Palette, tilesetData, atlasDim);
+            results.vitaPalette = VitaPalette.Palette(textureFile.Palette, -1);
+#else
             // Create Texture2D
             Texture2D albedoAtlas = new Texture2D(atlasDim, atlasDim, TextureFormat.ARGB32, MipMaps);
             albedoAtlas.SetPixels32(atlasColors);
             albedoAtlas.Apply(true, !stayReadable);
+#endif
 
             // Change settings for these textures
             albedoAtlas.wrapMode = TextureWrapMode.Clamp;

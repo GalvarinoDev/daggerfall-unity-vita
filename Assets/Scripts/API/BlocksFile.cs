@@ -307,6 +307,20 @@ namespace DaggerfallConnect.Arena2
             if (autoDiscardValue && lastBlock != -1)
                 DiscardBlock(lastBlock);
 
+#if UNITY_PSP2 && !UNITY_EDITOR
+            // Baked (VitaBlockData.cs): the DFBlock as parsed below (name, type, position, index, RDB fixes included), no BLOCKS.BSA read.
+            // An empty FileProxy marks the block as loaded (nothing reads it after Read).
+            if (VitaBlockData.Read(bsaFile.GetRecordName(block), ref blocks[block].DFBlock))
+            {
+                blocks[block].MemoryFile = new FileProxy();
+                blocks[block].Name = blocks[block].DFBlock.Name;
+                VitaApplyBuildingReplacements(block);
+                if (!blockNameLookup.ContainsKey(blocks[block].Name))
+                    blockNameLookup.Add(blocks[block].Name, block);
+                lastBlock = block;
+                return true;
+            }
+#endif
             // Load record data
             blocks[block].MemoryFile = bsaFile.GetRecordProxy(block);
             if (blocks[block].MemoryFile == null)
@@ -422,7 +436,11 @@ namespace DaggerfallConnect.Arena2
         /// <param name="block">Reference to block.</param>
         /// <param name="removeGroundFlats">Filters ground flat "speckles" from the AutoMap.</param>
         /// <returns>DFBitmap object.</returns>
+#if UNITY_PSP2
+        static public DFBitmap GetBlockAutoMap(DFBlock block, bool removeGroundFlats)
+#else
         static public DFBitmap GetBlockAutoMap(in DFBlock block, bool removeGroundFlats)
+#endif
         {
             // Create DFBitmap and copy data
             DFBitmap dfBitmap = new DFBitmap();
@@ -541,6 +559,16 @@ namespace DaggerfallConnect.Arena2
                 }
 
                 // Replace a corner near the original exit with a model having a door
+#if UNITY_PSP2
+                DFBlock.RdbObject[] rdbObjs = blocks[block].DFBlock.RdbBlock.ObjectRootList[5].RdbObjects;
+                rdbObjs[39].XPos += 64;
+                rdbObjs[39].ZPos -= 64;
+                int x = rdbObjs[39].XPos;
+                int y = rdbObjs[39].YPos;
+                int z = rdbObjs[39].ZPos;
+                rdbObjs[39].Resources.ModelResource.ModelIndex = 35;
+                rdbObjs[39].Resources.ModelResource.YRotation = -512;
+#else
                 ref var rdbObject = ref blocks[block].DFBlock.RdbBlock.ObjectRootList[5].RdbObjects[39];
                 rdbObject.XPos += 64;
                 rdbObject.ZPos -= 64;
@@ -549,14 +577,27 @@ namespace DaggerfallConnect.Arena2
                 int z = rdbObject.ZPos;
                 rdbObject.Resources.ModelResource.ModelIndex = 35;
                 rdbObject.Resources.ModelResource.YRotation = -512;
+#endif
                 // Move the exit to the corner door position
+#if UNITY_PSP2
+                rdbObjs = blocks[block].DFBlock.RdbBlock.ObjectRootList[8].RdbObjects;
+                rdbObjs[0].XPos = x;
+                rdbObjs[0].ZPos = z + 126;
+#else
                 rdbObject = ref blocks[block].DFBlock.RdbBlock.ObjectRootList[8].RdbObjects[0];
                 rdbObject.XPos = x;
                 rdbObject.ZPos = z + 126;
+#endif
                 // Move the start marker near the exit
+#if UNITY_PSP2
+                rdbObjs = blocks[block].DFBlock.RdbBlock.ObjectRootList[4].RdbObjects;
+                rdbObjs[5].XPos = x;
+                rdbObjs[5].ZPos = z;
+#else
                 rdbObject = ref blocks[block].DFBlock.RdbBlock.ObjectRootList[4].RdbObjects[5];
                 rdbObject.XPos = x;
                 rdbObject.ZPos = z;
+#endif
 
                 // Add an wall to seal the door in case the block is not the starting one
                 var rdbObjects = new List<DFBlock.RdbObject>(blocks[block].DFBlock.RdbBlock.ObjectRootList[8].RdbObjects);
@@ -831,6 +872,32 @@ namespace DaggerfallConnect.Arena2
                 }
             }
         }
+
+#if UNITY_PSP2
+        // gate), so apply the per-building replacements ReadRmbBlockData makes while parsing, the same way.
+        void VitaApplyBuildingReplacements(int block)
+        {
+            if (blocks[block].DFBlock.Type != DFBlock.BlockTypes.Rmb || blocks[block].DFBlock.RmbBlock.SubRecords == null)
+                return;
+            BuildingReplacementData buildingReplacementData;
+            for (int i = 0; i < blocks[block].DFBlock.RmbBlock.SubRecords.Length; i++)
+            {
+                if (WorldDataReplacement.GetBuildingReplacementData(blocks[block].Name, block, i, out buildingReplacementData))
+                {
+                    blocks[block].DFBlock.RmbBlock.SubRecords[i] = buildingReplacementData.RmbSubRecord;
+                    if (buildingReplacementData.FactionId > 0)
+                        blocks[block].DFBlock.RmbBlock.FldHeader.BuildingDataList[i].FactionId = buildingReplacementData.FactionId;
+                    blocks[block].DFBlock.RmbBlock.FldHeader.BuildingDataList[i].BuildingType = (DFLocation.BuildingTypes)buildingReplacementData.BuildingType;
+                    if (buildingReplacementData.Quality > 0)
+                        blocks[block].DFBlock.RmbBlock.FldHeader.BuildingDataList[i].Quality = buildingReplacementData.Quality;
+                    if (buildingReplacementData.NameSeed > 0)
+                        blocks[block].DFBlock.RmbBlock.FldHeader.BuildingDataList[i].NameSeed = buildingReplacementData.NameSeed;
+
+                    WorldDataReplacement.ApplyBuildingReplacementAutoMapData(buildingReplacementData, ref blocks[block].DFBlock.RmbBlock.FldHeader.AutoMapData);
+                }
+            }
+        }
+#endif
 
         /// <summary>
         /// Read RMB block data, i.e. the outside and inside repeating sections.

@@ -10,7 +10,9 @@
 //
 
 using UnityEngine;
+#if !UNITY_PSP2
 using UnityEngine.Rendering.PostProcessing;
+#endif
 using System;
 using System.Collections.Generic;
 using DaggerfallConnect;
@@ -56,8 +58,13 @@ namespace DaggerfallWorkshop.Game.Utility
         GameObject player;
         PlayerEnterExit playerEnterExit;
         StartMethods lastStartMethod;
+#if UNITY_PSP2
+        int loadingFrames;
+        VitaLoadingWindow loadingWindow;
+#else
         PostProcessLayer postProcessLayer;
         PostProcessVolume postProcessVolume;
+#endif
 
         #endregion
 
@@ -127,9 +134,29 @@ namespace DaggerfallWorkshop.Game.Utility
             // Restart game using method provided
             if (StartMethod != StartMethods.DoNothing)
             {
+#if UNITY_PSP2
+                // Building the world takes seconds on Vita: show a loading window for a few drawn frames first instead of a frozen screen.
+                // A DFU window, not OnGUI: our own OnGUI drew under the HUD
+                if (loadingFrames < 3 && (StartMethod == StartMethods.NewCharacter || StartMethod == StartMethods.LoadDaggerfallUnitySave ||
+                    StartMethod == StartMethods.LoadClassicSave))
+                {
+                    if (loadingFrames++ == 0)
+                        DaggerfallUI.UIManager.PushWindow(loadingWindow = new VitaLoadingWindow(DaggerfallUI.UIManager,
+                            StartMethod == StartMethods.NewCharacter ? "Dungeon" : null));
+                    return;
+                }
+                loadingFrames = 0;
+#endif
                 GameManager.Instance.PauseGame(true);
                 InvokeStartMethod();
                 StartMethod = StartMethods.DoNothing;
+#if UNITY_PSP2
+                // NewCharacter pops to the HUD itself; a save load may not. A save load that took the window over (SaveLoadManager.LoadGame)
+                // closes it itself once the world is built
+                if (loadingWindow != null && DaggerfallUI.UIManager.TopWindow == loadingWindow && SaveLoadManager.VitaLoadWindow != loadingWindow)
+                    loadingWindow.CloseWindow();
+                loadingWindow = null;
+#endif
             }
         }
 
@@ -187,7 +214,11 @@ namespace DaggerfallWorkshop.Game.Utility
                 Screen.SetResolution(
                     DaggerfallUnity.Settings.ResolutionWidth,
                     DaggerfallUnity.Settings.ResolutionHeight,
+#if UNITY_PSP2
+                    true);
+#else
                     FullScreenMode.ExclusiveFullScreen);
+#endif
             }
             else
             {
@@ -248,6 +279,12 @@ namespace DaggerfallWorkshop.Game.Utility
             {
                 Application.targetFrameRate = DaggerfallUnity.Settings.TargetFrameRate;
             }
+#if UNITY_PSP2
+
+            // Before any world texture is made: see SettingsManager.VitaTextureLimit
+            QualitySettings.masterTextureLimit = DaggerfallUnity.Settings.VitaTextureLimit;
+            QualitySettings.pixelLightCount = DaggerfallUnity.Settings.VitaPixelLights;
+#endif
 
             // Filter settings
             DaggerfallUnity.Instance.MaterialReader.MainFilterMode = (FilterMode)DaggerfallUnity.Settings.MainFilterMode;
@@ -861,6 +898,7 @@ namespace DaggerfallWorkshop.Game.Utility
 
         public void DeployCoreGameEffectSettings(CoreGameEffectSettingsGroups groups)
         {
+#if !UNITY_PSP2
             // Get layer
             if (!postProcessLayer)
             {
@@ -1026,6 +1064,7 @@ namespace DaggerfallWorkshop.Game.Utility
                 }
             }
 
+#endif
             // Retro Mode
             if (groups.HasFlag(CoreGameEffectSettingsGroups.RetroMode))
             {

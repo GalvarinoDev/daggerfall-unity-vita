@@ -19,8 +19,10 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+#if !UNITY_PSP2
 using UnityEngine.Localization;
 using UnityEngine.Localization.Settings;
+#endif
 using DaggerfallWorkshop.Utility;
 using FullSerializer;
 using DaggerfallWorkshop.Game.Utility.ModSupport.ModSettings;
@@ -224,6 +226,19 @@ namespace DaggerfallWorkshop.Game.Utility.ModSupport
 #endif
         }
 
+#if UNITY_PSP2
+        // Vita: a PC mod built into the game (no asset bundle, its scripts compiled in); GetAsset reads Resources/<resourceFolder>/<name>
+        string vitaResourceFolder;
+
+        public Mod(string fileName, ModInfo modInfo, string resourceFolder)
+            : this()
+        {
+            FileName = fileName;
+            ModInfo = modInfo;
+            vitaResourceFolder = resourceFolder;
+        }
+#endif
+
 #if UNITY_EDITOR
         /// <summary>
         /// Makes a mod from a manifest file without an assetbundle for debug.
@@ -307,7 +322,13 @@ namespace DaggerfallWorkshop.Game.Utility.ModSupport
         {
             loadedBundle = false;
 
+#if UNITY_PSP2
+            T asset = vitaResourceFolder != null
+                ? Resources.Load<T>(vitaResourceFolder + "/" + Path.GetFileNameWithoutExtension(assetName))
+                : LoadAssetFromBundle<T>(assetName, out loadedBundle);
+#else
             T asset = LoadAssetFromBundle<T>(assetName, out loadedBundle);
+#endif
 
             if (asset == null)
             {
@@ -595,7 +616,12 @@ namespace DaggerfallWorkshop.Game.Utility.ModSupport
                 localizationDatabaseLoaded = true;
             }
 
+#if UNITY_PSP2
+            string value;
+            if (localizationDatabase != null && localizationDatabase.TryGetValue(key, out value))
+#else
             if (localizationDatabase != null && localizationDatabase.TryGetValue(key, out string value))
+#endif
                 return value;
 
             return null;
@@ -770,8 +796,13 @@ namespace DaggerfallWorkshop.Game.Utility.ModSupport
                 return;
             }
 
+#if UNITY_PSP2
+            var database = new LocalizationDatabase(this, baseName);
+#else
             var database = new LocalizationDatabase((this, baseName));
+#endif
 
+#if !UNITY_PSP2 // Vita: English only, no locale-specific mod text
             Locale locale = LocalizationSettings.SelectedLocale;
             if (locale != null)
             {
@@ -783,25 +814,48 @@ namespace DaggerfallWorkshop.Game.Utility.ModSupport
                 foreach (Mod mod in ModManager.Instance.Mods)
                 {
                     if (mod == this && HasAsset(localeName))
+#if UNITY_PSP2
+                        database = new LocalizationDatabase(mod, localeName, database);
+#else
                         database = new LocalizationDatabase((mod, localeName), database);
+#endif
 
                     if (externName != null && mod.HasAsset(externName))
+#if UNITY_PSP2
+                        database = new LocalizationDatabase(mod, externName, database);
+#else
                         database = new LocalizationDatabase((mod, externName), database);
+#endif
                 }
             }
+#endif
 
             localizationDatabase = database;
         }
 
         private class LocalizationDatabase
         {
+#if UNITY_PSP2
+            private readonly Mod providerMod;
+            private readonly string providerAssetName;
+#else
             private readonly (Mod Mod, string AssetName) provider;
+#endif
             private readonly LocalizationDatabase fallback;
             private Table table;
 
+#if UNITY_PSP2
+            internal LocalizationDatabase(Mod mod, string assetName, LocalizationDatabase fallback = null)
+#else
             internal LocalizationDatabase((Mod Mod, string AssetName) provider, LocalizationDatabase fallback = null)
+#endif
             {
+#if UNITY_PSP2
+                this.providerMod = mod;
+                this.providerAssetName = assetName;
+#else
                 this.provider = provider;
+#endif
                 this.fallback = fallback;
             }
 
@@ -809,9 +863,17 @@ namespace DaggerfallWorkshop.Game.Utility.ModSupport
             {
                 if (table == null)
                 {
+#if UNITY_PSP2
+                    var textAsset = providerMod.GetAsset<TextAsset>(providerAssetName);
+#else
                     var textAsset = provider.Mod.GetAsset<TextAsset>(provider.AssetName);
+#endif
                     if (!textAsset)
+#if UNITY_PSP2
+                        throw new InvalidOperationException($"Failed to load text database ({providerMod}, {providerAssetName}).");
+#else
                         throw new InvalidOperationException($"Failed to load text database {provider}.");
+#endif
 
                     table = new Table(textAsset.text);
                 }
@@ -947,6 +1009,11 @@ namespace DaggerfallWorkshop.Game.Utility.ModSupport
         {
 #if UNITY_EDITOR
             if (IsVirtual)
+                return null;
+#endif
+#if UNITY_PSP2
+            // Vita: built-in mods have no sources (their scripts are in the game assembly)
+            if (vitaResourceFolder != null)
                 return null;
 #endif
 

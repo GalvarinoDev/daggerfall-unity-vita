@@ -1,3 +1,4 @@
+#if !UNITY_PSP2 // Vita applies these patches in TextProvider.GetVitaStringTable
 // Project:         Daggerfall Unity
 // Copyright:       Copyright (C) 2009-2023 Daggerfall Workshop
 // Web Site:        http://www.dfworkshop.net
@@ -28,7 +29,12 @@ public class StringTablePatcher : ITablePostprocessor
     public void PostprocessTable(LocalizationTable table)
     {
         // Only supports StringTable input
+#if UNITY_PSP2
+        StringTable stringTable = table as StringTable;
+        if (stringTable == null)
+#else
         if (!(table is StringTable stringTable))
+#endif
             return;
 
         // Load table patch data (if present)
@@ -69,3 +75,4 @@ public class StringTablePatcher : ITablePostprocessor
     //    }
     //}
 }
+#endif
