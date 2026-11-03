@@ -1,108 +1,123 @@
-![image](https://github.com/Interkarma/daggerfall-unity/assets/10426244/4f176f9d-6332-47b3-a4d7-317ed8d6b38b)
+# Daggerfall Unity Vita
 
-# What is Daggerfall Unity?
+<p align="center"><img src="./Assets/Resources/Vita/StartupBackground2.png"></p>
 
-Daggerfall Unity is an open source recreation of Daggerfall in the Unity engine created by [Daggerfall Workshop](http://www.dfworkshop.net).
+This is a port of [Daggerfall Unity](https://github.com/Interkarma/daggerfall-unity), the open source recreation of The Elder Scrolls II: Daggerfall, for the *PS Vita*.
 
-Experience the adventure and intrigue of Daggerfall with all of its original charm along with hundreds of fixes, quality of life enhancements, and extensive mod support.
+The port runs on the Vita's own Unity player, so nothing is emulated. I backported upstream's code to Unity 2018.2.19f1 and build it with IL2CPP, and the game renders at the native 960x544. Most game data is baked on a PC into packs made for the Vita and ships inside the VPK, which keeps load times and memory use down.
 
-## Classic Daggerfall Plus
+This is an alpha, so expect bugs. Back up your saves before updating.
 
-+ Cross-platform without emulation (Windows/Linux/Mac)
-+ Retro graphics are boosted by modern engine and lighting
-+ High resolution widescreen with classic style
-+ Optionally play in retro mode 320x200 or 640x400 with VGA palettes
-+ Optionally overhaul the graphics and gameplay with mods
-+ Huge draw distances even without mods
-+ Smooth first-person controls
-+ Quality of life enhancements
-+ Extensive mod support with an active creator community
-+ Translation support via community mods
+## Changelog
 
-# Get Daggerfall Unity
+### v.0.1.0-alpha
 
-Daggerfall Unity requires a free copy of DOS Daggerfall to run. This provides all necessary game assets such as textures, 3D models, and sound effects.
+- Initial release.
 
-You can get a free copy of DOS Daggerfall from [Steam](https://store.steampowered.com/app/1812390/The_Elder_Scrolls_II_Daggerfall/) and a free copy of Daggerfall Unity from the [Releases](https://github.com/Interkarma/daggerfall-unity/releases) page. Then simply unzip the latest version of Daggerfall Unity to its own folder and point it to the DOS version. Daggerfall Unity will take care of everything else.
+## Disclaimer
 
-Here are a couple of links with more detailed steps to help you get started using either Steam or a cross-platform process.
+Daggerfall Unity Vita is an unofficial fan project. It is not affiliated with or endorsed by Bethesda Softworks, Sony or Unity.
 
-+ [Using Steam Release of Daggerfall with Daggerfall Unity](https://github.com/Interkarma/daggerfall-unity/wiki/Using-Steam-Release-of-Daggerfall-with-Daggerfall-Unity)
-+ [Installing Daggerfall Unity Cross Platform](https://github.com/Interkarma/daggerfall-unity/wiki/Installing-Daggerfall-Unity-Cross-Platform)
+You need your own copy of Daggerfall to play. DOS Daggerfall is free on [Steam](https://store.steampowered.com/app/1812390/The_Elder_Scrolls_II_Daggerfall/).
 
-# System Requirements
+Please report bugs in this port here, not to the Daggerfall Unity team.
 
-Daggerfall Unity has the following system requirements. Please note that optional mods may substantially increase system requirements or cause game to become less stable.
+## Setup Instructions (For End Users)
 
-### Minimum
-* Operating system: Windows, Linux, MacOS
-* Processor: Intel i3 (Skylake) equivalent
-* Graphics: DirectX 11 capable with 1GB video memory and up-to-date drivers
-* Memory: 2GB system RAM
+You need a Vita running HENkaku or Enso with [VitaShell](https://github.com/TheOfficialFloW/VitaShell/releases) installed, and about 1.7 GB free on `ux0:` for the install. The game and its data take about 1.1 GB once you delete the VPK.
 
-### Recommended
-* Operating system: Windows, Linux, MacOS
-* Processor: Intel i5 (Skylake) equivalent
-* Graphics: GTX 660 with 2GB video memory and up-to-date drivers
-* Memory: 4GB system RAM
+- Download `DFU.vpk` from the [Releases](https://github.com/GalvarinoDev/daggerfall-unity-vita/releases) page and install it with VitaShell.
+- Install DOS Daggerfall on your PC. On Steam, the folder you need is `DF/DAGGER/ARENA2` inside the game's install folder.
+- Copy the whole `ARENA2` folder to your Vita, so that you end up with:
 
-# Featured Mods
+```
+ux0:data/DaggerfallUnity/ARENA2
+```
 
-Daggerfall Unity has an active mod community with hundreds of incredible mods. It's impossible to feature them all, but here's a sampling of a few popular mods that represent a variety of mods the community has created. They range from graphical overhauls, to new quests, new guilds, adding new world areas, and changing game formulas and other behaviours.
+- Launch the game from the LiveArea. The engine load can take about a minute.
 
-## DREAM
+The original 1996 manual is included. Open it with the Manual button on the game's LiveArea screen.
 
-![image](https://github.com/Interkarma/daggerfall-unity/assets/10426244/6a424f3c-f7f1-4def-82e9-98b6486dfc21)
+The game keeps saves and settings in `ux0:data/DaggerfallUnity/UserData`.
 
-The Daggerfall Remaster Enchanted Art Mod (DREAM) upgrades game assets including sound, music, videos & all graphics found in the game. It goes beyond a restoration and additionally fixes the old quirks, bugs and increases variety/fidelity everywhere possible.
+## Controls
 
-[Link to DREAM on Nexus](https://www.nexusmods.com/daggerfallunity/mods/5)
+| Button | Action |
+|---|---|
+| Left stick | Move |
+| Right stick | Look |
+| L or R | Swing weapon |
+| Cross | Activate, click in menus |
+| Circle | Tap: inventory. Hold: transport. Back in menus |
+| Square | Ready weapon |
+| Triangle | Jump, right click in menus |
+| Select | Tap: change HUD. Hold: spellbook |
+| Start | Pause menu |
+| D-pad up | Recast spell |
+| D-pad right | Travel map |
+| D-pad down | Automap |
+| D-pad left | Logbook |
+| Rear touch, left half | Quick tap: toggle sneak |
+| Rear touch, both halves | Hold: crouch |
 
-## Quest Pack 1
+The front touch screen clicks in menus. A new game starts with the HUD hidden, so tap Select to bring it up. In a text box, Triangle reopens the system keyboard.
 
-![image](https://github.com/Interkarma/daggerfall-unity/assets/10426244/43688bd8-c3b0-42b5-bb64-066d6867ff66)
+## Performance
 
-This quest pack offers 195 original new quests for Daggerfall Unity, mostly for the game's guilds.
+I measured these on one PCH-1000 with the alpha's data and code, following a fixed test route. Frame rates change a lot depending on where you are in the game.
 
-[Link to Quest Pack 1 on Nexus](https://www.nexusmods.com/daggerfallunity/mods/2)
+| Test | Result |
+|---|---|
+| 46 stops around the game | 53.9 FPS average |
+| 7 cities | 49.3 FPS average, 31.7 FPS low |
+| Loading a city | 22 to 34 seconds |
+| Entering a city's palace | 34 to 50 seconds |
 
-## Archaeologists
+The default speed setting raises the CPU to 444 MHz and the GPU clock, and limits screen brightness. You can change this with CPU/GPU speed in the pause menu.
 
-![image](https://github.com/Interkarma/daggerfall-unity/assets/10426244/282aa3a9-1662-49d9-9319-a9358775ea33)
+## Known Issues
 
-Enhance Daggerfall Unity gameplay by making language skills more viable and adding a new guild to the game, called "The Archaeologists Guild". Their mission is to delve into the history of Tamriel and they're interested in all creatures and races who have lived or still live there. Joining gives access to locator devices to aid in dungeon delving.
+- English only.
+- Mods aren't supported yet, but support is coming soon. The Vita can't run PC mods as they are. Each one has to be converted into a format the Vita can read, and I need to ask each mod's author for permission first.
+- The web browser and PlayStation Store can't run alongside the game, because it uses the Vita's extra memory mode.
+- Replacement videos, Post Processing and TextMeshPro fonts from PC Daggerfall Unity are not available. The original cutscenes still play.
 
-[Link to Archaeologists on Nexus](https://www.nexusmods.com/daggerfallunity/mods/14)
+## Build Instructions (For Developers)
 
-## World of Daggerfall Project
+The Vita's Unity support is not publicly available, so you need your own licensed copy of Unity 2018.2.19f1 with PS Vita build support.
 
-![image](https://github.com/Interkarma/daggerfall-unity/assets/10426244/c3909d99-9ce4-4c41-8aaf-ee7dce49a6d7)
+The scripts in `vita/` are written for a Linux machine running the editor under Proton, and you will need to adjust their paths for your setup. `vita/unity2017.sh` expects a machine-specific `vita/local.env`, which is not in the repository. Baked data, rendered music and some images are not in the repository either, so a fresh clone has to generate them. I haven't tested that yet.
 
-From the ashes of Daggerfall's past, experience the world of Daggerfall as originally envisioned. With glorious mountain tops that reach for the heavens, and countless new locations to explore.
+With the Unity editor closed, run from the repository root:
 
-[Link to World of Daggerfall Project on Nexus](https://www.nexusmods.com/daggerfallunity/mods/249)
+```bash
+vita/apply_settings.sh
 
-## Finding My Religion
+# Bake game data. Set ARENA2 if your copy isn't the default Steam one.
+export ARENA2=/path/to/ARENA2
+for s in textures texfiles skies models blocks weapons maps mapdata blockdata images fonts strings books quests careers biogs locbooks; do
+  vita/tools/bake_$s.sh
+done
+vita/tools/faction_bake.sh
+vita/tools/namegen_bake.sh
 
-![image](https://github.com/Interkarma/daggerfall-unity/assets/10426244/995ae53d-eb99-451f-942c-931dd31dc85c)
+# Render the music with Daggerfall Unity's own synth.
+vita/tools/render_music.sh
 
-Finding My Religion is a multi-release visual and gameplay overhaul of Daggerfall's religions. The current release is "Detailed Temples", which decorates and redesigns the temples' according to the worshipped deity's sphere of influence. Julianos boasts a bigger library than others, Kynareth has an indoor garden, Mara has a birthing room and more. Each temple have been expanded downwards,  with priests' quarters and additional rooms for all service members. They also feature a crypt where people of importance have been buried.
+# Build and pack vita/build/DFU.vpk.
+vita/build.sh && python3 vita/tools/pack_vpk.py
+```
 
-[Link to Finding My Religion on Nexus](https://www.nexusmods.com/daggerfallunity/mods/344)
+Vita-only changes to upstream's files sit behind `#if UNITY_PSP2` with upstream's original lines kept beside them, so upstream merges stay readable. `vita/tools/guard_diff.py` helps keep them that way.
 
-## Physical Combat And Armor Overhaul
+`vita/bootmusic` is an optional taiHEN plugin that plays the title theme during the engine load. `dfu-vita-converters` holds PC scripts that convert mod data for the port.
 
-![image](https://github.com/Interkarma/daggerfall-unity/assets/10426244/35bc2fb2-5b3d-401d-b3cb-806a59241014)
+## Credits
 
-Instead of increasing chance to avoid an attack completely, armor now reduces the damage you take, based on the material as well as the type of attack. Skills now determine most of your chance to avoid attacks, including many more features.
+- [Interkarma](https://github.com/Interkarma), Daggerfall Workshop and all the Daggerfall Unity contributors for [Daggerfall Unity](https://github.com/Interkarma/daggerfall-unity).
+- Bethesda Softworks for The Elder Scrolls II: Daggerfall.
+- Vwing for ideas from their Android port of Daggerfall Unity.
 
-[Link to Physical Combat And Armor Overhaul on Nexus](https://www.nexusmods.com/daggerfallunity/mods/76)
+## License
 
-## Links
-
-+ [Daggerfall Unity Nexus](https://www.nexusmods.com/daggerfallunity) - *Discover more mods for Daggerfall Unity*
-+ [Lysandus' Tomb Discord](https://discord.gg/rn95kxPGpg) - *Join an active growing community*
-+ [Daggerfall Workshop](http://www.dfworkshop.net/) - *Follow the development of Daggerfall Unity*
-+ [Workshop Forums](http://forums.dfworkshop.net/) - *Join the forum community*
-+ [Reddit](https://www.reddit.com/r/daggerfallunity) - *Join the Daggerfall Unity subreddit*
-+ [Twitter](https://twitter.com/gav_clayton) - *Follow lead developer on Twitter for more news*
+MIT, the same as upstream Daggerfall Unity. See [LICENSE](./LICENSE). The game's data is not covered by this license and is not included in this repository.
