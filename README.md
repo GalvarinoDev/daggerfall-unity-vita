@@ -116,7 +116,8 @@ Vita-only changes to upstream's files sit behind `#if UNITY_PSP2` with upstream'
 
 - [Interkarma](https://github.com/Interkarma), Daggerfall Workshop and all the Daggerfall Unity contributors for [Daggerfall Unity](https://github.com/Interkarma/daggerfall-unity).
 - Bethesda Softworks for The Elder Scrolls II: Daggerfall.
-- Vwing for ideas from their Android port of Daggerfall Unity.
+- [Vwing](https://github.com/Vwing) for ideas from their Android port of Daggerfall Unity.
+- [AJ](https://github.com/AJ170) and the PS Vita Forever server for their help with the project.
 
 ## License
 
