@@ -20,7 +20,11 @@ namespace DaggerfallWorkshop
     /// <summary>
     /// Data used for promotion of Daggerfall terrain material.
     /// </summary>
+#if UNITY_PSP2
+    public struct TerrainMaterialData
+#else
     public readonly struct TerrainMaterialData
+#endif
     {
         /// <summary>
         /// Material assigned to the terrain.
@@ -109,20 +113,39 @@ namespace DaggerfallWorkshop
         /// <returns>Texture archive index.</returns>
         protected int GetGroundArchive(int worldClimate)
         {
+#if UNITY_PSP2
+            DFLocation.ClimateSettings settings;
+            bool isWinter;
+            return GetClimateInfo(worldClimate, out settings, out isWinter);
+#else
             return GetClimateInfo(worldClimate).GroundArchive;
+#endif
         }
 
         /// <summary>
         /// Parses climate informations.
         /// </summary>
         /// <param name="worldClimate">Index of world climate.</param>
+#if UNITY_PSP2
+        /// <returns>Ground archive.</returns>
+        protected virtual int GetClimateInfo(int worldClimate, out DFLocation.ClimateSettings climate, out bool isWinter)
+#else
         /// <returns>Parsed climate informations.</returns>
         protected virtual (int GroundArchive, DFLocation.ClimateSettings Settings, bool IsWinter) GetClimateInfo(int worldClimate)
+#endif
         {
             // Get current climate and ground archive
+#if UNITY_PSP2
+            climate = MapsFile.GetWorldClimateSettings(worldClimate);
+#else
             DFLocation.ClimateSettings climate = MapsFile.GetWorldClimateSettings(worldClimate);
+#endif
             int groundArchive = climate.GroundArchive;
+#if UNITY_PSP2
+            isWinter = false;
+#else
             bool isWinter = false;
+#endif
             if (climate.ClimateType != DFLocation.ClimateBaseType.Desert &&
                 DaggerfallUnity.Instance.WorldTime.Now.SeasonValue == DaggerfallDateTime.Seasons.Winter)
             {
@@ -131,7 +154,11 @@ namespace DaggerfallWorkshop
                 isWinter = true;
             }
 
+#if UNITY_PSP2
+            return groundArchive;
+#else
             return (groundArchive, climate, isWinter);
+#endif
         }
     }
 
@@ -140,7 +167,12 @@ namespace DaggerfallWorkshop
     /// </summary>
     public class TilemapTerrainMaterialProvider : TerrainMaterialProvider
     {
+#if UNITY_PSP2
+        // Trimmed copy of Daggerfall/Tilemap's Vita branch
+        private readonly Shader shader = Shader.Find(VitaPalette.TilemapShaderName);
+#else
         private readonly Shader shader = Shader.Find(MaterialReader._DaggerfallTilemapShaderName);
+#endif
 
         public sealed override Material CreateMaterial()
         {
@@ -154,6 +186,15 @@ namespace DaggerfallWorkshop
 
             // Assign textures
             terrainMaterialData.Material.SetTexture(TileUniforms.TileAtlasTex, tileSetMaterial.GetTexture(TileUniforms.TileAtlasTex));
+#if UNITY_PSP2
+            // The tileset atlas holds palette indices (TextureReader.GetTerrainTilesetTexture made this palette with no alpha index)
+            terrainMaterialData.Material.SetTexture(VitaPalette.PaletteTex, VitaPalette.CachedPalette(-1));
+            // ground square = flat one-colour ground), so set them as TextureReader.GetTerrainTilesetTexture lays the atlas out
+            terrainMaterialData.Material.SetFloat("_TilesetDim", 16);
+            terrainMaterialData.Material.SetFloat("_MaxIndex", 255);
+            terrainMaterialData.Material.SetFloat("_AtlasSize", 2048);
+            terrainMaterialData.Material.SetFloat("_GutterSize", 32);
+#endif
             terrainMaterialData.Material.SetTexture(TileUniforms.TilemapTex, terrainMaterialData.TileMapTexture);
             terrainMaterialData.Material.SetInt(TileUniforms.TilemapDim, MapsFile.WorldMapTileDim);
         }

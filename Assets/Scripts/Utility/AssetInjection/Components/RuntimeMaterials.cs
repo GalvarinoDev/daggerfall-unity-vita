@@ -130,6 +130,18 @@ namespace DaggerfallWorkshop.Utility.AssetInjection
             }
         }
 
+#if UNITY_PSP2
+        /// <summary>
+        /// above checks the old, empty configuration instead of the argument and throws.
+        /// </summary>
+        public void VitaApplyMaterials(RuntimeMaterial[] materials)
+        {
+            Materials = materials;
+            UseDungeonTextureTable = false;
+            ApplyMaterials(true);
+        }
+
+#endif
         /// <summary>
         /// Applies materials to MeshRender found on gameobject with the given dungeon texture table
         /// and optionally overrides configuration.

@@ -19,11 +19,13 @@ namespace DaggerfallWorkshop.Utility
             Second = b;
         }
 
+#if !UNITY_PSP2
         public Tuple((T1, T2) valueTuple)
             : this(valueTuple.Item1, valueTuple.Item2)
         {
         }
 
+#endif
         public static Tuple<T1, T2> Make(T1 a, T2 b)
         {
             return new Tuple<T1, T2>(a, b);
@@ -33,10 +35,12 @@ namespace DaggerfallWorkshop.Utility
         {
             return string.Format("First: {0}, Second: {1}", First, Second);
         }
+#if !UNITY_PSP2
 
         public (T1, T2) ToValueTuple()
         {
             return (First, Second);
         }
+#endif
     }
 }

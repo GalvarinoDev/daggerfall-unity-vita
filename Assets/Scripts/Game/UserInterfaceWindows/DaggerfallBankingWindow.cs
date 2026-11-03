@@ -213,7 +213,11 @@ namespace DaggerfallWorkshop.Game.UserInterface
         {
             base.Update();
 
+#if UNITY_PSP2 && !UNITY_EDITOR
+            if (Input.GetKeyUp(KeyCode.Return) || Input.GetKeyUp(KeyCode.KeypadEnter) || VitaKeyboard.Submitted)
+#else
             if (Input.GetKeyUp(KeyCode.Return) || Input.GetKeyUp(KeyCode.KeypadEnter))
+#endif
             {
                 if (transactionType != TransactionType.None && transactionInput.Enabled)
                 {

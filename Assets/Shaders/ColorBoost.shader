@@ -59,6 +59,7 @@ Shader "Daggerfall/PostProcess/ColorBoost"
 
                 #pragma vertex VertDefault
                 #pragma fragment Frag
+                #pragma exclude_renderers psp2 // Post Processing v2 is left out on Vita: don't compile this for it
 
             ENDHLSL
         }

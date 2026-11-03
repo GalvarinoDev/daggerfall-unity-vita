@@ -695,7 +695,11 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
                 effectEntries[editOrDeleteSlot] = effectEditor.EffectEntry;
 
             // Get total costs
+#if UNITY_PSP2
+            FormulaHelper.SpellCost cost = FormulaHelper.CalculateTotalEffectCosts(effectEntries, selectedTarget); totalGoldCost = cost.goldCost; totalSpellPointCost = cost.spellPointCost;
+#else
             (totalGoldCost, totalSpellPointCost) = FormulaHelper.CalculateTotalEffectCosts(effectEntries, selectedTarget);
+#endif
             SetStatusLabels();
         }
 

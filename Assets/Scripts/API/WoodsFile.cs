@@ -407,8 +407,27 @@ namespace DaggerfallConnect.Arena2
             dataOffsets = new UInt32[mapBufferLengthValue];
 
             // Read offsets 
+#if UNITY_PSP2
+            // 500,000 ReadUInt32 calls on the disk-backed reader took ~0.9 s of every boot: read 64 KB at a time instead
+            // (little-endian like the file, so the same values)
+            byte[] vitaChunk = new byte[65536];
+            for (int i = 0; i < mapBufferLengthValue; )
+            {
+                int count = Math.Min(vitaChunk.Length / 4, mapBufferLengthValue - i);
+                for (int done = 0; done < count * 4; )
+                {
+                    int got = reader.Read(vitaChunk, done, count * 4 - done);
+                    if (got <= 0)
+                        throw new EndOfStreamException("WOODS.WLD offsets cut short");
+                    done += got;
+                }
+                System.Buffer.BlockCopy(vitaChunk, 0, dataOffsets, i * 4, count * 4);
+                i += count;
+            }
+#else
             for (int i = 0; i < mapBufferLengthValue; i++)
                 dataOffsets[i] = reader.ReadUInt32();
+#endif
         }
 
         ///// <summary>

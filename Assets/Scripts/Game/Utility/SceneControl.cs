@@ -20,8 +20,14 @@ namespace DaggerfallWorkshop.Game.Utility
     /// </summary>
     public class SceneControl : MonoBehaviour
     {
+#if UNITY_PSP2 && !UNITY_EDITOR
+        // The Vita build puts VitaBoot (splash art during the startup scene's setup) at index 0 (Assets/Editor/Vita/VitaBuild.cs)
+        public const int StartupSceneIndex = 1;
+        public const int GameSceneIndex = 2;
+#else
         public const int StartupSceneIndex = 0;
         public const int GameSceneIndex = 1;
+#endif
         public GameObject defaultSky = null;
 
         void Start()
@@ -32,7 +38,11 @@ namespace DaggerfallWorkshop.Game.Utility
                 Screen.SetResolution(
                     DaggerfallUnity.Settings.ResolutionWidth,
                     DaggerfallUnity.Settings.ResolutionHeight,
+#if UNITY_PSP2 // FullScreenMode is Unity 2018.1+
+                    true);
+#else
                     FullScreenMode.ExclusiveFullScreen);
+#endif
             }
             else
             {

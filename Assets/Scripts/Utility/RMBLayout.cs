@@ -155,6 +155,12 @@ namespace DaggerfallWorkshop.Utility
             else
                 go = new GameObject(name);
 
+#if UNITY_PSP2 && !UNITY_EDITOR
+            // Baked block (VitaBlockBake): the same objects, from the PC bake instead of ARCH3D reads and merging
+            if (VitaBlockBake.TryBuild(ref blockData, layoutX, layoutY, go))
+                return go;
+#endif
+
             // Setup combiner
             ModelCombiner combiner = null;
             if (dfUnity.Option_CombineRMB)
@@ -169,7 +175,11 @@ namespace DaggerfallWorkshop.Utility
             GameObject modelsNode = new GameObject("Models");
             modelsNode.transform.parent = go.transform;
             AddModels(dfUnity, layoutX, layoutY, ref blockData, out modelDoors, out modelBuildings, combiner, modelsNode.transform);
+#if UNITY_PSP2
+#endif
             AddProps(dfUnity, ref blockData, out propDoors, combiner, modelsNode.transform);
+#if UNITY_PSP2
+#endif
 
             // Combine list of doors found in models and props
             List<StaticDoor> allDoors = new List<StaticDoor>();
@@ -206,6 +216,8 @@ namespace DaggerfallWorkshop.Utility
                 if (combiner.VertexCount > 0)
                 {
                     combiner.Apply();
+#if UNITY_PSP2
+#endif
                     GameObjectHelper.CreateCombinedMeshGameObject(
                         combiner,
                         "CombinedModels",
@@ -350,6 +362,19 @@ namespace DaggerfallWorkshop.Utility
                     obj.ZPos + BlocksFile.RMBDimension) * MeshReader.GlobalScale;
                 
                 GameObject go = MeshReplacement.ImportCustomFlatGameobject(obj.TextureArchive, obj.TextureRecord, billboardPosition, flatsParent);
+#if UNITY_PSP2 && !UNITY_EDITOR
+                // Plain flats go into the block's flat batches, no billboard object (VitaFlatBatch.BuildCityBlock)
+                if (go == null && VitaFlatBatch.IsWinterCrop(obj.TextureArchive))
+                {
+                    if (VitaFlatBatch.AddCityFlat(VitaFlatBatch.WinterCropArchive, VitaFlatBatch.WinterCropRecord, billboardPosition, -1, true))
+                        continue;
+                    go = GameObjectHelper.CreateDaggerfallBillboardGameObject(VitaFlatBatch.WinterCropArchive, VitaFlatBatch.WinterCropRecord, flatsParent);
+                    go.transform.position = billboardPosition;
+                    AlignBillboardToBase(go);
+                }
+                if (go == null && obj.FactionID == 0 && VitaFlatBatch.AddCityFlat(obj.TextureArchive, obj.TextureRecord, billboardPosition))
+                    continue;
+#endif
                 if (go == null)
                 {
                     // Add standalone billboard gameobject
@@ -377,6 +402,15 @@ namespace DaggerfallWorkshop.Utility
                     QuestMachine.Instance.SetupIndividualStaticNPC(go, obj.FactionID);
                 }
             }
+#if UNITY_PSP2 && !UNITY_EDITOR
+
+            foreach (DFBlock.RmbBlock3dObjectRecord obj in blockData.RmbBlock.Misc3dObjectRecords)
+            {
+                if (VitaFlatBatch.IsCropField(obj.ModelIdNum))
+                    VitaFlatBatch.AddCropField(obj.ModelIdNum, new Vector3(obj.XPos, -obj.YPos + propsOffsetY, obj.ZPos + BlocksFile.RMBDimension) * MeshReader.GlobalScale,
+                        blockData.Name, flatsParent.parent, flatsParent);
+            }
+#endif
         }
 
         /// <summary>
@@ -404,6 +438,8 @@ namespace DaggerfallWorkshop.Utility
 
                 foreach (DFBlock.RmbBlockFlatObjectRecord obj in subRecord.Exterior.BlockFlatObjectRecords)
                 {
+#if UNITY_PSP2
+#endif
                     // Don't add building exterior editor flats since they can't be used by any DFU systems
                     int archive = obj.TextureArchive;
                     if (archive == TextureReader.EditorFlatsTextureArchive)
@@ -425,7 +461,22 @@ namespace DaggerfallWorkshop.Utility
                     }
 
                     GameObject go = MeshReplacement.ImportCustomFlatGameobject(archive, obj.TextureRecord, billboardPosition, flatsParent);
+#if UNITY_PSP2
+#endif
                     bool isImported = go != null;
+#if UNITY_PSP2 && !UNITY_EDITOR
+                    if (!isImported && VitaFlatBatch.IsWinterCrop(archive))
+                    {
+                        if (VitaFlatBatch.AddCityFlat(VitaFlatBatch.WinterCropArchive, VitaFlatBatch.WinterCropRecord, billboardPosition, -1, true))
+                            continue;
+                        go = GameObjectHelper.CreateDaggerfallBillboardGameObject(VitaFlatBatch.WinterCropArchive, VitaFlatBatch.WinterCropRecord, flatsParent);
+                        go.transform.position = billboardPosition;
+                        AlignBillboardToBase(go);
+                        isImported = true;  // skips the standalone billboard below; light/animal code doesn't apply to archive 301
+                    }
+                    if (!isImported && obj.FactionID == 0 && VitaFlatBatch.AddCityFlat(archive, obj.TextureRecord, billboardPosition))
+                        continue;
+#endif
                     if (!isImported)
                     {
                         // Add standalone billboard gameobject
@@ -433,6 +484,8 @@ namespace DaggerfallWorkshop.Utility
                         go.transform.position = billboardPosition;
                         AlignBillboardToBase(go);
                     }
+#if UNITY_PSP2
+#endif
 
                     // Add animal sound
                     if (archive == TextureReader.AnimalsTextureArchive)
@@ -452,6 +505,8 @@ namespace DaggerfallWorkshop.Utility
 
                         QuestMachine.Instance.SetupIndividualStaticNPC(go, obj.FactionID);
                     }
+#if UNITY_PSP2
+#endif
 
                     // If this is a light flat, import light prefab
                     if (archive == TextureReader.LightsTextureArchive && !isImported)
@@ -468,6 +523,8 @@ namespace DaggerfallWorkshop.Utility
 
                         GameObjectHelper.InstantiatePrefab(dfUnity.Option_CityLightPrefab.gameObject, string.Empty, lightsParent, position);
                     }
+#if UNITY_PSP2
+#endif
                 }
             }
         }
@@ -547,7 +604,11 @@ namespace DaggerfallWorkshop.Utility
         /// <param name="layoutX">X coordindate in map layout used to generate building key.</param>
         /// <param name="layoutY">Y coordindate in map layout used to generate building key.</param>
         /// <returns>BuildingSummary.</returns>
+#if UNITY_PSP2
+        public static BuildingSummary[] GetBuildingData(DFBlock blockData, int layoutX = -1, int layoutY = -1)
+#else
         public static BuildingSummary[] GetBuildingData(in DFBlock blockData, int layoutX = -1, int layoutY = -1)
+#endif
         {
             // Store building information
             int buildingCount = blockData.RmbBlock.SubRecords.Length;
@@ -558,7 +619,11 @@ namespace DaggerfallWorkshop.Utility
                 buildings[i] = new BuildingSummary();
 
                 // Set building data
+#if UNITY_PSP2
+                DFLocation.BuildingData buildingData = blockData.RmbBlock.FldHeader.BuildingDataList[i];
+#else
                 ref readonly DFLocation.BuildingData buildingData = ref blockData.RmbBlock.FldHeader.BuildingDataList[i];
+#endif
                 buildings[i].buildingKey = BuildingDirectory.MakeBuildingKey((byte)layoutX, (byte)layoutY, (byte)i);
                 buildings[i].NameSeed = buildingData.NameSeed;
                 buildings[i].FactionId = buildingData.FactionId;
@@ -566,7 +631,11 @@ namespace DaggerfallWorkshop.Utility
                 buildings[i].Quality = buildingData.Quality;
 
                 // Set building transform info
+#if UNITY_PSP2
+                DFBlock.RmbSubRecord subRecord = blockData.RmbBlock.SubRecords[i];
+#else
                 ref readonly DFBlock.RmbSubRecord subRecord = ref blockData.RmbBlock.SubRecords[i];
+#endif
                 buildings[i].Position = new Vector3(subRecord.XPos, 0, BlocksFile.RMBDimension - subRecord.ZPos) * MeshReader.GlobalScale;
                 buildings[i].Rotation = new Vector3(0, -subRecord.YRotation / BlocksFile.RotationDivisor, 0);
                 buildings[i].Matrix = Matrix4x4.TRS(buildings[i].Position, Quaternion.Euler(buildings[i].Rotation), Vector3.one);
@@ -589,12 +658,20 @@ namespace DaggerfallWorkshop.Utility
         /// It will be progressed over time.
         /// </summary>
         /// <param name="location">Location to use.</param>
+#if UNITY_PSP2
+        public static DFBlock[] GetLocationBuildingData(DFLocation location)
+#else
         public static DFBlock[] GetLocationBuildingData(in DFLocation location)
+#endif
         {
             int mapId = location.MapTableData.MapId;
             DFBlock[] blocksArray = locationCache.FirstOrDefault(l => l.Key == mapId).Value;
             if (blocksArray != null)
                 return blocksArray;
+#if UNITY_PSP2
+            // Vita: keep only the current location. Each cached city is ~10-20 MB of parsed blocks (live C# data at castle visits grew
+            locationCache.Clear();
+#endif
 
             List<BuildingPoolItem> namedBuildingPool = new List<BuildingPoolItem>();
             List<DFBlock> blocks = new List<DFBlock>();
@@ -641,7 +718,11 @@ namespace DaggerfallWorkshop.Utility
                     BuildingReplacementData buildingReplacementData;
                     for (int i = 0; i < block.RmbBlock.SubRecords.Length; i++)
                     {
+#if UNITY_PSP2
+                        DFLocation.BuildingData building = block.RmbBlock.FldHeader.BuildingDataList[i];
+#else
                         ref DFLocation.BuildingData building = ref block.RmbBlock.FldHeader.BuildingDataList[i];
+#endif
                         if (IsNamedBuilding(building.BuildingType))
                         {
                             // Try to find next building and merge data
@@ -681,6 +762,10 @@ namespace DaggerfallWorkshop.Utility
                                 building.BuildingType = DFLocation.BuildingTypes.GuildHall;
                                 building.FactionId = 414;
                             }
+#if UNITY_PSP2
+
+                            block.RmbBlock.FldHeader.BuildingDataList[i] = building;
+#endif
                         }
                     }
 
@@ -838,9 +923,13 @@ namespace DaggerfallWorkshop.Utility
                     Vector3 modelScale = GetModelScaleVector(obj);
                     Matrix4x4 modelMatrix = subRecordMatrix * Matrix4x4.TRS(modelPosition, Quaternion.Euler(modelRotation), modelScale);
 
+#if UNITY_PSP2
+#endif
                     // Get model data
                     ModelData modelData;
                     bool hasModelData = dfUnity.MeshReader.GetModelData(obj.ModelIdNum, out modelData);
+#if UNITY_PSP2
+#endif
 
                     // Does this Daggerfall model have any static doors?
                     StaticDoor[] staticDoors = null;
@@ -849,7 +938,12 @@ namespace DaggerfallWorkshop.Utility
 
                     // Import custom GameObject, or else use the Daggerfall model
                     GameObject go;
+#if UNITY_PSP2
+                    go = MeshReplacement.ImportCustomGameobject(obj.ModelIdNum, parent, modelMatrix);
+                    if (!go)
+#else
                     if (!(go = MeshReplacement.ImportCustomGameobject(obj.ModelIdNum, parent, modelMatrix)))
+#endif
                     {
                         if (!hasModelData) {
                             Debug.LogError($"Could not load model '{obj.ModelIdNum}' in block '{blockData.Name}'");
@@ -859,6 +953,8 @@ namespace DaggerfallWorkshop.Utility
                         } else {
                             combiner.Add(ref modelData, modelMatrix);
                         }
+#if UNITY_PSP2
+#endif
                     }
 
                     // Store building information for first model of record
@@ -912,6 +1008,10 @@ namespace DaggerfallWorkshop.Utility
             // Iterate through all misc records
             foreach (DFBlock.RmbBlock3dObjectRecord obj in blockData.RmbBlock.Misc3dObjectRecords)
             {
+#if UNITY_PSP2
+                if (VitaFlatBatch.IsCropField(obj.ModelIdNum))
+                    continue;
+#endif
                 // Get model transform
                 Vector3 modelPosition = new Vector3(obj.XPos, -obj.YPos + propsOffsetY, obj.ZPos + BlocksFile.RMBDimension) * MeshReader.GlobalScale;
                 Vector3 modelRotation = new Vector3(-obj.XRotation / BlocksFile.RotationDivisor, -obj.YRotation / BlocksFile.RotationDivisor, -obj.ZRotation / BlocksFile.RotationDivisor);

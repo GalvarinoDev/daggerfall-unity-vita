@@ -97,6 +97,11 @@ namespace DaggerfallWorkshop.Game
 
         List<Actions> currentActions = new List<Actions>();
         List<Actions> previousActions = new List<Actions>();
+#if UNITY_PSP2
+        LevitateMotor vitaLevitateMotor;
+        float vitaSquareDownTime;
+        public const float VitaHoldSeconds = 0.5f;      // a pad button held this long is a "hold" (Circle, Select, Square on the dragon)
+#endif
         KeyCode[] heldKeys = new KeyCode[totalHeldKeys];
         KeyCode[] previousKeys = new KeyCode[totalHeldKeys];
         KeyCode heldModifier;
@@ -274,6 +279,17 @@ namespace DaggerfallWorkshop.Game
             }
         }
 
+#if UNITY_PSP2
+        /// <summary>Puts the controller cursor at a screen point (Input.mousePosition space). Used by VitaMenuNav.</summary>
+        public void SetControllerCursor(Vector2 position)
+        {
+            usingControllerCursor = true;
+            controllerCursorPosition = position;
+            // Draw it there now: the rect is otherwise only set while the stick moves the cursor (size 0 until then, so nothing showed)
+            controllerCursorRect = new Rect(position.x, Screen.height - position.y, controllerCursorWidth, controllerCursorHeight);
+        }
+
+#endif
         public float JoystickCursorSensitivity
         {
             get
@@ -443,6 +459,17 @@ namespace DaggerfallWorkshop.Game
                 // Load a keybind file if possible
                 if (HasKeyBindsSave())
                     LoadKeyBinds();
+#if UNITY_PSP2
+                // Select and Circle are DaggerfallHUD's now (tap/hold): drop Select -> CastSpell, Circle -> Inventory saved by older builds
+                foreach (var dict in new[] { actionKeyDict, secondaryActionKeyDict })
+                {
+                    Actions saved;
+                    if (dict.TryGetValue(KeyCode.JoystickButton6, out saved) && saved == Actions.CastSpell)
+                        dict.Remove(KeyCode.JoystickButton6);
+                    if (dict.TryGetValue(KeyCode.JoystickButton1, out saved) && saved == Actions.Inventory)
+                        dict.Remove(KeyCode.JoystickButton1);
+                }
+#endif
 
                 // Ensure defaults are deployed if missing
                 ResetDefaults(true);
@@ -547,6 +574,36 @@ namespace DaggerfallWorkshop.Game
             // Process actions from input sources
             FindKeyboardActions();
             FindInputAxisActions();
+#if UNITY_PSP2
+            if (false)
+            {
+                // and a Square hold (hover/flight) itself, so no activating or swinging while riding; a Square tap still readies the weapon,
+                // sent on release so a hold doesn't draw it
+                for (int i = currentActions.Count - 1; i >= 0; i--)
+                {
+                    if (currentActions[i] == Actions.ActivateCenterObject)
+                        currentActions[i] = Actions.FloatDown;
+                    else if (currentActions[i] == Actions.ReadyWeapon || currentActions[i] == Actions.SwingWeapon)
+                        currentActions.RemoveAt(i);
+                }
+                if (Input.GetKeyDown(KeyCode.JoystickButton2))
+                    vitaSquareDownTime = Time.unscaledTime;
+                if (Input.GetKeyUp(KeyCode.JoystickButton2) && Time.unscaledTime - vitaSquareDownTime < VitaHoldSeconds)
+                    currentActions.Add(Actions.ReadyWeapon);
+            }
+            else
+            {
+                // Vita: no pad button for FloatDown, so holding Square (Ready Weapon) sinks while levitating (the spell)
+                int readyIndex = currentActions.IndexOf(Actions.ReadyWeapon);
+                if (readyIndex >= 0)
+                {
+                    if (!vitaLevitateMotor && GameManager.HasInstance && GameManager.Instance.PlayerObject)
+                        vitaLevitateMotor = GameManager.Instance.PlayerObject.GetComponent<LevitateMotor>();
+                    if (vitaLevitateMotor && vitaLevitateMotor.IsLevitating)
+                        currentActions[readyIndex] = Actions.FloatDown;
+                }
+            }
+#endif
 
             // Update look impulse
             UpdateLook();
@@ -566,7 +623,13 @@ namespace DaggerfallWorkshop.Game
 
                     GUI.depth = 0;
 
+#if UNITY_PSP2
+                    // Not over the loading screen
+                    if (!(DaggerfallUI.UIManager.TopWindow is VitaLoadingWindow))
+                        GUI.DrawTexture(controllerCursorRect, controllerCursorImage);
+#else
                     GUI.DrawTexture(controllerCursorRect, controllerCursorImage);
+#endif
                 }
                 else
                 {
@@ -923,6 +986,9 @@ namespace DaggerfallWorkshop.Game
             }
 
             string json = SaveLoadManager.Serialize(keyBindsData.GetType(), keyBindsData);
+#if UNITY_PSP2
+            VitaFile.Delete(path);
+#endif
             File.WriteAllText(path, json);
             UpdateBindingCache();
             RaiseSavedKeyBindsEvent();
@@ -1007,7 +1073,11 @@ namespace DaggerfallWorkshop.Game
             setBinding(KeyCode.U, Actions.UseMagicItem, true);
 
             setBinding(KeyCode.Z, Actions.ReadyWeapon, true);
+#if UNITY_PSP2
+            setBinding(KeyCode.JoystickButton4, Actions.SwingWeapon, true);     // L (R is the secondary below)
+#else
             setBinding(KeyCode.Mouse1, Actions.SwingWeapon, true);
+#endif
             setBinding(KeyCode.H, Actions.SwitchHand, true);
 
             setBinding(KeyCode.I, Actions.Status, true);
@@ -1030,6 +1100,21 @@ namespace DaggerfallWorkshop.Game
             setBinding(KeyCode.F8, Actions.PrintScreen, true);
             setBinding(KeyCode.F9, Actions.QuickSave, true);
             setBinding(KeyCode.F11, Actions.QuickLoad, true);
+#if UNITY_PSP2
+
+            // Vita pad (button numbers from Unity's PS Vita Input manual page). L/R attack, nothing else goes there.
+            setBinding(KeyCode.JoystickButton5, Actions.SwingWeapon, false);            // R
+            setBinding(KeyCode.JoystickButton0, Actions.ActivateCenterObject, false);   // Cross (UI: click)
+            // Circle (JoystickButton1, UI: back): DaggerfallHUD's, tap = inventory, hold = transport
+            setBinding(KeyCode.JoystickButton2, Actions.ReadyWeapon, false);            // Square
+            setBinding(KeyCode.JoystickButton3, Actions.Jump, false);                   // Triangle
+            // Select (JoystickButton6): DaggerfallHUD's, tap = HUD mode, hold = spellbook (bound to CastSpell, the spellbook would close on release)
+            setBinding(KeyCode.JoystickButton7, Actions.Escape, false);                 // Start
+            setBinding(KeyCode.JoystickButton8, Actions.RecastSpell, false);            // D-pad up
+            setBinding(KeyCode.JoystickButton9, Actions.TravelMap, false);              // D-pad right
+            setBinding(KeyCode.JoystickButton10, Actions.AutoMap, false);               // D-pad down
+            setBinding(KeyCode.JoystickButton11, Actions.LogBook, false);               // D-pad left
+#endif
 
             setAxisBinding("Axis1", AxisActions.MovementHorizontal);
             setAxisBinding("Axis2", AxisActions.MovementVertical);
@@ -1067,10 +1152,26 @@ namespace DaggerfallWorkshop.Game
             return Input.GetKeyDown(KeyCode.Escape) || (EnableController && GetKeyDown(joystickUICache[3], false));
         }
 
+#if UNITY_PSP2
+        /// <summary>Vita: set when holding Circle opened a window (DaggerfallHUD), so letting go of that hold isn't read as Back</summary>
+        public bool VitaIgnoreBackRelease;
+
+        public bool GetBackButtonUp()
+        {
+            if (VitaIgnoreBackRelease)
+            {
+                if (Input.GetKey(KeyCode.JoystickButton1) || Input.GetKeyUp(KeyCode.JoystickButton1))
+                    return Input.GetKeyUp(KeyCode.Escape);
+                VitaIgnoreBackRelease = false;
+            }
+            return Input.GetKeyUp(KeyCode.Escape) || (EnableController && GetKeyUp(joystickUICache[3], false));
+        }
+#else
         public bool GetBackButtonUp()
         {
             return Input.GetKeyUp(KeyCode.Escape) || (EnableController && GetKeyUp(joystickUICache[3], false));
         }
+#endif
 
         public bool GetBackButton()
         {
@@ -1100,23 +1201,39 @@ namespace DaggerfallWorkshop.Game
 
         public bool AnyKeyDown
         {
+#if UNITY_PSP2
+            get { return GetAnyKeyDown() != KeyCode.None; }
+#else
             get => GetAnyKeyDown() != KeyCode.None;
+#endif
         }
 
         public bool AnyKeyUp
         {
+#if UNITY_PSP2
+            get { return GetAnyKeyUp() != KeyCode.None; }
+#else
             get => GetAnyKeyUp() != KeyCode.None;
+#endif
         }
 
         public bool AnyKeyDownIgnoreAxisBinds
         {
+#if UNITY_PSP2
+            get { return GetAnyKeyDownIgnoreAxisBinds() != KeyCode.None; }
+#else
             get => GetAnyKeyDownIgnoreAxisBinds() != KeyCode.None;
+#endif
         }
 
 
         public bool AnyKeyUpIgnoreAxisBinds
         {
+#if UNITY_PSP2
+            get { return GetAnyKeyUpIgnoreAxisBinds() != KeyCode.None; }
+#else
             get => GetAnyKeyUpIgnoreAxisBinds() != KeyCode.None;
+#endif
         }
 
         public KeyCode GetAnyKeyDown(bool allowUnaccepted = false)
@@ -1587,13 +1704,17 @@ namespace DaggerfallWorkshop.Game
                 list.Add((KeyCode)k);
 
             // Remove keys that require a 'shift'
+#if !UNITY_PSP2 // newer KeyCodes
             list.Remove(KeyCode.Tilde);
+#endif
             list.Remove(KeyCode.None);
             list.Remove(KeyCode.Exclaim);
             list.Remove(KeyCode.At);
             list.Remove(KeyCode.Hash);
             list.Remove(KeyCode.Dollar);
+#if !UNITY_PSP2
             list.Remove(KeyCode.Percent);
+#endif
             list.Remove(KeyCode.Caret);
             list.Remove(KeyCode.Ampersand);
             list.Remove(KeyCode.Asterisk);
@@ -1601,10 +1722,14 @@ namespace DaggerfallWorkshop.Game
             list.Remove(KeyCode.RightParen);
             list.Remove(KeyCode.Underscore);
             list.Remove(KeyCode.Plus);
+#if !UNITY_PSP2
             list.Remove(KeyCode.Pipe);
+#endif
 
+#if !UNITY_PSP2
             list.Remove(KeyCode.LeftCurlyBracket);
             list.Remove(KeyCode.RightCurlyBracket);
+#endif
             list.Remove(KeyCode.Colon);
             list.Remove(KeyCode.DoubleQuote);
 
@@ -1892,6 +2017,10 @@ namespace DaggerfallWorkshop.Game
                     return;
 
                 float dist = jd / JoystickMovementThreshold;
+#if UNITY_PSP2
+                if (dist >= 1.0F)
+                    currentActions.Add(Actions.Run);
+#endif
 
                 if (MaximizeJoystickMovement || dist > 1.0F)
                     dist = 1.0F;

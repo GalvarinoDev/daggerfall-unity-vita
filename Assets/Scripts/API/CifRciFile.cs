@@ -184,6 +184,29 @@ namespace DaggerfallConnect.Arena2
                 !filePath.EndsWith(".RCI", StringComparison.InvariantCultureIgnoreCase))
                 return false;
 
+#if UNITY_PSP2 && !UNITY_EDITOR
+            // Baked by VitaImageBaker: what Read and the frame readers produce
+            VitaImages.File baked = VitaImages.Read(filePath, Palette);
+            if (baked != null)
+            {
+                records = new Record[Math.Max(records.Length, baked.Records.Length)];
+                for (int i = 0; i < baked.Records.Length; i++)
+                {
+                    VitaImages.Record record = baked.Records[i];
+                    records[i].Header.XOffset = (Int16)record.X;
+                    records[i].Header.YOffset = (Int16)record.Y;
+                    records[i].Header.Width = (Int16)record.Width;
+                    records[i].Header.Height = (Int16)record.Height;
+                    records[i].Header.FrameCount = record.Frames.Length;
+                    records[i].AnimHeader.Width = (UInt16)record.Width;
+                    records[i].AnimHeader.Height = (UInt16)record.Height;
+                    records[i].Frames = record.Frames;
+                }
+                totalRecords = baked.Records.Length;
+                managedFile.Load(new byte[0], filePath);
+                return true;
+            }
+#endif
             // Load file
             if (!managedFile.Load(filePath, usage, readOnly))
                 return false;

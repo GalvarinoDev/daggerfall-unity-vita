@@ -40,6 +40,19 @@ namespace DaggerfallWorkshop.Game
         EnemyEntity enemyEntity;
         bool targetInSight;
         bool playerInSight;
+#if UNITY_PSP2
+        // ClassicUpdate stays true for every fixed step of its frame, and the player only moves in Update: one player sight ray per
+        // frame is enough (Palace: 64 guards x 2-3 steps). false = upstream's ray every step.
+        public static bool VitaSightOncePerFrame = true;
+        // An enemy that can't target the player only reads playerInSight when it looks for targets (classicTargetUpdateTimer > 5), so
+        // later (LastKnownDoor side effect). false = every ClassicUpdate.
+        public static bool VitaFriendlySightOnTargetTick = true;
+        // Only the ray's first hit counts, and the target's own capsule (around its eye point) comes first when nothing is in the way, so
+        // a ray that ends 1 m past the target's eye finds the same hit as one of SightRadius, with less of the castle's mesh colliders
+        // to walk (Palace: ~41 sight rays per frame, ~80 us each in the dev player). false = upstream's length.
+        public static bool VitaShortSightRay = true;
+        int playerSightFrame = -1;
+#endif
         bool targetInEarshot;
         Vector3 directionToTarget;
         float distanceToPlayer;
@@ -211,8 +224,14 @@ namespace DaggerfallWorkshop.Game
         {
             //Initialize delegates to standard defaults
             BlockedByIllusionEffectHandler = BlockedByIllusionEffect;
+#if UNITY_PSP2
+            // Vita probes: same checks, timed
             CanSeeTargetHandler = CanSeeTarget;
             CanHearTargetHandler = CanHearTarget;
+#else
+            CanSeeTargetHandler = CanSeeTarget;
+            CanHearTargetHandler = CanHearTarget;
+#endif
             CanDetectOtherwiseHandler = delegate (DaggerfallEntityBehaviour target) { return false; };
 
             mobile = GetComponent<DaggerfallEnemy>().MobileUnit;
@@ -241,7 +260,16 @@ namespace DaggerfallWorkshop.Game
                 FieldOfView = 190;
         }
 
+#if UNITY_PSP2
         void FixedUpdate()
+        {
+            SensesFixedUpdate();
+        }
+
+        void SensesFixedUpdate()
+#else
+        void FixedUpdate()
+#endif
         {
             if (GameManager.Instance.DisableAI)
                 return;
@@ -382,7 +410,20 @@ namespace DaggerfallWorkshop.Game
                 {
                     distanceToTarget = distanceToPlayer;
                     directionToTarget = toPlayer.normalized;
+#if UNITY_PSP2
+                    // Distant enemies look for the player at classic's AI rate, not every fixed step (raycast per enemy).
+                    // Vita trade-off (up to 62 ms later than PC): revert if the frame time can be found elsewhere.
+                    bool cannotTargetPlayer = GameManager.Instance.PlayerEntity.NoTargetMode || !motor.IsHostile ||
+                        enemyEntity.MobileEnemy.Team == MobileTeams.PlayerAlly;
+                    if (GameManager.ClassicUpdate && (!VitaSightOncePerFrame || playerSightFrame != Time.frameCount) &&
+                        (!VitaFriendlySightOnTargetTick || !cannotTargetPlayer || classicTargetUpdateTimer > 5))
+                    {
+                        playerSightFrame = Time.frameCount;
+                        playerInSight = CanSeeTargetHandler(player);
+                    }
+#else
                     playerInSight = CanSeeTargetHandler(player);
+#endif
                 }
 
                 if (classicTargetUpdateTimer > 5)
@@ -392,7 +433,11 @@ namespace DaggerfallWorkshop.Game
                     // Is enemy in area around player or can see player?
                     if (wouldBeSpawnedInClassic || playerInSight)
                     {
+#if UNITY_PSP2
                         GetTargets();
+#else
+                        GetTargets();
+#endif
 
                         if (target != null && target != player)
                             targetSenses = target.GetComponent<EnemySenses>();
@@ -418,7 +463,11 @@ namespace DaggerfallWorkshop.Game
                 {
                     distanceToTarget = distanceToPlayer;
                     directionToTarget = toPlayer.normalized;
+#if UNITY_PSP2
+                    targetInSight = playerInSight; // Same check as above, no second raycast
+#else
                     targetInSight = CanSeeTargetHandler(player);
+#endif
                 }
                 else
                 {
@@ -873,6 +922,12 @@ namespace DaggerfallWorkshop.Game
             }
         }
 
+#if UNITY_PSP2
+        CharacterController ownController;
+        DaggerfallEntityBehaviour seeTarget;
+        CharacterController seeTargetController;
+#endif
+
         bool CanSeeTarget(DaggerfallEntityBehaviour target)
         {
             bool seen = false;
@@ -888,12 +943,28 @@ namespace DaggerfallWorkshop.Game
                     RaycastHit hit;
 
                     // Set origin of ray to approximate eye position
+#if UNITY_PSP2
+                    // Same controllers, looked up once
+                    if (!ownController)
+                        ownController = entityBehaviour.transform.GetComponent<CharacterController>();
+                    CharacterController controller = ownController;
+#else
                     CharacterController controller = entityBehaviour.transform.GetComponent<CharacterController>();
+#endif
                     Vector3 eyePos = transform.position + controller.center;
                     eyePos.y += controller.height / 3;
 
                     // Set destination to the target's approximate eye position
+#if UNITY_PSP2
+                    if (target != seeTarget || !seeTargetController)
+                    {
+                        seeTarget = target;
+                        seeTargetController = target.transform.GetComponent<CharacterController>();
+                    }
+                    controller = seeTargetController;
+#else
                     controller = target.transform.GetComponent<CharacterController>();
+#endif
                     Vector3 targetEyePos = target.transform.position + controller.center;
                     targetEyePos.y += controller.height / 3;
 
@@ -902,8 +973,20 @@ namespace DaggerfallWorkshop.Game
                     Vector3 eyeDirectionToTarget = eyeToTarget.normalized;
                     Ray ray = new Ray(eyePos, eyeDirectionToTarget);
 
+#if UNITY_PSP2
+                    float rayLength = VitaShortSightRay ? Mathf.Min(SightRadius, eyeToTarget.magnitude + 1f) : SightRadius;
+                    if (Physics.Raycast(ray, out hit, rayLength))
+#else
                     if (Physics.Raycast(ray, out hit, SightRadius))
+#endif
                     {
+#if UNITY_PSP2
+                        // raycast ~89): the hit object holds `target` exactly when it is target's GameObject, and that is no door
+                        if (hit.transform == target.transform)
+                            seen = true;
+
+                        DaggerfallActionDoor door = seen ? null : hit.transform.gameObject.GetComponent<DaggerfallActionDoor>();
+#else
                         // Check if hit was target
                         DaggerfallEntityBehaviour entity = hit.transform.gameObject.GetComponent<DaggerfallEntityBehaviour>();
                         if (entity == target)
@@ -911,6 +994,7 @@ namespace DaggerfallWorkshop.Game
 
                         // Check if hit was an action door
                         DaggerfallActionDoor door = hit.transform.gameObject.GetComponent<DaggerfallActionDoor>();
+#endif
                         if (door != null)
                         {
                             actionDoor = door;

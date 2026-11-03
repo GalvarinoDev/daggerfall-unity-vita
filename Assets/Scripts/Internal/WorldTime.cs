@@ -68,6 +68,8 @@ namespace DaggerfallWorkshop
             RaiseEvents();
         }
 
+        // Vita: no OnGUI for this console-only debug overlay; an idle OnGUI still costs ~0.1 ms per frame
+#if !UNITY_PSP2
         void OnGUI()
         {
             if (Event.current.type.Equals(EventType.Repaint) && ShowDebugString)
@@ -79,6 +81,7 @@ namespace DaggerfallWorkshop
                 GUI.Label(new Rect(8, 8, 500, 24), text);
             }
         }
+#endif
 
         void RaiseEvents()
         {

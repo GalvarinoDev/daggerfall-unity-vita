@@ -376,7 +376,11 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
                 OnSettingsChanged();
 
             // Get spell cost
+#if UNITY_PSP2
+            int spellPointCost = FormulaHelper.CalculateEffectCosts(EffectEntry).spellPointCost;
+#else
             (int _, int spellPointCost) = FormulaHelper.CalculateEffectCosts(EffectEntry);
+#endif
             spellCostLabel.Text = spellPointCost.ToString();
         }
 

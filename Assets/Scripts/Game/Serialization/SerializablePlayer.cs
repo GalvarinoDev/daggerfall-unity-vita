@@ -489,6 +489,11 @@ namespace DaggerfallWorkshop.Game.Serialization
             {
                 float diffY = GameManager.Instance.StreamingWorld.WorldCompensation.y - data.worldCompensation.y;
                 player.transform.position = data.position + new Vector3(0, diffY, 0);
+#if UNITY_PSP2
+                // Load pose check
+                Debug.LogFormat("VITAPOS restore saved {0} comp {1} now comp {2} -> {3} world {4},{5}", data.position, data.worldCompensation.y,
+                    GameManager.Instance.StreamingWorld.WorldCompensation.y, player.transform.position, data.worldPosX, data.worldPosZ);
+#endif
                 return;
             }
 

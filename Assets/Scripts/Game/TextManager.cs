@@ -14,12 +14,16 @@ using System;
 using System.IO;
 using System.Collections.Generic;
 using DaggerfallWorkshop.Utility;
+#if !UNITY_PSP2
 using UnityEngine.Localization;
 using UnityEngine.Localization.Settings;
+#endif
 using Wenzil.Console;
 using DaggerfallWorkshop.Game.UserInterface;
 using DaggerfallWorkshop.Game.Entity;
+#if !UNITY_PSP2
 using UnityEngine.Localization.Tables;
+#endif
 using DaggerfallWorkshop.Game.MagicAndEffects;
 
 namespace DaggerfallWorkshop.Game
@@ -69,6 +73,9 @@ namespace DaggerfallWorkshop.Game
         public string tableCopyTargetLocationStrings = null;
 
         Dictionary<string, Table> textDatabases = new Dictionary<string, Table>();
+#if UNITY_PSP2
+        static Dictionary<string, Table> sharedTextDatabases;
+#endif
         Dictionary<string, string[]> cachedLocalizedTextLists = new Dictionary<string, string[]>();
         Dictionary<string, DaggerfallFont> localizedFonts = new Dictionary<string, DaggerfallFont>();
 
@@ -100,13 +107,28 @@ namespace DaggerfallWorkshop.Game
 
         private void Awake()
         {
+#if UNITY_PSP2
+            // Each scene has its own TextManager and each parsed every StreamingAssets/Text table again (~0.3 s per copy on hardware).
+            // Nothing writes to the tables after parsing, so every copy shares the first one's.
+            VitaMemory.Mark("before TextManager");
+            if (sharedTextDatabases == null)
+            {
+                EnumerateTextDatabases();
+                sharedTextDatabases = textDatabases;
+            }
+            textDatabases = sharedTextDatabases;
+            VitaMemory.Mark("TextManager");
+#else
             EnumerateTextDatabases();    
+#endif
         }
 
         private void Start()
         {
+#if !UNITY_PSP2
             ConsoleCommandsDatabase.RegisterCommand(Locale_Print.name, Locale_Print.description, Locale_Print.usage, Locale_Print.Execute);
             ConsoleCommandsDatabase.RegisterCommand(Locale_Set.name, Locale_Set.description, Locale_Set.usage, Locale_Set.Execute);
+#endif
             ConsoleCommandsDatabase.RegisterCommand(Locale_Debug.name, Locale_Debug.description, Locale_Debug.usage, Locale_Debug.Execute);
         }
 
@@ -122,6 +144,7 @@ namespace DaggerfallWorkshop.Game
         /// <param name="locale">Locale of font.</param>
         /// <param name="fontName">Name of font, which must be one of the 5 Daggerfall fonts.</param>
         /// <param name="font">DaggerfallFont object to use for this font name and locale.</param>
+#if !UNITY_PSP2
         public void RegisterLocalizedFont(Locale locale, DaggerfallFont.FontName fontName, DaggerfallFont font)
         {
             if (locale == null || font == null)
@@ -134,6 +157,7 @@ namespace DaggerfallWorkshop.Game
             localizedFonts.Add(key, font);
             DaggerfallUnity.Settings.SDFFontRendering = true;
         }
+#endif
 
         /// <summary>
         /// Check if font of specified name and locale have been registered.
@@ -141,6 +165,7 @@ namespace DaggerfallWorkshop.Game
         /// <param name="locale">Locale of font.</param>
         /// <param name="fontName">Name of font, which must be one of the 5 Daggerfall fonts.</param>
         /// <returns>True if font of this name and locale has been registered.</returns>
+#if !UNITY_PSP2
         public bool HasLocalizedFont(Locale locale, DaggerfallFont.FontName fontName)
         {
             if (locale == null)
@@ -148,6 +173,7 @@ namespace DaggerfallWorkshop.Game
 
             return localizedFonts.ContainsKey(GetLocaleFontKey(locale, fontName));
         }
+#endif
 
         /// <summary>
         /// Check if font of specified name is available in current locale.
@@ -156,6 +182,9 @@ namespace DaggerfallWorkshop.Game
         /// <returns>True if font of this name has been registered in current locale.</returns>
         public bool HasLocalizedFont(DaggerfallFont.FontName fontName)
         {
+#if UNITY_PSP2
+            return false; // Vita: English only, no locale fonts
+#else
             Locale selectedLocale = null;
             var op = LocalizationSettings.SelectedLocaleAsync;
             op.WaitForCompletion();
@@ -165,6 +194,7 @@ namespace DaggerfallWorkshop.Game
                 Debug.LogError("HasLocalizedFont() failed LocalizationSettings.SelectedLocaleAsync operation");
 
             return (selectedLocale != null) ? localizedFonts.ContainsKey(GetLocaleFontKey(selectedLocale, fontName)) : false;
+#endif
         }
 
         /// <summary>
@@ -173,6 +203,7 @@ namespace DaggerfallWorkshop.Game
         /// <param name="locale">Locale of font.</param>
         /// <param name="fontName">Name of font, which must be one of the 5 Daggerfall fonts.</param>
         /// <returns>DaggerfallFont object if registered, otherwise null.</returns>
+#if !UNITY_PSP2
         public DaggerfallFont GetLocalizedFont(Locale locale, DaggerfallFont.FontName fontName)
         {
             if (locale == null)
@@ -184,6 +215,7 @@ namespace DaggerfallWorkshop.Game
 
             return null;
         }
+#endif
 
         /// <summary>
         /// Gets a registered DaggerfallFont replacement for current locale.
@@ -192,6 +224,9 @@ namespace DaggerfallWorkshop.Game
         /// <returns></returns>
         public DaggerfallFont GetLocalizedFont(DaggerfallFont.FontName fontName)
         {
+#if UNITY_PSP2
+            return null;
+#else
             Locale selectedLocale = null;
             var op = LocalizationSettings.SelectedLocaleAsync;
             op.WaitForCompletion();
@@ -201,12 +236,15 @@ namespace DaggerfallWorkshop.Game
                 Debug.LogError("GetLocalizedFont() failed LocalizationSettings.SelectedLocaleAsync operation");
 
             return (selectedLocale != null) ? GetLocalizedFont(selectedLocale, fontName) : null;
+#endif
         }
 
+#if !UNITY_PSP2
         private string GetLocaleFontKey(Locale locale, DaggerfallFont.FontName fontName)
         {
             return string.Format("{0}_{1}", fontName, locale.name);
         }
+#endif
 
         #endregion
 
@@ -765,12 +803,15 @@ namespace DaggerfallWorkshop.Game
 
         #region Console Commands
 
+#if !UNITY_PSP2
         private static class Locale_Print
         {
             public static readonly string name = "locale_print";
             public static readonly string description = "Output available locales.";
             public static readonly string usage = "locale_print";
+#endif
 
+#if !UNITY_PSP2
             public static string Execute(params string[] args)
             {
                 int index = 0;
@@ -817,6 +858,7 @@ namespace DaggerfallWorkshop.Game
                 return string.Format("Set locale to '{0}'", locale.name);
             }
         }
+#endif
 
         private static class Locale_Debug
         {
@@ -832,7 +874,11 @@ namespace DaggerfallWorkshop.Game
                 if (args[0] == "on")
                 {
                     DaggerfallUnity.Instance.TextProvider.EnableLocalizedStringDebug(true);
+#if UNITY_PSP2
+                    return "Localization debug enabled.";
+#else
                     return string.Format("Localization debug enabled.\nRuntimePath='{0}'", UnityEngine.AddressableAssets.Addressables.RuntimePath);
+#endif
                 }
                 else if (args[0] == "off")
                 {

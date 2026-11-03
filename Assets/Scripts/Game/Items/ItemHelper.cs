@@ -95,10 +95,33 @@ namespace DaggerfallWorkshop.Game.Items
 
         public ItemHelper()
         {
+#if UNITY_PSP2
+            vitaTables = VitaSaveIO.ReadSave(System.IO.Path.Combine(System.IO.Path.Combine(Application.streamingAssetsPath, "VitaNative"), "itemtables.bin"));
+#endif
             LoadItemTemplates();
             LoadMagicItemTemplates();
             LoadBookIDNameMapping();
+#if UNITY_PSP2
+            vitaTables = null;
+#endif
         }
+
+#if UNITY_PSP2
+        // Native tables: the three JSON tables below took 2.3 s of FullSerializer parsing per boot.
+        // Baked on the PC by VitaSaveCodegen.BakeTables (same objects, checked by JSON round trip); the JSON path stays as the fallback.
+        Dictionary<string, byte[]> vitaTables;
+
+        object VitaTable(string name, Type type)
+        {
+            byte[] data;
+            if (vitaTables == null || !vitaTables.TryGetValue(name, out data))
+            {
+                Debug.LogWarningFormat("VITANATIVE miss table {0}", name);
+                return null;
+            }
+            return VitaSaveCodec.Read(type, data);
+        }
+#endif
 
         #endregion
 
@@ -1489,8 +1512,17 @@ namespace DaggerfallWorkshop.Game.Items
         {
             try
             {
+#if UNITY_PSP2
+                itemTemplates = VitaTable(itemTemplatesFilename, typeof(List<ItemTemplate>)) as List<ItemTemplate>;
+                if (itemTemplates == null)
+                {
+                    TextAsset templates = Resources.Load<TextAsset>(itemTemplatesFilename);
+                    itemTemplates = SaveLoadManager.Deserialize(typeof(List<ItemTemplate>), templates.text) as List<ItemTemplate>;
+                }
+#else
                 TextAsset templates = Resources.Load<TextAsset>(itemTemplatesFilename);
                 itemTemplates = SaveLoadManager.Deserialize(typeof(List<ItemTemplate>), templates.text) as List<ItemTemplate>;
+#endif
                 TextAssetReader.Merge(itemTemplates, "ItemTemplates.json", (item, data) => item.index == (int)data["index"].AsInt64);
             }
             catch
@@ -1504,8 +1536,17 @@ namespace DaggerfallWorkshop.Game.Items
             try
             {
                 // Get full list of magic items
+#if UNITY_PSP2
+                allMagicItemTemplates = VitaTable(magicItemTemplatesFilename, typeof(List<MagicItemTemplate>)) as List<MagicItemTemplate>;
+                if (allMagicItemTemplates == null)
+                {
+                    TextAsset templates = Resources.Load<TextAsset>(magicItemTemplatesFilename);
+                    allMagicItemTemplates = SaveLoadManager.Deserialize(typeof(List<MagicItemTemplate>), templates.text) as List<MagicItemTemplate>;
+                }
+#else
                 TextAsset templates = Resources.Load<TextAsset>(magicItemTemplatesFilename);
                 allMagicItemTemplates = SaveLoadManager.Deserialize(typeof(List<MagicItemTemplate>), templates.text) as List<MagicItemTemplate>;
+#endif
 
                 // Create list of just artifact item
                 artifactItemTemplates = new List<MagicItemTemplate>();
@@ -1533,8 +1574,17 @@ namespace DaggerfallWorkshop.Game.Items
         {
             try
             {
+#if UNITY_PSP2
+                List<BookMappingTemplate> mappings = VitaTable(bookMappingFilename, typeof(List<BookMappingTemplate>)) as List<BookMappingTemplate>;
+                if (mappings == null)
+                {
+                    TextAsset bookNames = Resources.Load<TextAsset>(bookMappingFilename);
+                    mappings = SaveLoadManager.Deserialize(typeof(List<BookMappingTemplate>), bookNames.text) as List<BookMappingTemplate>;
+                }
+#else
                 TextAsset bookNames = Resources.Load<TextAsset>(bookMappingFilename);
                 List<BookMappingTemplate> mappings = SaveLoadManager.Deserialize(typeof(List<BookMappingTemplate>), bookNames.text) as List<BookMappingTemplate>;
+#endif
                 foreach (BookMappingTemplate entry in mappings)
                 {
                     bookIDNameMapping.Add(entry.id, entry.title);

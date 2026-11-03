@@ -75,9 +75,16 @@ namespace DaggerfallWorkshop.Utility
         /// <returns>Color32 array.</returns>
         public static Color32[] GetColors(ImageData imageData)
         {
+#if UNITY_PSP2
+            // Decode straight to colours: the texture UpdateTexture made here only lived in this copy of the struct, so each image was converted,
+            // uploaded, read back from the GPU and orphaned, and GetImageData then built a second texture from the colours
+            if (imageData.texture == null)
+                return imageData.dfBitmap.GetColor32((imageData.hasAlpha) ? imageData.alphaIndex : -1);
+#else
             // Generate texture if not present
             if (imageData.texture == null)
                 UpdateTexture(ref imageData);
+#endif
 
             return imageData.texture.GetPixels32();
         }
@@ -156,6 +163,19 @@ namespace DaggerfallWorkshop.Utility
             }
             else
             {
+#if UNITY_PSP2
+                // Read only the piece: GetPixels32 copied the whole source (256 KB for a 320x200 image) for every piece cut from it, and a
+                // first inventory open cuts ~50. Same pixels: 8-bit values survive the float round trip
+                int x = (int)subRect.x, w = (int)subRect.width, h = (int)subRect.height, y = texture.height - (int)subRect.y - h;
+                if (x >= 0 && y >= 0 && w > 0 && h > 0 && x + w <= texture.width && y + h <= texture.height)
+                {
+                    Texture2D piece = new Texture2D(w, h, TextureFormat.ARGB32, false);
+                    piece.SetPixels(texture.GetPixels(x, y, w, h), 0);
+                    piece.Apply(false, false);
+                    piece.filterMode = DaggerfallUI.Instance.GlobalFilterMode;
+                    return piece;
+                }
+#endif
                 return GetSubTexture(texture.GetPixels32(), subRect, texture.width, texture.height);
             }
         }

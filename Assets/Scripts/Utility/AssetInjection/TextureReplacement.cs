@@ -92,6 +92,10 @@ namespace DaggerfallWorkshop.Utility.AssetInjection
         static readonly string texturesPath = Path.Combine(Application.streamingAssetsPath, "Textures");
         static readonly string imgPath = Path.Combine(texturesPath, "Img");
         static readonly string cifRciPath = Path.Combine(texturesPath, "CifRci");
+#if UNITY_PSP2
+        static readonly bool looseTexturesPresent = Directory.Exists(texturesPath)
+            && Directory.GetFiles(texturesPath, "*" + extension, SearchOption.AllDirectories).Length > 0;
+#endif
 
         static readonly Type customBlendModeType = typeof(MaterialReader.CustomBlendMode);
         static readonly int ihdrIdentifier = ToInt(Encoding.UTF8.GetBytes("IHDR"), 0);
@@ -571,7 +575,11 @@ namespace DaggerfallWorkshop.Utility.AssetInjection
                 return null;
 
             Texture2D tex, emission;
+#if UNITY_PSP2
+            if (importedTextures.HasImportedTextures = LoadFromCacheOrImport(archive, 0, 0, true, true, out tex, out emission))
+#else
             if (importedTextures.HasImportedTextures = LoadFromCacheOrImport(archive, 0, 0, allowEmissionMap: true, readOnly: true, out tex, out emission))
+#endif
             {
                 string renderMode = null;
 
@@ -625,13 +633,23 @@ namespace DaggerfallWorkshop.Utility.AssetInjection
                     List<Texture2D[]> allEmission = importedTextures.IsEmissive ? new List<Texture2D[]>() : null;
 
                     int record = 0;
+#if UNITY_PSP2
+                    Texture2D[] currentAlbedo;
+                    while (TryImportTexture(archive, record, true, out currentAlbedo))
+#else
                     while (TryImportTexture(archive, record, readOnly: true, out Texture2D[] currentAlbedo))
+#endif
                     {
                         allAlbedo.Add(currentAlbedo);
 
                         if (importedTextures.IsEmissive)
                         {
+#if UNITY_PSP2
+                            Texture2D[] currentEmissive;
+                            if (TryImportTexture(texturesPath, frame => GetName(archive, record, frame, TextureMap.Emission), true, out currentEmissive))
+#else
                             if (TryImportTexture(texturesPath, frame => GetName(archive, record, frame, TextureMap.Emission), readOnly: true, out Texture2D[] currentEmissive))
+#endif
                             {
                                 allEmission.Add(currentEmissive);
                             }
@@ -993,8 +1011,10 @@ namespace DaggerfallWorkshop.Utility.AssetInjection
                 // Seek from mods
                 if (ModManager.Instance && ModManager.Instance.TryGetAsset(name, null, out tex))
                 {
+#if !UNITY_PSP2
                     if (!readOnly && !tex.isReadable)
                         Debug.LogWarning($"Texture {name} is not readable.");
+#endif
 
                     return true;
                 }
@@ -1045,10 +1065,26 @@ namespace DaggerfallWorkshop.Utility.AssetInjection
             if (!path.EndsWith(extension))
                 path += extension;
 
+#if UNITY_PSP2
+            // Loose textures live in read-only app0:, so check once instead of a card lookup per texture variant
+            if (!looseTexturesPresent)
+            {
+                tex = null;
+                return false;
+            }
+
+#endif
             if (File.Exists(path))
             {
                 byte[] bytes = File.ReadAllBytes(path);
+#if UNITY_PSP2
+                Vector2Int? pngResolution = FindPngResolution(bytes);
+            if (!pngResolution.HasValue)
+                throw new Exception($"Failed to find PNG resolution for {path}");
+            Vector2Int resolution = pngResolution.Value;
+#else
                 Vector2Int resolution = FindPngResolution(bytes) ?? throw new Exception($"Failed to find PNG resolution for {path}");
+#endif
                 TextureFormat textureFormat = resolution.x < retroThreshold || resolution.y < retroThreshold ? TextureFormat.ARGB32 : TextureFormat;
 
                 tex = new Texture2D(4, 4, textureFormat, mipMaps, isLinear);

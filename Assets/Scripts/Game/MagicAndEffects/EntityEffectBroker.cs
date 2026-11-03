@@ -761,7 +761,11 @@ namespace DaggerfallWorkshop.Game.MagicAndEffects
             if (recipeCount == 0)
                 return;
 
+#if UNITY_PSP2
+            // ~50 lines at every boot, ~0.3 s of log writes on hardware; collisions are still logged as errors
+#else
             Debug.LogFormat("Effect '{0}' has {1} potion recipes:", effect.Key, recipeCount);
+#endif
 
             // Index all recipes for this effect
             for (int i = 0; i < recipeCount; i++)
@@ -775,7 +779,9 @@ namespace DaggerfallWorkshop.Game.MagicAndEffects
                     if (!potionEffectTemplates.ContainsKey(recipeKey) || allowReplacement)
                     {
                         potionEffectTemplates[recipeKey] = effect;
+#if !UNITY_PSP2
                         Debug.LogFormat("'{0}' recipe {1} [key={2}] ingredients: {3}", effect.Key, i, recipeKey, recipe.ToString());
+#endif
                     }
                     else
                     {

@@ -25,7 +25,9 @@ using DaggerfallWorkshop.Utility;
 using DaggerfallWorkshop.Game.Questing;
 using DaggerfallWorkshop.Game.Guilds;
 using DaggerfallWorkshop.Game.MagicAndEffects;
+#if !UNITY_PSP2
 using UnityEngine.Rendering.PostProcessing;
+#endif
 
 namespace DaggerfallWorkshop.Game
 {
@@ -96,7 +98,9 @@ namespace DaggerfallWorkshop.Game
         TalkManager talkManager = null;
         GuildManager guildManager = null;
         QuestListsManager questListsManager = null;
+#if !UNITY_PSP2
         PostProcessVolume postProcessVolume = null;
+#endif
 
         #endregion
 
@@ -391,11 +395,13 @@ namespace DaggerfallWorkshop.Game
             set { questListsManager = value; }
         }
 
+#if !UNITY_PSP2
         public PostProcessVolume PostProcessVolume
         {
             get { return (postProcessVolume) ? postProcessVolume : postProcessVolume = GetMonoBehaviour<PostProcessVolume>(); }
             set { postProcessVolume = value; }
         }
+#endif
 
         public bool IsPlayerOnHUD
         {
@@ -807,6 +813,7 @@ namespace DaggerfallWorkshop.Game
 
         public void TryUpateAmbientOcclusionIntensity()
         {
+#if !UNITY_PSP2
             PostProcessVolume volume = GameManager.Instance.PostProcessVolume;
             if (!volume)
                 return;
@@ -826,6 +833,7 @@ namespace DaggerfallWorkshop.Game
                     ambientOcclusion.intensity.value = DaggerfallUnity.Settings.AmbientOcclusionIntensity;
                 }
             }
+#endif
         }
 
         #endregion

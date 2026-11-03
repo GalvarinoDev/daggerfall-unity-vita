@@ -104,6 +104,10 @@ namespace DaggerfallWorkshop
             {
                 materials[i] = dfUnity.MaterialReader.ChangeClimate(defaultTextures[i], climate, season, windowStyle);
             }
+#if UNITY_PSP2
+            // Vita: a city block with a texture atlas keeps it as submesh 0 (VitaAtlas.BuildCity)
+            materials = VitaAtlas.OnClimate(this, materials, climate, season);
+#endif
 
             // Assign material array
             if (materials != null)
@@ -164,7 +168,14 @@ namespace DaggerfallWorkshop
             DFLocation.ClimateBaseType climateIndex = Game.GameManager.Instance.PlayerGPS.ClimateSettings.ClimateType;
             for (int i = 0; i < defaultTextures.Count; i++)
             {
+#if UNITY_PSP2
+                int archive;
+                int record;
+                int frame;
+                MaterialReader.ReverseTextureKey(defaultTextures[i], out archive, out record, out frame);
+#else
                 MaterialReader.ReverseTextureKey(defaultTextures[i], out int archive, out int record, out _);
+#endif
                 archive = DungeonTextureTables.ApplyTextureTable(archive, dungeonTextureTable, climateIndex);
                 materials[i] = dfUnity.MaterialReader.GetMaterial(archive, record);
             }

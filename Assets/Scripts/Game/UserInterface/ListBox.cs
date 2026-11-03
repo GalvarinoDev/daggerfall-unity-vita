@@ -73,7 +73,11 @@ namespace DaggerfallWorkshop.Game.UserInterface
             public Color highlightedSelectedTextColor = DaggerfallUI.DaggerfallBrighterSelectedTextColor;
             public object tag;
 
+#if UNITY_PSP2
+            public bool Enabled { get { return textLabel.Enabled; } set { textLabel.Enabled = value; } }
+#else
             public bool Enabled { get => textLabel.Enabled; set { textLabel.Enabled = value; } }
+#endif
 
             public ListItem(TextLabel textLabel)
             {

@@ -147,7 +147,11 @@ namespace DaggerfallWorkshop.Game.UserInterface
 
         public bool IMECompositionInProgress
         {
+#if UNITY_PSP2
+            get { return Input.imeIsSelected && curCompositionString.Length > 0; }
+#else
             get => Input.imeIsSelected && curCompositionString.Length > 0;
+#endif
         }
 
         public TextBox(DaggerfallFont font = null)
@@ -177,6 +181,11 @@ namespace DaggerfallWorkshop.Game.UserInterface
             // Do nothing if read only or using focus and does not have focus
             if (readOnly || (UseFocus && !HasFocus()))
                 return;
+#if UNITY_PSP2 && !UNITY_EDITOR
+            // Vita: the system keyboard takes the input while it is open (VitaKeyboard.cs, plugin vita/plugins/vitaime)
+            if (VitaKeyboard.Update(this))
+                return;
+#endif
 
             // SDF fonts can have different widths to classic so need to recalc cursor position any time this changes
             bool sdfState = font.IsSDFCapable;

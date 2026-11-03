@@ -333,7 +333,13 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             if (classIndex != CreateCharClassQuestions.noClassIndex)
             {
                 string fileName = "CLASS" + classIndex.ToString("00") + ".CFG";
+#if UNITY_PSP2 && !UNITY_EDITOR
+                // ClassFile reads the baked career (VitaCareers): no ARENA2 listing (seconds on the Vita) for one known name
+                string[] files = VitaCareers.ClassFiles(DaggerfallUnity.Instance.Arena2Path) != null ?
+                    new string[] { Path.Combine(DaggerfallUnity.Instance.Arena2Path, fileName) } : Directory.GetFiles(DaggerfallUnity.Instance.Arena2Path, fileName);
+#else
                 string[] files = Directory.GetFiles(DaggerfallUnity.Instance.Arena2Path, fileName);
+#endif
                 if (files == null)
                 {
                     throw new Exception("Could not load class file: " + fileName);

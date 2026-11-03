@@ -64,6 +64,10 @@ namespace DaggerfallWorkshop.Game
             Vector3 playerXZ = new Vector3(player.transform.position.x, 0, player.transform.position.z);
 
             // Check distance
+#if UNITY_PSP2
+            // Vita: the Light component may be parked by VitaLights, which then keeps this on/off state
+            VitaLights.SetEnabled(myLight, Vector3.Distance(lightXZ, playerXZ) <= scaledRange);
+#else
             if (Vector3.Distance(lightXZ, playerXZ) > scaledRange)
             {
                 myLight.enabled = false;
@@ -72,6 +76,7 @@ namespace DaggerfallWorkshop.Game
             {
                 myLight.enabled = true;
             }
+#endif
         }
     }
 }

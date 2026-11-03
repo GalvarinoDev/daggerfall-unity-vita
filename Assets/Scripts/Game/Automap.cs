@@ -1155,7 +1155,11 @@ namespace DaggerfallWorkshop.Game
             if ((gameobjectGeometry != null) && ((GameManager.Instance.IsPlayerInsideBuilding) || (GameManager.Instance.IsPlayerInsideDungeon) || (GameManager.Instance.IsPlayerInsideCastle)))
             {
                 // enable automap level geometry for revealing (so raycasts can hit colliders of automap level geometry)
+#if UNITY_PSP2
+                VitaScanGeometry(true);
+#else
                 gameobjectGeometry.SetActive(true);
+#endif
 
                 // reveal geometry right below player - raycast down from player head position
                 Vector3 rayStartPos = gameObjectPlayerAdvanced.transform.position + Camera.main.transform.localPosition;
@@ -1191,7 +1195,11 @@ namespace DaggerfallWorkshop.Game
                 }
 
                 // disable gameobjectGeometry so player movement won't be affected by geometry colliders of automap level geometry
+#if UNITY_PSP2
+                VitaScanGeometry(false);
+#else
                 gameobjectGeometry.SetActive(false);
+#endif
             }
 
             // entrance marker discovery check - only do as long as undiscovered
@@ -1324,6 +1332,10 @@ namespace DaggerfallWorkshop.Game
         private void SetActivationStateOfMapObjects(bool active)
         {          
             gameobjectGeometry.SetActive(active);
+#if UNITY_PSP2
+            if (active)
+                VitaSetGeometryColliders(true); // the map window raycasts against them
+#endif
 
             gameobjectBeacons.SetActive(active);
 
@@ -1701,6 +1713,95 @@ namespace DaggerfallWorkshop.Game
             dictTeleporterConnections.Clear();
         }
 
+#if UNITY_PSP2
+        // player: stopping this coroutine took the frame from 58 to 32 ms; GameObject.Activate 12.5 + Deactivate 5.6 ms/frame).
+        // Instead the geometry stays active between scans (the main camera's culling mask already skips its layer) and only its
+        // colliders are switched on for the scan, so raycasts and movement see exactly what they saw before.
+        // Mode 2 switches on only the colliders the scan's rays can reach: they start at the player's head and go at most
+        // raycastDistanceViewDirection forward, then raycastDistanceDown down from points along that ray (+10 cm offsets).
+        // VitaScanMode 0 = upstream's SetActive, 1 = all colliders, 2 = nearby colliders.
+        public static int VitaScanMode = 2;
+        Collider[] vitaGeometryColliders;
+        Bounds[] vitaGeometryColliderBounds;
+        readonly List<Collider> vitaScanColliders = new List<Collider>();
+        GameObject vitaGeometryCollidersOwner;
+        bool vitaGeometryCollidersEnabled;
+
+        void VitaScanGeometry(bool begin)
+        {
+            if (VitaScanMode == 0)
+            {
+                if (begin)
+                    VitaSetGeometryColliders(true);
+                gameobjectGeometry.SetActive(begin);
+                return;
+            }
+            if (begin && !gameobjectGeometry.activeSelf)
+                gameobjectGeometry.SetActive(true);
+            if (VitaScanMode == 1)
+            {
+                VitaSetGeometryColliders(begin);
+                return;
+            }
+            if (begin)
+            {
+                VitaSetGeometryColliders(false);
+                Vector3 rayStartPos = gameObjectPlayerAdvanced.transform.position + Camera.main.transform.localPosition;
+                float reach = raycastDistanceViewDirection + raycastDistanceDown + 1f;
+                for (int i = 0; i < vitaGeometryColliders.Length; i++)
+                {
+                    Collider c = vitaGeometryColliders[i];
+                    if (c && vitaGeometryColliderBounds[i].SqrDistance(rayStartPos) <= reach * reach)
+                    {
+                        c.enabled = true;
+                        vitaScanColliders.Add(c);
+                    }
+                }
+            }
+            else
+            {
+                foreach (Collider c in vitaScanColliders)
+                    if (c)
+                        c.enabled = false;
+                vitaScanColliders.Clear();
+            }
+        }
+
+        void VitaSetGeometryColliders(bool enabled)
+        {
+            if (vitaGeometryCollidersOwner != gameobjectGeometry)
+            {
+                // Called with the geometry active and its colliders still enabled, so their world bounds are valid
+                vitaGeometryCollidersOwner = gameobjectGeometry;
+                vitaGeometryColliders = gameobjectGeometry.GetComponentsInChildren<Collider>(true);
+                vitaGeometryColliderBounds = new Bounds[vitaGeometryColliders.Length];
+                for (int i = 0; i < vitaGeometryColliders.Length; i++)
+                    vitaGeometryColliderBounds[i] = vitaGeometryColliders[i].bounds;
+                vitaGeometryCollidersEnabled = true;
+                vitaScanColliders.Clear();
+            }
+            if (enabled)
+                vitaScanColliders.Clear();  // all on: nothing left for mode 2 to switch off
+            if (enabled == vitaGeometryCollidersEnabled)
+                return;
+            vitaGeometryCollidersEnabled = enabled;
+            foreach (Collider c in vitaGeometryColliders)
+                if (c)
+                    c.enabled = enabled;
+        }
+
+        public string VitaGeometryCounts()
+        {
+            if (!gameobjectGeometry)
+                return "no geometry";
+            Renderer[] renderers = gameobjectGeometry.GetComponentsInChildren<Renderer>(true);
+            return string.Format("objects {0} colliders {1} renderers {2} enabled renderers {3} behaviours {4}",
+                gameobjectGeometry.GetComponentsInChildren<Transform>(true).Length, gameobjectGeometry.GetComponentsInChildren<Collider>(true).Length,
+                renderers.Length, Array.FindAll(renderers, r => r.enabled).Length,
+                gameobjectGeometry.GetComponentsInChildren<MonoBehaviour>(true).Length);
+        }
+#endif
+
         /// <summary>
         /// sets layer of a GameObject and all of its childs recursively
         /// </summary>
@@ -1974,7 +2075,15 @@ namespace DaggerfallWorkshop.Game
             gameobjectGeometry.transform.SetParent(gameobjectAutomap.transform);
 
             // inject all materials of automap geometry with automap shader and reset MeshRenderer enabled state (this is used for the discovery mechanism)
+#if UNITY_PSP2
+            // Probe: material injection part of the copy
+            System.Diagnostics.Stopwatch vitaInject = System.Diagnostics.Stopwatch.StartNew();
             RaiseOnInjectMeshAndMaterialPropertiesEvent();
+            if (VitaMemory.Probes)
+                Debug.Log("VITAAUTOMAP inject " + vitaInject.ElapsedMilliseconds + " ms");
+#else
+            RaiseOnInjectMeshAndMaterialPropertiesEvent();
+#endif
 
             //oldGeometryName = newGeometryName;
         }
@@ -2489,7 +2598,17 @@ namespace DaggerfallWorkshop.Game
             }
             else if ((GameManager.Instance.IsPlayerInsideDungeon) || (GameManager.Instance.IsPlayerInsideCastle))
             {
+#if UNITY_PSP2
+                // Probe: the dungeon copy was 16 s and Unity Heap +11 MB in the Daggerfall Palace
+                System.Diagnostics.Stopwatch vitaWatch = System.Diagnostics.Stopwatch.StartNew();
+                string vitaBefore = VitaMemory.Probes ? VitaMemory.FreeMem() : null;
                 CreateDungeonGeometryForAutomap();
+                if (VitaMemory.Probes)
+                    Debug.Log(string.Format("VITAAUTOMAP dungeon copy {0} ms, {1} colliders\n  before {2}\n  after  {3}", vitaWatch.ElapsedMilliseconds,
+                        gameobjectGeometry.GetComponentsInChildren<Collider>(true).Length, vitaBefore, VitaMemory.FreeMem()));
+#else
+                CreateDungeonGeometryForAutomap();
+#endif
                 RestoreStateAutomapDungeon(!initFromLoadingSave); // if a save game was loaded, do not reset the revisited state (don't set parameter forceNotVisitedInThisRun to true)
                 resetAutomapSettingsFromExternalScript = true; // set flag so external script (DaggerfallAutomapWindow) can pull flag and reset automap values on next window push
 
@@ -2525,13 +2644,32 @@ namespace DaggerfallWorkshop.Game
         {
             SaveStateAutomapInterior();
             DestroyBeacons();
+#if UNITY_PSP2
+            VitaDestroyGeometry();
+#endif
         }
 
         private void OnTransitionToDungeonExterior(PlayerEnterExit.TransitionEventArgs args)
         {
             SaveStateAutomapDungeon(true);
             DestroyBeacons();
+#if UNITY_PSP2
+            VitaDestroyGeometry();
+#endif
         }
+#if UNITY_PSP2
+
+        // meshes after the starting dungeon, ~1000 after Castle Daggerfall, with 10 MB main free in the city). The discovery state is
+        // saved just above and the geometry is rebuilt on every entry (InitWhenInInteriorOrDungeon), so free it now.
+        private void VitaDestroyGeometry()
+        {
+            if (gameobjectGeometry != null)
+            {
+                UnityEngine.Object.Destroy(gameobjectGeometry);
+                gameobjectGeometry = null;
+            }
+        }
+#endif
 
         void OnLoadEvent(SaveData_v1 saveData)
         {

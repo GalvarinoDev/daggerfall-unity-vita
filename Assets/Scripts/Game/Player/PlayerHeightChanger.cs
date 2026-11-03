@@ -122,6 +122,11 @@ namespace DaggerfallWorkshop.Game
         /// <summary>
         /// Determines what Height-changing action should be taken based on player's input and PlayerMotor.IsRiding
         /// </summary>
+#if UNITY_PSP2
+        // Vita: set by DaggerfallHUD on a tap in the top middle of the rear touch pad (toggles crouch)
+        public static bool VitaRearCrouchPressed;
+
+#endif
         public void DecideHeightAction()
         {
             bool onWater = (GameManager.Instance.PlayerMotor.OnExteriorWater == PlayerMotor.OnExteriorWaterMethod.Swimming);
@@ -129,6 +134,10 @@ namespace DaggerfallWorkshop.Game
             bool crouching = playerMotor.IsCrouching;
             bool riding = playerMotor.IsRiding;
             bool pressedCrouch = InputManager.Instance.ActionStarted(InputManager.Actions.Crouch);
+#if UNITY_PSP2
+            pressedCrouch |= VitaRearCrouchPressed;
+            VitaRearCrouchPressed = false;
+#endif
             bool climbing = climbingMotor.IsClimbing;
             bool levitating = playerMotor.IsLevitating;
             //timerMax = timerSlow;

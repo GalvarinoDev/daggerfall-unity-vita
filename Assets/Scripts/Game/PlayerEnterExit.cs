@@ -473,6 +473,13 @@ namespace DaggerfallWorkshop.Game
         {
             // Wait for end of frame so existing world data can be removed
             yield return new WaitForEndOfFrame();
+#if UNITY_PSP2
+            // Vita: free the area being left (RespawnPlayer destroyed its dungeon/interior, the exterior is still up) before building the
+            // new one, as the transitions do: a save load used to build on top of it (peak memory). Save loads run behind a loading window
+            world.VitaClearWorld();
+            yield return StartCoroutine(VitaUnload("respawn unloaded"));
+            Debug.Log("VITARESPAWN unloaded");
+#endif
 
             // Store if player was inside a dungeon or building before respawning
             bool playerWasInDungeon = IsPlayerInsideDungeon;
@@ -517,8 +524,17 @@ namespace DaggerfallWorkshop.Game
                 }
 
                 // Wait until world is ready
+#if UNITY_PSP2
+                // The Vita builds the 9 tiles over frames after init, and the pending reposition (Offset: terrain height only) runs after
+                // them. Waiting on IsInit alone let a load restore the saved position first and then drop the player onto the terrain:
+                // off bridges and walkways, out of mid-air saves. Wait for the reposition too.
+                float vitaWaitStart = Time.realtimeSinceStartup;
+                while (world.IsInit || (world.VitaIsBuilding && Time.realtimeSinceStartup - vitaWaitStart < 120))
+                    yield return new WaitForEndOfFrame();
+#else
                 while (world.IsInit)
                     yield return new WaitForEndOfFrame();
+#endif
 
                 // Raise transition exterior event if player was inside a dungeon or building
                 // This helps inform other systems player has transitioned to exterior without clicking a door or reloading game
@@ -553,6 +569,9 @@ namespace DaggerfallWorkshop.Game
                 world.TeleportToCoordinates(pos.X, pos.Y);
             }
 
+#if UNITY_PSP2
+            Debug.Log("VITARESPAWN done");
+#endif
             // Lower respawn flag
             isRespawning = false;
 
@@ -898,6 +917,14 @@ namespace DaggerfallWorkshop.Game
             if (!ReferenceComponents())
                 return;
 
+#if UNITY_PSP2
+            if (!vitaEnteringDungeon)
+            {
+                StartCoroutine(VitaTransitionDungeonInterior(doorOwner, door, location, doFade));
+                return;
+            }
+
+#endif
             // Reset dungeon block on entering dungeon
             lastPlayerDungeonBlockIndex = -1;
             playerDungeonBlockData = new DFLocation.DungeonBlock();
@@ -1151,15 +1178,93 @@ namespace DaggerfallWorkshop.Game
             if (!ReferenceComponents() || !dungeon || !isPlayerInsideDungeon)
                 return;
 
+#if UNITY_PSP2
+            StartCoroutine(VitaTransitionDungeonExterior());
+        }
+#else
             // Redirect to coroutine verion for fade support
             if (doFade)
             {
                 StartCoroutine(FadedTransitionDungeonExterior());
                 return;
             }
+#endif
 
+#if UNITY_PSP2
+        bool vitaEnteringDungeon;
+
+        // Vita: DFU keeps the whole exterior (hidden) under a dungeon, so both were in memory at once. Behind a loading window: destroy
+        // the exterior, give the GPU a few frames, unload, then build the dungeon. The exit rebuilds the exterior (TeleportToCoordinates).
+        private IEnumerator VitaTransitionDungeonInterior(Transform doorOwner, StaticDoor door, DFLocation location, bool doFade)
+        {
+            VitaLoadingWindow loadingWindow = new VitaLoadingWindow(DaggerfallUI.UIManager, "Dungeon");
+            loadingWindow.Progress = 0.3f;      // the bar fills to here while the exterior is freed; the dungeon then builds in one long frame
+            DaggerfallUI.UIManager.PushWindow(loadingWindow);
+            yield return null;
+            yield return null;
+
+            world.VitaClearWorld();
+            yield return StartCoroutine(VitaUnload("dungeon entry unloaded"));
+
+            vitaEnteringDungeon = true;
+            TransitionDungeonInterior(doorOwner, door, location, doFade);
+            vitaEnteringDungeon = false;
+
+            // No start marker: the player is still outside, so bring the exterior back
+            if (!isPlayerInsideDungeon)
+                VitaRebuildExterior();
+
+            if (DaggerfallUI.UIManager.TopWindow == loadingWindow)
+                loadingWindow.CloseWindow();
+        }
+
+        // Frees what the transition just destroyed: GXM frees are delayed until the GPU finishes its frames (UNITY_VITA_GUIDE §5), and
+        // MaterialReader keeps materials AssetCacheThreshold minutes, so drop its cache (but the terrain tilesets) before UnloadUnusedAssets
+        private IEnumerator VitaUnload(string tag)
+        {
+            for (int i = 0; i < 3; i++)
+                yield return null;
+            DaggerfallUnity.Instance.MaterialReader.VitaClearCacheExceptTilesets();
+            DaggerfallUnity.Instance.MeshReader.ClearCache();
+            DaggerfallUnity.Instance.ContentReader.VitaDiscardBlocks();
+            DaggerfallConnect.Utility.FileProxy.VitaClearLevelCache();
+            yield return Resources.UnloadUnusedAssets();
+            GC.Collect();
+            if (VitaMemory.Probes)
+                VitaMemory.Dump(tag);
+        }
+
+        void VitaRebuildExterior()
+        {
+            DFPosition mapPixel = GameManager.Instance.PlayerGPS.CurrentMapPixel;
+            world.TeleportToCoordinates(mapPixel.X, mapPixel.Y, StreamingWorld.RepositionMethods.DungeonEntrance);
+        }
+
+        // next menu). Behind a loading window: destroy the dungeon, give the GPU a few frames to release it (GXM frees are delayed),
+        // drop the cached dungeon materials (kept AssetCacheThreshold minutes otherwise) and unload them, then build the exterior.
+        private IEnumerator VitaTransitionDungeonExterior()
+        {
+            VitaLoadingWindow loadingWindow = new VitaLoadingWindow(DaggerfallUI.UIManager);
+            DaggerfallUI.UIManager.PushWindow(loadingWindow);
+            yield return null;
+            yield return null;
+
+#else
             // Perform transition
+#endif
             DungeonTransitionExteriorLogic();
+#if UNITY_PSP2
+            world.suppressWorld = true;
+            yield return StartCoroutine(VitaUnload("dungeon exit unloaded"));
+            VitaRebuildExterior();
+
+            yield return null;
+            float start = Time.realtimeSinceStartup;
+            while (world.VitaIsBuilding && Time.realtimeSinceStartup - start < 60)
+                yield return null;
+            if (DaggerfallUI.UIManager.TopWindow == loadingWindow)
+                loadingWindow.CloseWindow();
+#endif
         }
 
         private IEnumerator FadedTransitionDungeonExterior()

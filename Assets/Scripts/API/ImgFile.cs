@@ -234,6 +234,29 @@ namespace DaggerfallConnect.Arena2
                 return false;
             }
 
+#if UNITY_PSP2 && !UNITY_EDITOR
+            // Baked by VitaImageBaker: what Read and the frame readers produce
+            VitaImages.File baked = VitaImages.Read(filePath, Palette);
+            if (baked != null && baked.Records.Length == 1 && baked.Records[0].Frames.Length == 1)
+            {
+                VitaImages.Record record = baked.Records[0];
+                header.XOffset = (Int16)record.X;
+                header.YOffset = (Int16)record.Y;
+                header.Width = (Int16)record.Width;
+                header.Height = (Int16)record.Height;
+                imgRecord.Width = record.Width;
+                imgRecord.Height = record.Height;
+                imgRecord.Data = record.Frames[0].Data;
+                imgRecord.Palette = Palette;
+                if (baked.Palette != null)
+                {
+                    myPalette.Set(baked.Palette);
+                    isPalettizedValue = true;
+                }
+                managedFile.Load(new byte[0], filePath);
+                return true;
+            }
+#endif
             // Load file
             if (!managedFile.Load(filePath, usage, readOnly))
                 return false;

@@ -74,7 +74,11 @@ namespace DaggerfallWorkshop
                 if (lastCityLightsFlag != dfUnity.WorldTime.Now.IsCityLightsOn)
                 {
                     // Set light
+#if UNITY_PSP2
+                    VitaLights.SetEnabled(myLight, dfUnity.WorldTime.Now.IsCityLightsOn);     // may be parked
+#else
                     myLight.enabled = dfUnity.WorldTime.Now.IsCityLightsOn;
+#endif
                     lastCityLightsFlag = dfUnity.WorldTime.Now.IsCityLightsOn;
                 }
             }
@@ -82,6 +86,61 @@ namespace DaggerfallWorkshop
 
         #region Private Methods
 
+#if UNITY_PSP2
+        // Vita: a light the dungeon light handler switched off (Light.enabled = false, the object stays active) has nothing to animate,
+        // Palace, 159 lights, 78 on): stopping these coroutines saved 8.6 ms of coroutines (frame −11 ms).
+        // VitaSkipDisabled = false is upstream's.
+        public static bool VitaSkipDisabled = true;
+
+        // (DungeonLightHandler's own period; it resumes flickering from its last range), and a lit one keeps its range in a field: one
+        // Light.range write per tick instead of up to three reads and a write. Same flicker steps.
+        // masked/parked, town lamps are baked). So a lit light that isn't shown waits like a switched-off one (the Palace's 78 lit lights
+        public static bool VitaAnimateShownOnly = true;
+
+        IEnumerator AnimateLight()
+        {
+            startRange = myLight.range;
+            float range = startRange;
+            WaitForSeconds wait = new WaitForSeconds(1f / FramesPerSecond);
+            WaitForSeconds waitOff = new WaitForSeconds(0.4f);
+
+            while (Animate)
+            {
+                if (VitaSkipDisabled && (!VitaLights.IsEnabled(myLight) || VitaAnimateShownOnly && !VitaLights.IsShown(myLight)))
+                {
+                    yield return waitOff;
+                    continue;
+                }
+                if (stepping)
+                {
+                    if (targetRange <= range)
+                    {
+                        range -= Speed;
+                        myLight.range = range;
+                        if (range <= targetRange)
+                            stepping = false;
+                    }
+                    else
+                    {
+                        range += Speed;
+                        myLight.range = range;
+                        if (range >= targetRange)
+                            stepping = false;
+                    }
+                }
+                else
+                {
+                    // Start a new cycle
+                    targetRange = UnityEngine.Random.Range(startRange - Variance, startRange);
+                    stepping = true;
+                }
+
+                yield return wait;
+            }
+
+            myLight.range = startRange;
+        }
+#else
         IEnumerator AnimateLight()
         {
             startRange = myLight.range;
@@ -115,6 +174,7 @@ namespace DaggerfallWorkshop
 
             myLight.range = startRange;
         }
+#endif
 
         private bool ReadyCheck()
         {

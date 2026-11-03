@@ -422,12 +422,22 @@ namespace DaggerfallWorkshop
                     settings.emissionIndex = -1;
                 }
 
+#if UNITY_PSP2
+                settings.vitaPalette = !isBillboard;
+#endif
                 // Get texture
                 results = textureReader.GetTexture2D(settings, AlphaTextureFormat, TextureImport.AllLocations);
 
                 // Create material
                 if (isBillboard)
                     material = CreateBillboardMaterial();
+#if UNITY_PSP2
+                else if (results.vitaPalette)
+                {
+                    material = new Material(Shader.Find(VitaPalette.ShaderName));
+                    material.SetTexture(VitaPalette.PaletteTex, results.vitaPalette);
+                }
+#endif
                 else
                     material = CreateDefaultMaterial();
 
@@ -445,6 +455,16 @@ namespace DaggerfallWorkshop
                     material.EnableKeyword(KeyWords.NormalMap);
                 }
 
+#if UNITY_PSP2
+                // Palette texture with emission (VitaPalette.WorldEmission): DefaultPalette's _EMISSION looks the colour up per index
+                if (results.vitaPalette && results.vitaEmissionPalette)
+                {
+                    material.SetTexture(VitaPalette.EmissionPaletteTex, results.vitaEmissionPalette);
+                    material.SetColor(Uniforms.EmissionColor, results.isWindow ? DayWindowColor * DayWindowIntensity : Color.white);
+                    material.EnableKeyword(KeyWords.Emission);
+                }
+                else
+#endif
                 // Setup emission map
                 if (results.isEmissive && !results.isWindow && results.emissionMap != null)
                 {
@@ -482,6 +502,16 @@ namespace DaggerfallWorkshop
                 recordOffsets = new Vector2[1] { new Vector2(offset.X, offset.Y) };
                 singleFrameCount = results.textureFile.GetFrameCount(record);
             }
+#if UNITY_PSP2
+            else if (results.vitaBaked)
+            {
+                // Baked world texture (VitaWorldTextures): the record's info from the pack
+                recordSizes = new Vector2[1] { results.vitaSize };
+                recordScales = new Vector2[1] { results.vitaScale };
+                recordOffsets = new Vector2[1] { results.vitaOffset };
+                singleFrameCount = results.vitaFrameCount;
+            }
+#endif
             else
             {
                 // If we have no texture file, this means this is a non-classic texture
@@ -583,10 +613,23 @@ namespace DaggerfallWorkshop
             settings.atlasPadding = padding;
             settings.atlasMaxSize = maxAtlasSize;
             settings.copyToOppositeBorder = copyToOppositeBorder;
+#if UNITY_PSP2
+            settings.vitaPalette = isBillboard;
+#endif
 
             // Setup material
             material.name = string.Format("TEXTURE.{0:000} [Atlas]", archive);
             GetTextureResults results = textureReader.GetTexture2DAtlas(settings, AlphaTextureFormat);
+#if UNITY_PSP2
+            // 8-bit palette sprite atlas (TextureReader.TryPackAtlasOnCpu): Daggerfall/Billboard with the palette lookup
+            if (results.vitaPalette)
+            {
+                material.shader = Shader.Find(results.vitaEmissionPalette ? VitaPalette.BillboardSpectralShaderName : VitaPalette.BillboardShaderName);
+                material.SetTexture(VitaPalette.PaletteTex, results.vitaPalette);
+                if (results.vitaEmissionPalette)
+                    material.SetTexture(VitaPalette.EmissionPaletteTex, results.vitaEmissionPalette);
+            }
+#endif
 
             material.mainTexture = results.albedoMap;
             material.mainTexture.filterMode = MainFilterMode;
@@ -676,6 +719,10 @@ namespace DaggerfallWorkshop
             Material material = new Material(shader);
             material.name = string.Format("TEXTURE.{0:000} [Tilemap]", archive);
             material.SetTexture("_TileAtlasTex", results.albedoMap);
+#if UNITY_PSP2
+            // Vita: the atlas holds palette indices (TextureReader.GetTerrainTilesetTexture); terrain materials copy this palette too
+            material.SetTexture(VitaPalette.PaletteTex, results.vitaPalette);
+#endif
 
             CachedMaterial newcm = new CachedMaterial()
             {
@@ -953,6 +1000,47 @@ namespace DaggerfallWorkshop
         {
             materialDict.Clear();
         }
+#if UNITY_PSP2
+
+        /// <summary>
+        /// Vita: clears the cache except the terrain tilesets. Rebuilding a tileset needs a 2048x2048 ARGB32 texture (22 MB with mips)
+        /// plus a 16 MB colour array in main memory at once, which failed on the way out of Castle Daggerfall; kept, it stays in VRAM.
+        /// </summary>
+        // Vita: which cached texture each material shows (VitaAtlas packs the plain ones of a dungeon into one atlas)
+        public Dictionary<Material, CachedMaterial> VitaMaterialsByKey()
+        {
+            var result = new Dictionary<Material, CachedMaterial>();
+            foreach (var item in materialDict)
+                if (item.Value.material && !result.ContainsKey(item.Value.material))
+                    result.Add(item.Value.material, item.Value);
+            return result;
+        }
+
+        public void VitaClearCacheExceptTilesets()
+        {
+            foreach (var item in materialDict.Where(x => x.Value.keyGroup != TileMapKeyGroup).ToList())
+                materialDict.Remove(item.Key);
+        }
+
+        // Vita: forget the tilesets (2048x2048 atlas each) of climates no terrain shows any more, e.g. after travelling to another climate
+        //. Destroys only the cached material; UnloadUnusedAssets then frees the atlas
+        // if nothing else still uses it. Returns how many were dropped.
+        public int VitaDropTilesetsExcept(HashSet<Texture> inUse)
+        {
+            int dropped = 0;
+            foreach (var item in materialDict.Where(x => x.Value.keyGroup == TileMapKeyGroup).ToList())
+            {
+                Material material = item.Value.material;
+                if (material && inUse.Contains(material.GetTexture(TileUniforms.TileAtlasTex)))
+                    continue;
+                materialDict.Remove(item.Key);
+                if (material)
+                    Destroy(material);
+                dropped++;
+            }
+            return dropped;
+        }
+#endif
 
         #endregion
 

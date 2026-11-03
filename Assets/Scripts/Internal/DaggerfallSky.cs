@@ -67,6 +67,11 @@ namespace DaggerfallWorkshop
         Texture2D eastTexture;
         Color cameraClearColor;
         Rect fullTextureRect = new Rect(0, 0, 1, 1);
+#if UNITY_PSP2
+        Texture2D vitaPaletteTexture;
+        Material vitaMaterial;
+        Rect vitaTextureRect;
+#endif
         int lastSkyIndex = -1;
         int lastSkyFrame = -1;
         bool lastNightFlag = false;
@@ -84,6 +89,12 @@ namespace DaggerfallWorkshop
             public Color32[] east;
             public Color clearColor;
             public Vector2Int imageSize;
+#if UNITY_PSP2
+            // Vita: a baked frame (VitaClassicSky) as palette indices instead of west/east colours
+            public byte[] vitaWest;
+            public byte[] vitaEast;
+            public Color32[] vitaPalette;
+#endif
         }
 
         #endregion
@@ -179,6 +190,16 @@ namespace DaggerfallWorkshop
             }
         }
 
+#if UNITY_PSP2
+        void OnDestroy()
+        {
+            Destroy(westTexture);
+            Destroy(eastTexture);
+            Destroy(vitaPaletteTexture);
+            Destroy(vitaMaterial);
+        }
+
+#endif
         void OnPostRender()
         {
             UpdateSkyRects();
@@ -257,14 +278,38 @@ namespace DaggerfallWorkshop
             GL.LoadPixelMatrix(0, Screen.width, Screen.height, 0);
 
             // Draw sky hemispheres
+#if UNITY_PSP2
+            if (westTexture.format == TextureFormat.Alpha8)
+            {
+                // Graphics.DrawTexture's colour is neutral at 0.5 (Unity's GUI texture shader doubles it, as the clear colour above);
+                // UIPalette takes its tint as is
+                Color tint = SkyTintColor * SkyColorScale;
+                vitaMaterial.SetColor("_ColorTint", new Color(tint.r * 2f, tint.g * 2f, tint.b * 2f, Mathf.Min(1f, tint.a * 2f)));
+                Graphics.DrawTexture(westRect, westTexture, vitaTextureRect, 0, 0, 0, 0, vitaMaterial);
+                Graphics.DrawTexture(eastRect, eastTexture, vitaTextureRect, 0, 0, 0, 0, vitaMaterial);
+            }
+            else
+            {
+                Graphics.DrawTexture(westRect, westTexture, fullTextureRect, 0, 0, 0, 0, SkyTintColor * SkyColorScale, null);
+                Graphics.DrawTexture(eastRect, eastTexture, fullTextureRect, 0, 0, 0, 0, SkyTintColor * SkyColorScale, null);
+            }
+#else
             Graphics.DrawTexture(westRect, westTexture, fullTextureRect, 0, 0, 0, 0, SkyTintColor * SkyColorScale, null);
             Graphics.DrawTexture(eastRect, eastTexture, fullTextureRect, 0, 0, 0, 0, SkyTintColor * SkyColorScale, null);
+#endif
 
             GL.PopMatrix();
         }
 
         private void PromoteToTexture(SkyColors colors, bool flip = false)
         {
+#if UNITY_PSP2
+            if (colors.vitaWest != null)
+            {
+                PromoteIndices(colors, flip);
+                return;
+            }
+#endif
             // Destroy old textures
             Destroy(westTexture);
             Destroy(eastTexture);
@@ -306,6 +351,40 @@ namespace DaggerfallWorkshop
 
             SetSkyFogColor(colors);
         }
+
+#if UNITY_PSP2
+        // Vita: a baked frame's indices into two Alpha8 textures made once and refilled (kept readable for that), drawn with UIPalette
+        private void PromoteIndices(SkyColors colors, bool flip)
+        {
+            if (!westTexture || westTexture.format != TextureFormat.Alpha8)
+            {
+                Destroy(westTexture);
+                Destroy(eastTexture);
+                westTexture = new Texture2D(VitaClassicSky.Width, VitaClassicSky.Height, TextureFormat.Alpha8, false);
+                eastTexture = new Texture2D(VitaClassicSky.Width, VitaClassicSky.Height, TextureFormat.Alpha8, false);
+                westTexture.filterMode = eastTexture.filterMode = FilterMode.Point;
+                westTexture.wrapMode = eastTexture.wrapMode = TextureWrapMode.Clamp;
+            }
+            westTexture.LoadRawTextureData(flip ? colors.vitaEast : colors.vitaWest);
+            westTexture.Apply(false, false);
+            eastTexture.LoadRawTextureData(flip ? colors.vitaWest : colors.vitaEast);
+            eastTexture.Apply(false, false);
+            if (!vitaPaletteTexture)
+            {
+                vitaPaletteTexture = new Texture2D(256, 1, TextureFormat.RGBA32, false);
+                vitaPaletteTexture.filterMode = FilterMode.Point;
+                vitaPaletteTexture.wrapMode = TextureWrapMode.Clamp;
+            }
+            vitaPaletteTexture.SetPixels32(colors.vitaPalette);
+            vitaPaletteTexture.Apply(false, false);
+            if (!vitaMaterial)
+                vitaMaterial = new Material(Shader.Find(VitaWeaponPack.ShaderName));
+            vitaMaterial.SetTexture(VitaPalette.PaletteTex, vitaPaletteTexture);
+            vitaTextureRect = new Rect(0, 0, 1, colors.imageSize.y / (float)VitaClassicSky.Height);
+
+            SetSkyFogColor(colors);
+        }
+#endif
 
         public void SetSkyFogColor(SkyColors colors)
         {
@@ -398,8 +477,15 @@ namespace DaggerfallWorkshop
         {
             if (DaggerfallUnity.Settings.AssetInjection)
             {
+#if UNITY_PSP2
+                Texture2D westTexture, eastTexture;
+#endif
                 TryLoadDayTextures(SkyIndex, frame,
+#if UNITY_PSP2
+                    out westTexture, out eastTexture);
+#else
                     out Texture2D westTexture, out Texture2D eastTexture);
+#endif
 
                 if (westTexture && eastTexture)
                 {
@@ -419,8 +505,15 @@ namespace DaggerfallWorkshop
         {
             if (DaggerfallUnity.Settings.AssetInjection)
             {
+#if UNITY_PSP2
+                Texture2D westTexture, eastTexture;
+#endif
                 TryLoadNightSkyTextures(SkyIndex, frame,
+#if UNITY_PSP2
+                    out westTexture, out eastTexture);
+#else
                     out Texture2D westTexture, out Texture2D eastTexture);
+#endif
 
                 if (westTexture && eastTexture)
                 {
@@ -545,12 +638,31 @@ namespace DaggerfallWorkshop
         /// <returns>SkyColors loaded</returns>
         private SkyColors LoadVanillaDaySky(int skyIndex, int frame)
         {
+#if UNITY_PSP2
+            // Vita: the baked frame (VitaClassicSky); the file is read only on a miss
+            SkyColors baked = new SkyColors();
+            int bakedHeight;
+            if (VitaClassicSky.Read(VitaClassicSky.DayKey(skyIndex, frame), out baked.vitaPalette, out baked.vitaEast, out baked.vitaWest, out bakedHeight))
+            {
+                baked.clearColor = baked.vitaPalette[baked.vitaWest[0]];
+                baked.imageSize = new Vector2Int(512, bakedHeight);
+                return baked;
+            }
+#endif
+#if UNITY_PSP2
+            // Vita: read one palette and two frames (~230 KB) from disk, not the whole 7.5 MB file into the managed heap at every sky change
+            SkyFile skyFile = new SkyFile(Path.Combine(dfUnity.Arena2Path, SkyFile.IndexToFileName(skyIndex)), FileUsage.UseDisk, true);
+#else
             SkyFile skyFile = new SkyFile(Path.Combine(dfUnity.Arena2Path, SkyFile.IndexToFileName(skyIndex)), FileUsage.UseMemory, true);
+#endif
             skyFile.Palette = skyFile.GetDFPalette(frame);
 
             SkyColors colors = new SkyColors();
             colors.east = skyFile.GetColor32(0, frame);
             colors.west = skyFile.GetColor32(1, frame);
+#if UNITY_PSP2
+            skyFile.managedFile.Close();
+#endif
             colors.clearColor = colors.west[0];
             colors.imageSize = new Vector2Int(512, 220);
 
@@ -578,6 +690,40 @@ namespace DaggerfallWorkshop
             else
                 nightSky = 0;
 
+#if UNITY_PSP2
+            // Vita: the baked night sky (VitaClassicSky, rows bottom-up), with upstream's stars and seam fix done on its indices
+            SkyColors baked = new SkyColors();
+            int bakedHeight;
+            if (VitaClassicSky.Read(VitaClassicSky.NightFlag | (uint)nightSky, out baked.vitaPalette, out baked.vitaEast, out baked.vitaWest, out bakedHeight))
+            {
+                byte[] indices = baked.vitaEast;
+                // Same pixel order as upstream (image rows top-down), so the same random draws
+                if (ShowStars)
+                {
+                    for (int y = 0; y < bakedHeight; y++)
+                    {
+                        int row = (bakedHeight - 1 - y) * VitaClassicSky.Width;
+                        for (int x = 0; x < width; x++)
+                        {
+                            int index = indices[row + x];
+                            if (index > 16 && index < 32)
+                            {
+                                if (random.NextDouble() < starChance)
+                                    indices[row + x] = starColorIndices[random.Next(0, starColorIndices.Length)];
+                            }
+                        }
+                    }
+                }
+                for (int y = 0; y < bakedHeight; y++)
+                {
+                    int pos = y * VitaClassicSky.Width + width - 2;
+                    indices[pos + 1] = indices[pos];
+                }
+                baked.clearColor = baked.vitaPalette[indices[0]];
+                baked.imageSize = new Vector2Int(512, bakedHeight);
+                return baked;
+            }
+#endif
             string filename = string.Format("NITE{0:00}I0.IMG", nightSky);
             imgFile = new ImgFile(Path.Combine(dfUnity.Arena2Path, filename), FileUsage.UseMemory, true);
             imgFile.Palette.Load(Path.Combine(dfUnity.Arena2Path, imgFile.PaletteName));

@@ -193,6 +193,68 @@ namespace DaggerfallWorkshop
                 GetComponent<MeshRenderer>().shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.TwoSided;
         }
 
+#if UNITY_PSP2
+        // Vita: the city's ~52 town NPCs cost ~2.6 ms per frame here, about
+        // 15 native transform calls each, drawn or not. An NPC whose renderer wasn't drawn last frame only advances its animation clock;
+        // facing, orientation and the texture frame catch up on the first frame it is drawn again (one frame late as it comes into view).
+        // The camera's position and facing are read once per frame for all NPCs. VitaSkipHidden = false gives the upstream behaviour.
+        public static bool VitaSkipHidden = true;
+        static int vitaFrame = -1;
+        static Camera vitaCamera;
+        static Vector3 vitaCameraPosition;
+        static Quaternion vitaFacing;
+        static bool vitaFacingValid;
+        Transform vitaTransform;
+        bool vitaWasDrawn = true;
+
+        private void Update()
+        {
+            if (!mainCamera || !Application.isPlaying)
+                return;
+            if (vitaFrame != Time.frameCount || vitaCamera != mainCamera)
+            {
+                vitaFrame = Time.frameCount;
+                vitaCamera = mainCamera;
+                Transform cam = mainCamera.transform;
+                vitaCameraPosition = cam.position;
+                Vector3 forward = cam.forward;
+                Vector3 viewDirection = -new Vector3(forward.x, 0, forward.z);
+                vitaFacingValid = viewDirection != Vector3.zero;
+                if (vitaFacingValid)
+                    vitaFacing = Quaternion.LookRotation(viewDirection);
+            }
+            if (meshRenderer == null)
+                meshRenderer = GetComponent<MeshRenderer>();
+            bool drawn = !VitaSkipHidden || meshRenderer.isVisible;
+            if (drawn)
+            {
+                // Rotate billboard based on camera facing (= transform.LookAt(position + viewDirection))
+                cameraPosition = vitaCameraPosition;
+                if (vitaTransform == null)
+                    vitaTransform = transform;
+                if (vitaFacingValid)
+                    vitaTransform.rotation = vitaFacing;
+
+                // Orient based on camera position
+                UpdateOrientation();
+                if (!vitaWasDrawn && lastOrientation >= 0)
+                    UpdatePerson(lastOrientation);
+            }
+            vitaWasDrawn = drawn;
+
+            // Tick animations
+            animTimer += Time.deltaTime;
+            if (animTimer > 1f / animSpeed)
+            {
+                if (++currentFrame >= stateAnims[0].NumFrames)
+                    currentFrame = 0;
+
+                if (drawn)
+                    UpdatePerson(lastOrientation);
+                animTimer = 0;
+            }
+        }
+#else
         private void Update()
         {
             // Rotate to face camera in game
@@ -218,6 +280,7 @@ namespace DaggerfallWorkshop
                 }
             }
         }
+#endif
 
         #endregion
 
@@ -312,7 +375,36 @@ namespace DaggerfallWorkshop
             }
         }
 
+#if UNITY_PSP2
+        // play); the arrays are only read after this, so NPCs share them.
+        static readonly System.Collections.Generic.Dictionary<int, System.Collections.Generic.KeyValuePair<Vector2[], int[]>> vitaRecordSizes =
+            new System.Collections.Generic.Dictionary<int, System.Collections.Generic.KeyValuePair<Vector2[], int[]>>();
+
         private void CacheRecordSizesAndFrames(int textureArchive)
+        {
+            System.Collections.Generic.KeyValuePair<Vector2[], int[]> cached;
+            if (!vitaRecordSizes.TryGetValue(textureArchive, out cached))
+            {
+                Vector2[] sizes;
+                int[] frames;
+                if (VitaTextureInfo.RecordSizes(textureArchive, out sizes, out frames))
+                {
+                    recordSizes = sizes;
+                    recordFrames = frames;
+                }
+                else
+                    VitaCacheRecordSizesAndFrames(textureArchive);
+                vitaRecordSizes[textureArchive] = new System.Collections.Generic.KeyValuePair<Vector2[], int[]>(recordSizes, recordFrames);
+                return;
+            }
+            recordSizes = cached.Key;
+            recordFrames = cached.Value;
+        }
+
+        private void VitaCacheRecordSizesAndFrames(int textureArchive)
+#else
+        private void CacheRecordSizesAndFrames(int textureArchive)
+#endif
         {
             // Open texture file
             string path = Path.Combine(DaggerfallUnity.Instance.Arena2Path, TextureFile.IndexToFileName(textureArchive));

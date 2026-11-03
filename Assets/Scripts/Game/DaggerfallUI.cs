@@ -25,8 +25,10 @@ using DaggerfallWorkshop.Game.UserInterface;
 using DaggerfallWorkshop.Game.UserInterfaceWindows;
 using DaggerfallWorkshop.Game.MagicAndEffects;
 using DaggerfallWorkshop.Game.MagicAndEffects.MagicEffects;
+#if !UNITY_PSP2
 using UnityEngine.Localization.Settings;
 using static DaggerfallWorkshop.Game.UserInterface.BaseScreenComponent;
+#endif
 
 namespace DaggerfallWorkshop.Game
 {
@@ -98,7 +100,13 @@ namespace DaggerfallWorkshop.Game
 
         Texture2D[] daggerfallParchmentTextures;
         Vector2Int daggerfallParchmentTexturesSize;
+#if UNITY_PSP2
+        // Shared by every scene's DaggerfallUI: each boot scene loaded FONT0003 again. Runtime textures,
+        // nothing destroys them
+        static DaggerfallFont[] daggerfallFonts = new DaggerfallFont[5];
+#else
         DaggerfallFont[] daggerfallFonts = new DaggerfallFont[5];
+#endif
         char lastCharacterTyped;
         KeyCode lastKeyCode;
         bool processHotkeys;
@@ -342,6 +350,9 @@ namespace DaggerfallWorkshop.Game
 
         void Awake()
         {
+#if UNITY_PSP2
+            vitaUITextures.Clear();     // the old scene's menu images go with its windows (UnloadUnusedAssets)
+#endif
             dfUnity = DaggerfallUnity.Instance;
             audioSource = GetComponent<AudioSource>();
             audioSource.spatialBlend = 0;
@@ -352,7 +363,11 @@ namespace DaggerfallWorkshop.Game
             Questing.Actions.GivePc.OnOfferPending += GivePc_OnOfferPending;
 
             // Create 8x scale paper doll renderer
+#if UNITY_PSP2
+            paperDollRenderer = new PaperDollRenderer(3); // 544-pixel screen: 8x (880x1472, ~20 MB with its copy) is wasted
+#else
             paperDollRenderer = new PaperDollRenderer(8);
+#endif
 
             // Create persistent Game Effects window
             // This window isn't intended to be replaced by mods - rather mods should plug in custom pages implementing IGameEffectConfigPage
@@ -363,6 +378,16 @@ namespace DaggerfallWorkshop.Game
             timeClosedInputMessageBox = Time.realtimeSinceStartup;
 
             SetupSingleton();
+#if UNITY_PSP2
+        }
+
+        // The static event would otherwise keep this DaggerfallUI (and DaggerfallUnity, ARCH3D, textures) alive after its scene unloads
+        void OnDestroy()
+        {
+            Questing.Actions.GivePc.OnOfferPending -= GivePc_OnOfferPending;
+            if (dfInventoryWindow != null)
+                dfInventoryWindow.ReleaseStaticEvents();
+#endif
         }
 
         void Start()
@@ -397,7 +422,43 @@ namespace DaggerfallWorkshop.Game
             Input.imeCompositionMode = IMECompositionMode.Auto;
         }
 
+#if UNITY_PSP2
+        public static bool VitaProbe;
+        public static readonly System.Diagnostics.Stopwatch VitaUpdateTime = new System.Diagnostics.Stopwatch();
+        public static readonly System.Diagnostics.Stopwatch VitaRepaintTime = new System.Diagnostics.Stopwatch();
+        public static readonly System.Diagnostics.Stopwatch VitaOtherGuiTime = new System.Diagnostics.Stopwatch();
+        public static int VitaGuiEvents;
+
         void Update()
+        {
+            if (!VitaProbe)
+            {
+                VitaUpdate();
+                return;
+            }
+            VitaUpdateTime.Start();
+            VitaUpdate();
+            VitaUpdateTime.Stop();
+        }
+
+        void OnGUI()
+        {
+            if (!VitaProbe)
+            {
+                VitaOnGUI();
+                return;
+            }
+            System.Diagnostics.Stopwatch sw = Event.current.type == EventType.Repaint ? VitaRepaintTime : VitaOtherGuiTime;
+            VitaGuiEvents++;
+            sw.Start();
+            VitaOnGUI();
+            sw.Stop();
+        }
+
+        void VitaUpdate()
+#else
+        void Update()
+#endif
         {
             // HUD is always first window on stack when ready
             if (dfUnity.IsPathValidated && !hudSetup)
@@ -430,6 +491,9 @@ namespace DaggerfallWorkshop.Game
             if (uiManager.TopWindow != null)
             {
                 uiManager.TopWindow.ParentPanel.CustomMousePosition = customMousePosition;
+#if UNITY_PSP2
+                VitaMenuNav.Tick(uiManager.TopWindow);
+#endif
                 uiManager.TopWindow.Update();
             }
 
@@ -438,7 +502,11 @@ namespace DaggerfallWorkshop.Game
             lastKeyCode = KeyCode.None;
         }
 
+#if UNITY_PSP2
+        void VitaOnGUI()
+#else
         void OnGUI()
+#endif
         {
             // Set depth of GUI to appear on top of other elements
             GUI.depth = 0;
@@ -489,6 +557,9 @@ namespace DaggerfallWorkshop.Game
                 if (uiManager.TopWindow != null)
                 {
                     uiManager.TopWindow.Draw();
+#if UNITY_PSP2
+                    VitaMenuNav.DrawCursor(uiManager.TopWindow);
+#endif
                 }
 
                 if (customRenderTarget)
@@ -724,6 +795,14 @@ namespace DaggerfallWorkshop.Game
 #if UNITY_EDITOR
                     DaggerfallUnity.Settings.SaveSettings();
                     UnityEditor.EditorApplication.isPlaying = false;
+#elif UNITY_PSP2
+                    DaggerfallUnity.Settings.SaveSettings();
+                    // Vita: ending the process from in game crashed in the system's exit cleanup, so go back to the title screen
+                    // (as after death); from the title it still exits
+                    if (GameManager.Instance.IsPlayingGame())
+                        GameManager.Instance.StartGameBehaviour.StartMethod = StartGameBehaviour.StartMethods.TitleMenu;
+                    else
+                        VitaPower.Exit();
 #else
                     DaggerfallUnity.Settings.SaveSettings();
                     Application.Quit();
@@ -1222,8 +1301,16 @@ namespace DaggerfallWorkshop.Game
             if (!dfUnity.IsReady || !dfUnity.IsPathValidated)
                 return null;
 
-            ImgFile imgFile = new ImgFile(Path.Combine(dfUnity.Arena2Path, name), FileUsage.UseMemory, true);
+#if UNITY_PSP2
             Texture2D texture;
+            string vitaKey = readOnly ? name + "|" + (int)format : null;
+            if (VitaTryCachedUITexture(vitaKey, out texture, out offset))
+                return texture;
+#endif
+            ImgFile imgFile = new ImgFile(Path.Combine(dfUnity.Arena2Path, name), FileUsage.UseMemory, true);
+#if !UNITY_PSP2
+            Texture2D texture;
+#endif
             if (!TextureReplacement.TryImportImage(name, readOnly, out texture))
             {
                 imgFile.LoadPalette(Path.Combine(dfUnity.Arena2Path, imgFile.PaletteName));
@@ -1232,9 +1319,45 @@ namespace DaggerfallWorkshop.Game
                 
             texture.filterMode = DaggerfallUI.Instance.GlobalFilterMode;
             offset = imgFile.ImageOffset;
+#if UNITY_PSP2
+            VitaCacheUITexture(vitaKey, texture, offset);
+#endif
 
             return texture;
         }
+
+#if UNITY_PSP2
+        // Menus are built again on every open (message boxes, pause menu, pickers ...) and each build decoded its IMG/CIF/RCI into a new
+        // texture: first frames of 0.1-0.5 s per open, and textures piling up until the next UnloadUnusedAssets. Read-only images (nobody
+        // can write into them, no caller destroys them) are kept per name/record/format instead. Dropped when a scene's DaggerfallUI starts.
+        struct VitaUITexture
+        {
+            public Texture2D texture;
+            public DFPosition offset;
+        }
+        static readonly Dictionary<string, VitaUITexture> vitaUITextures = new Dictionary<string, VitaUITexture>();
+
+        static bool VitaTryCachedUITexture(string key, out Texture2D texture, out DFPosition offset)
+        {
+            VitaUITexture cached;
+            if (key != null && vitaUITextures.TryGetValue(key, out cached) && cached.texture)
+            {
+                texture = cached.texture;
+                texture.filterMode = DaggerfallUI.Instance.GlobalFilterMode;
+                offset = cached.offset;
+                return true;
+            }
+            texture = null;
+            offset = new DFPosition();
+            return false;
+        }
+
+        static void VitaCacheUITexture(string key, Texture2D texture, DFPosition offset)
+        {
+            if (key != null && texture)
+                vitaUITextures[key] = new VitaUITexture { texture = texture, offset = offset };
+        }
+#endif
 
         public static Texture2D GetTextureFromImg(ImgFile img, TextureFormat format = TextureFormat.ARGB32, bool readOnly = true)
         {
@@ -1272,8 +1395,16 @@ namespace DaggerfallWorkshop.Game
             if (!dfUnity.IsReady)
                 return null;
 
-            CifRciFile cifRciFile = new CifRciFile(Path.Combine(dfUnity.Arena2Path, name), FileUsage.UseMemory, true);
+#if UNITY_PSP2
             Texture2D texture;
+            string vitaKey = name + "|" + record + "|" + frame + "|" + (int)format;
+            if (VitaTryCachedUITexture(vitaKey, out texture, out offset))
+                return texture;
+#endif
+            CifRciFile cifRciFile = new CifRciFile(Path.Combine(dfUnity.Arena2Path, name), FileUsage.UseMemory, true);
+#if !UNITY_PSP2
+            Texture2D texture;
+#endif
             if (!TextureReplacement.TryImportCifRci(name, record, frame, true, out texture))
             {
                 cifRciFile.LoadPalette(Path.Combine(dfUnity.Arena2Path, cifRciFile.PaletteName));
@@ -1285,6 +1416,9 @@ namespace DaggerfallWorkshop.Game
             texture.filterMode = DaggerfallUI.Instance.GlobalFilterMode;
 
             offset = cifRciFile.GetOffset(record);
+#if UNITY_PSP2
+            VitaCacheUITexture(vitaKey, texture, offset);
+#endif
 
             return texture;
         }

@@ -163,6 +163,10 @@ qualityLevel,                                       Quality Level
 qualityLevelInfo,                                   General graphic quality
 mainFilterMode,                                     Main Filter
 mainFilterModeInfo,                                 Filter for game textures
+vitaTextureLimit,                                   Texture Size
+vitaTextureLimitInfo,                               Smaller textures use less memory (PS Vita)
+vitaGpuMode,                                        CPU/GPU Speed
+vitaGpuModeInfo,                                    Fast modes = more FPS and more battery use. No Wi-Fi: Wi-Fi may stay off after quitting (PS Vita)
 guiFilterMode,                                      GUI Filter
 guiFilterModeInfo,                                  Filter for HUD images
 videoFilterMode,                                    Video Filter

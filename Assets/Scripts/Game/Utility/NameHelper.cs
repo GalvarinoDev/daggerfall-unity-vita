@@ -371,6 +371,10 @@ namespace DaggerfallWorkshop.Game.Utility
         /// </summary>
         void LoadNameGenData()
         {
+#if UNITY_PSP2
+            if (VitaLoadBakedNameGen())
+                return;
+#endif
             try
             {
                 // Load default NameGen asset from Resources
@@ -391,6 +395,54 @@ namespace DaggerfallWorkshop.Game.Utility
             }
         }
 
+#if UNITY_PSP2
+        // Banks baked on the PC by vita/tools/namegen_bake.sh with DFU's own FullSerializer: the 28 KB JSON took 285-543 ms on the Vita at
+        // the first city load. A replacement in StreamingAssets/Text still goes through the JSON. False = use the JSON
+        bool VitaLoadBakedNameGen()
+        {
+            string bakedPath = Path.Combine(Path.Combine(Application.streamingAssetsPath, "VitaNative"), "namegen.bin");
+            if (File.Exists(Path.Combine(Path.Combine(Application.streamingAssetsPath, textString), nameGenFilename + txtExt)) || !File.Exists(bakedPath))
+                return false;
+            try
+            {
+                using (BinaryReader reader = new BinaryReader(File.OpenRead(bakedPath)))
+                {
+                    if (new string(reader.ReadChars(4)) != "VNMG" || reader.ReadInt32() != 1)
+                        return false;
+                    var banks = new Dictionary<BankTypes, NameBank>();
+                    for (int bankCount = reader.ReadInt32(); bankCount > 0; bankCount--)
+                    {
+                        BankTypes type = (BankTypes)reader.ReadInt32();
+                        NameBank bank = new NameBank { setCount = reader.ReadInt32() };
+                        int setCount = reader.ReadInt32();
+                        bank.sets = setCount < 0 ? null : new NameSet[setCount];
+                        for (int s = 0; s < setCount; s++)
+                        {
+                            bank.sets[s].setIndex = reader.ReadInt32();
+                            int partCount = reader.ReadInt32();
+                            bank.sets[s].parts = partCount < 0 ? null : new string[partCount];
+                            for (int p = 0; p < partCount; p++)
+                            {
+                                int length = reader.ReadInt32();
+                                bank.sets[s].parts[p] = length < 0 ? null : System.Text.Encoding.UTF8.GetString(reader.ReadBytes(length));
+                            }
+                        }
+                        banks[type] = bank;
+                    }
+                    if (reader.BaseStream.Position != reader.BaseStream.Length)
+                        return false;
+                    bankDict = banks;
+                    return true;
+                }
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarningFormat("NameHelper: {0} not read ({1}), using the JSON", bakedPath, e.Message);
+                return false;
+            }
+        }
+
+#endif
         #endregion
     }
 }

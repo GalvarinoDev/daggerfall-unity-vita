@@ -331,7 +331,11 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             if (GameManager.Instance.TransportManager.IsOnShip())
                 SaveLoadManager.CacheScene(GameManager.Instance.StreamingWorld.SceneName);
             GameManager.Instance.StreamingWorld.RestoreWorldCompensationHeight(0);
+#if UNITY_PSP2
+            GameManager.Instance.StreamingWorld.VitaFastTravel((int)endPos.X, (int)endPos.Y, StreamingWorld.RepositionMethods.DirectionFromStartMarker);
+#else
             GameManager.Instance.StreamingWorld.TeleportToCoordinates((int)endPos.X, (int)endPos.Y, StreamingWorld.RepositionMethods.DirectionFromStartMarker);
+#endif
 
             if (speedCautious)
             {

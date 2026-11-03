@@ -50,7 +50,12 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             base.Setup();
 
             // Read all CLASS*.CFG files and add to listbox
+#if UNITY_PSP2 && !UNITY_EDITOR
+            // The baked class list (VitaCareers): a listing of ARENA2 takes seconds on the Vita
+            string[] files = VitaCareers.ClassFiles(DaggerfallUnity.Instance.Arena2Path) ?? Directory.GetFiles(DaggerfallUnity.Instance.Arena2Path, "CLASS*.CFG");
+#else
             string[] files = Directory.GetFiles(DaggerfallUnity.Instance.Arena2Path, "CLASS*.CFG");
+#endif
             if (files != null && files.Length > 0)
             {
                 for (int i = 0; i < files.Length - 1; i++)

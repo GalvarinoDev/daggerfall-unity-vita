@@ -80,6 +80,32 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
 
             dropdown = new PauseOptionsDropdown(uiManager);
             ParentPanel.Components.Add(dropdown);
+#if UNITY_PSP2
+
+            // Vita: Quick Save / Quick Load under the panel (the keys F9/F11 have no pad buttons)
+            Button quickSaveButton = DaggerfallUI.AddTextButton(new Rect(4, optionsPanel.Size.y + 3, 70, 12), "Quick Save", optionsPanel);
+            quickSaveButton.BackgroundColor = Color.black;
+            quickSaveButton.OnMouseClick += (sender, position) =>
+            {
+                DaggerfallUI.Instance.PlayOneShot(SoundClips.ButtonClick);
+                CancelWindow();
+                if (GameManager.Instance.SaveLoadManager.IsSavingPrevented)
+                    DaggerfallUI.MessageBox(TextManager.Instance.GetLocalizedText("cannotSaveNow"));
+                else
+                    DaggerfallWorkshop.Game.Serialization.SaveLoadManager.Instance.QuickSave();
+            };
+            Button quickLoadButton = DaggerfallUI.AddTextButton(new Rect(76, optionsPanel.Size.y + 3, 70, 12), "Quick Load", optionsPanel);
+            quickLoadButton.BackgroundColor = Color.black;
+            quickLoadButton.OnMouseClick += (sender, position) =>
+            {
+                DaggerfallUI.Instance.PlayOneShot(SoundClips.ButtonClick);
+                string name = GameManager.Instance.PlayerEntity.Name;
+                if (!DaggerfallWorkshop.Game.Serialization.SaveLoadManager.Instance.HasQuickSave(name))
+                    return;
+                CancelWindow();
+                GameManager.Instance.SaveLoadManager.PromptQuickLoadGame(name, () => { DaggerfallWorkshop.Game.Serialization.SaveLoadManager.Instance.QuickLoad(); });
+            };
+#endif
 
             // Exit game
             Button exitButton = DaggerfallUI.AddButton(new Rect(101, 4, 45, 16), optionsPanel);
@@ -260,6 +286,10 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             int value = Mathf.RoundToInt(Mathf.Lerp(0, QualitySettings.names.Length - 1, position.x / sender.Size.x));
             detailBar.Size = new Vector2(GetDetailBarWidth(value), detailBar.Size.y);
             QualitySettings.SetQualityLevel(DaggerfallUnity.Settings.QualityLevel = value);
+#if UNITY_PSP2
+            QualitySettings.masterTextureLimit = DaggerfallUnity.Settings.VitaTextureLimit;
+            QualitySettings.pixelLightCount = DaggerfallUnity.Settings.VitaPixelLights;
+#endif
             GameManager.UpdateShadowDistance();
             GameManager.UpdateShadowResolution();
             if (!saveSettings)

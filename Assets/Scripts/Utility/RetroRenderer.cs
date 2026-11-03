@@ -383,6 +383,11 @@ namespace DaggerfallWorkshop.Utility
 
         public void UpdateDepthProcessMaterial()
         {
+#if UNITY_PSP2
+            // Palettization needs 3D textures, so its shader isn't built for the Vita: a value from an old settings file goes back to off
+            if (DaggerfallUnity.Settings.PostProcessingInRetroMode > 2)
+                DaggerfallUnity.Settings.PostProcessingInRetroMode = 0;
+#endif
             // Get depth process material
             Shader shader;
             switch (DaggerfallUnity.Settings.PostProcessingInRetroMode)

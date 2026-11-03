@@ -278,6 +278,14 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             // set caption line in bottom part of exterior automap window background image texture
             panelCaption.BackgroundTexture = nativeTextureCaption;
 
+#if UNITY_PSP2
+            int width = (int)(320 * (nativeTexture.width / 320f));
+            int height = (int)((200 - 29) * (nativeTexture.height / 200f));
+            Color32[] vitaFill = new Color32[width * height];
+            textureBackgroundAlternative1 = DaggerfallAutomapWindow.VitaSolidTexture(vitaFill, width, height, new Color(0.0f, 0.0f, 0.0f, 1.0f));
+            textureBackgroundAlternative2 = DaggerfallAutomapWindow.VitaSolidTexture(vitaFill, width, height, new Color(0.2f, 0.1f, 0.3f, 1.0f));
+            textureBackgroundAlternative3 = DaggerfallAutomapWindow.VitaSolidTexture(vitaFill, width, height, new Color(0.7f, 0.52f, 0.18f, 1.0f));
+#else
             // store background graphics from from background image            
             int width = (int)(320 * (nativeTexture.width / 320f));
             int height = (int)((200 - 29) * (nativeTexture.height / 200f));
@@ -321,6 +329,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             textureBackgroundAlternative3.SetPixels(backgroundAlternative3);
             textureBackgroundAlternative3.filterMode = DaggerfallUI.Instance.GlobalFilterMode;
             textureBackgroundAlternative3.Apply(false, true);
+#endif
 
             // Always dim background
             ParentPanel.BackgroundColor = ScreenDimColor;
@@ -339,7 +348,15 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
 
             // Setup automap render panel (into this the level geometry is rendered) - use dummyPanelAutomap to get size
             Rect positionPanelRenderAutomap = dummyPanelAutomap.Rectangle;            
+#if UNITY_PSP2
+            // Shows the automap render texture itself (VitaRenderPanel.cs): no ReadPixels copy per view update
+            panelRenderAutomap = new VitaRenderPanel();
+            panelRenderAutomap.Position = new Vector2(positionPanelRenderAutomap.x, positionPanelRenderAutomap.y);
+            panelRenderAutomap.Size = new Vector2(positionPanelRenderAutomap.width, positionPanelRenderAutomap.height);
+            ParentPanel.Components.Add(panelRenderAutomap);
+#else
             panelRenderAutomap = DaggerfallUI.AddPanel(positionPanelRenderAutomap, ParentPanel);
+#endif
             panelRenderAutomap.AutoSize = AutoSizeModes.None;
             
             panelRenderAutomap.OnMouseScrollUp += PanelAutomap_OnMouseScrollUp;
@@ -583,6 +600,12 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
 
             HotkeySequence.KeyModifiers keyModifiers = HotkeySequence.GetKeyboardKeyModifiers();
 
+#if UNITY_PSP2
+            // Vita: the automap hotkey is D-pad Down, which pans here, so only Circle (back) closes
+            if (InputManager.Instance.GetBackButtonDown())
+                isCloseWindowDeferred = true;
+            else if (InputManager.Instance.GetBackButtonUp() && isCloseWindowDeferred)
+#else
             if (InputManager.Instance.GetBackButtonDown() ||
                 // Toggle window closed with same hotkey used to open it
                 InputManager.Instance.GetKeyDown(automapBinding))
@@ -590,6 +613,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             else if ((InputManager.Instance.GetBackButtonUp() ||
                 // Toggle window closed with same hotkey used to open it
                 InputManager.Instance.GetKeyUp(automapBinding)) && isCloseWindowDeferred)
+#endif
             {
                 isCloseWindowDeferred = false;
                 CloseWindow();
@@ -707,6 +731,21 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             {                
                 ActionZoom(zoomSpeed * Time.unscaledDeltaTime);
             }
+#if UNITY_PSP2
+            // Vita: R/L zoom in/out, the D-pad pans (VitaMenuNav leaves it alone here; only Circle closes)
+            if (Input.GetKey(KeyCode.JoystickButton5))
+                ActionZoom(-zoomSpeed * Time.unscaledDeltaTime);
+            if (Input.GetKey(KeyCode.JoystickButton4))
+                ActionZoom(zoomSpeed * Time.unscaledDeltaTime);
+            if (Input.GetKey(KeyCode.JoystickButton8))
+                ActionMoveForward();
+            if (Input.GetKey(KeyCode.JoystickButton10))
+                ActionMoveBackward();
+            if (Input.GetKey(KeyCode.JoystickButton11))
+                ActionMoveLeft();
+            if (Input.GetKey(KeyCode.JoystickButton9))
+                ActionMoveRight();
+#endif
 
             if (HotkeySequence_MaxZoom1.IsPressedWith(keyModifiers))
             {
@@ -848,12 +887,16 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
 
             cameraExteriorAutomap.Render();
 
+#if UNITY_PSP2
+            ((VitaRenderPanel)panelRenderAutomap).Texture = renderTextureExteriorAutomap;
+#else
             RenderTexture.active = renderTextureExteriorAutomap;
             textureExteriorAutomap.ReadPixels(new Rect(0, 0, renderTextureExteriorAutomap.width, renderTextureExteriorAutomap.height), 0, 0);
             textureExteriorAutomap.Apply(false);
             RenderTexture.active = null;
 
             panelRenderAutomap.BackgroundTexture = textureExteriorAutomap;
+#endif
 
             panelRenderAutomap.Components.Clear();
 
@@ -874,7 +917,11 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
                 exteriorAutomap.buildingNameplates[i].textLabel.ToolTip.BackgroundColor = DaggerfallUnity.Settings.ToolTipBackgroundColor;
                 exteriorAutomap.buildingNameplates[i].textLabel.ToolTip.TextColor = DaggerfallUnity.Settings.ToolTipTextColor;                
                 exteriorAutomap.buildingNameplates[i].textLabel.ToolTip.Parent = dummyPanelAutomap; // use dummyPanelAutomap (the render panel in native daggerfall resolution)
+#if UNITY_PSP2
+                exteriorAutomap.buildingNameplates[i].textLabel.ToolTip.Position = new Vector2(exteriorAutomap.buildingNameplates[i].textLabel.ToolTip.Position.x / dummyPanelAutomap.LocalScale.x, exteriorAutomap.buildingNameplates[i].textLabel.ToolTip.Position.y / dummyPanelAutomap.LocalScale.y);                
+#else
                 exteriorAutomap.buildingNameplates[i].textLabel.ToolTip.Position /= dummyPanelAutomap.LocalScale;                
+#endif
                 exteriorAutomap.buildingNameplates[i].textLabel.ToolTipText = GrammarManager.grammarProcessor.ProcessGrammar(exteriorAutomap.buildingNameplates[i].name);
                 panelRenderAutomap.Components.Add(exteriorAutomap.buildingNameplates[i].textLabel);
 
@@ -990,7 +1037,9 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
                 renderTextureExteriorAutomap = new RenderTexture(width, height, renderTextureExteriorAutomapDepth);
                 cameraExteriorAutomap.targetTexture = renderTextureExteriorAutomap;
 
+#if !UNITY_PSP2
                 textureExteriorAutomap = new Texture2D(renderTextureExteriorAutomap.width, renderTextureExteriorAutomap.height, TextureFormat.ARGB32, false);
+#endif
 
                 oldRenderTextureExteriorAutomapWidth = width;
                 oldRenderTextureExteriorAutomapHeight = height;

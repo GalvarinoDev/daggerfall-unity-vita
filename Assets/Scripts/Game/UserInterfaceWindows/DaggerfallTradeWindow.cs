@@ -184,6 +184,11 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         {
             this.WindowMode = windowMode;
             this.Guild = guild;
+#if UNITY_PSP2
+
+            // A new trade window is made per shop visit: the base's static OnNewGame subscription would keep every one alive
+            StartGameBehaviour.OnNewGame -= StartGameBehaviour_OnNewGame;
+#endif
         }
 
         #endregion

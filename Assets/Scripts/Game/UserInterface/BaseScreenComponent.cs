@@ -878,6 +878,16 @@ namespace DaggerfallWorkshop.Game.UserInterface
         {
             MouseClick(Vector2.zero);
         }
+#if UNITY_PSP2
+
+        /// <summary>
+        /// Manually trigger an OnMouseDoubleClick event for this component (VitaMenuNav: Cross on a list row = a mouse double click).
+        /// </summary>
+        public virtual void TriggerMouseDoubleClick()
+        {
+            MouseDoubleClick(Vector2.zero);
+        }
+#endif
 
         #endregion
 

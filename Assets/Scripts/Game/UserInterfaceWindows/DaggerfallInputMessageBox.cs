@@ -83,8 +83,13 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
 
         public bool AllowIME
         {
+#if UNITY_PSP2
+            get { return allowIME; }
+            set { allowIME = value; }
+#else
             get => allowIME;
             set => allowIME = value;
+#endif
         }
 
         //public int MinWidth
@@ -199,7 +204,11 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         {
             base.Update();
 
+#if UNITY_PSP2 && !UNITY_EDITOR
+            if (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter) || VitaKeyboard.Submitted)
+#else
             if (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter))
+#endif
             {
                 ReturnPlayerInputEvent(this, textBox.Text);
             }

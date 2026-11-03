@@ -65,7 +65,7 @@ Shader "Daggerfall/Automap"
     			float4  pos : SV_POSITION;				
     			float2  uv : TEXCOORD0;
 				float3 worldPos : TEXCOORD5;
-				float3 normal : NORMAL;
+				float3 normal : TEXCOORD1; // NORMAL is not a valid varying semantic on PS Vita
                 //fixed4 color : COLOR;
 			};		
 

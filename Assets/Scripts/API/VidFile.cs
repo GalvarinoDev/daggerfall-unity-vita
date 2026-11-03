@@ -83,7 +83,13 @@ namespace DaggerfallConnect.Arena2
         public bool Open(string filename)
         {
             // Open file proxy
+#if UNITY_PSP2
+            // Vita: stream from disk (read strictly forward) instead of holding up to 19 MB per video in the managed heap
+            const FileUsage vidFileUsage = FileUsage.UseDisk;
+            if (!vidFile.Load(filename, vidFileUsage, true))
+#else
             if (!vidFile.Load(filename, FileUsage.UseMemory, true))
+#endif
             {
                 endOfFileReached = true;
                 return false;

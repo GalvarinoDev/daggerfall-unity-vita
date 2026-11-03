@@ -161,6 +161,37 @@ namespace DaggerfallWorkshop.Game.Questing
             return quest;
         }
 
+#if UNITY_PSP2
+        /// <summary>
+        /// Vita: Parse from a baked split (VitaQuests): the same Quest, messages and QBN as Parse makes from the file's lines.
+        /// </summary>
+        public Quest VitaParse(VitaQuests.Split split, int factionId, bool partialParse = false)
+        {
+            Quest quest = new Quest();
+            quest.FactionId = factionId;
+            if (split.QuestName != null)
+                quest.QuestName = split.QuestName;
+            if (split.DisplayName != null)
+                quest.DisplayName = split.DisplayName;
+
+            System.Diagnostics.Stopwatch stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            if (!partialParse)
+            {
+                for (int m = 0; m < split.MessageIds.Length; m++)
+                    quest.AddMessage(split.MessageIds[m], new Message(quest, split.MessageIds[m], split.MessageLines[m]));
+                ParseQBN(quest, new List<string>(split.QbnLines));
+            }
+
+            long totalTime = stopwatch.ElapsedMilliseconds;
+            if (string.IsNullOrEmpty(quest.DisplayName))
+                Debug.Log(string.Format("Time to parse quest {0} was {1}ms.", quest.QuestName, totalTime));
+            else
+                Debug.Log(string.Format("Time to parse quest {0} ({1}) was {2}ms.", quest.QuestName, quest.DisplayName, totalTime));
+
+            return quest;
+        }
+#endif
+
         /// <summary>
         /// Special cut-down parser to read localized quest source containing only QRC text part.
         /// Only reads lines related to quest display name and messages.

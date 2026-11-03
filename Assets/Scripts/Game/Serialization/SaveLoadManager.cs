@@ -54,6 +54,13 @@ namespace DaggerfallWorkshop.Game.Serialization
         const string automapDataFilename = "AutomapData.txt";
         const string questExceptionsFilename = "QuestExceptions.txt";
         const string screenshotFilename = "Screenshot.jpg";
+#if UNITY_PSP2
+        const string vitaThumbFilename = "Screenshot.vita";     // VitaSaveThumb: raw half-size RGB24, read with no JPG decode
+
+        // The loading window of the save being loaded: LoadGame keeps it up until the world is built (the dungeon builds frames after
+        // Load returns), so StartGameBehaviour leaves this one open
+        public static VitaLoadingWindow VitaLoadWindow;
+#endif
         const string bioFileName = "bio.txt";
         const string notReadyExceptionText = "SaveLoad not ready.";
 
@@ -63,6 +70,9 @@ namespace DaggerfallWorkshop.Game.Serialization
         // Enumerated save info
         Dictionary<int, string> enumeratedSaveFolders = new Dictionary<int, string>();
         Dictionary<int, SaveInfo_v1> enumeratedSaveInfo = new Dictionary<int, SaveInfo_v1>();
+#if UNITY_PSP2
+        int vitaSavesListedAt = -1;
+#endif
         Dictionary<string, List<int>> enumeratedCharacterSaves = new Dictionary<string, List<int>>();
 
         string unitySavePath = string.Empty;
@@ -199,9 +209,19 @@ namespace DaggerfallWorkshop.Game.Serialization
         /// </summary>
         public void EnumerateSaves()
         {
+#if UNITY_PSP2
+            // Nothing written or deleted since the last listing: keep it
+            if (vitaSavesListedAt == VitaSaveIO.Changes)
+                return;
+            vitaSavesListedAt = VitaSaveIO.Changes;
+            float listStart = Time.realtimeSinceStartup;
+#endif
             enumeratedSaveFolders = EnumerateSaveFolders();
             enumeratedSaveInfo = EnumerateSaveInfo(enumeratedSaveFolders);
             enumeratedCharacterSaves = EnumerateCharacterSaves(enumeratedSaveInfo);
+#if UNITY_PSP2
+            Debug.LogFormat("VITASAVELIST {0} saves in {1:F0} ms", enumeratedSaveInfo.Count, (Time.realtimeSinceStartup - listStart) * 1000);
+#endif
         }
 
         /// <summary>
@@ -259,6 +279,13 @@ namespace DaggerfallWorkshop.Game.Serialization
             if (!enumeratedSaveFolders.ContainsKey(key))
                 return null;
 
+#if UNITY_PSP2
+            // The load/save list read and decoded the full-size JPG on every cursor move (slow menus on hardware): the raw thumbnail
+            // is the save file's second part, read with the save info and copied
+            Dictionary<string, byte[]> parts = VitaSaveIO.ReadSave(GetSaveFolder(key), 2);
+            byte[] thumbData;
+            return parts != null && parts.TryGetValue(vitaThumbFilename, out thumbData) ? ReadVitaThumb(thumbData) : null;
+#else
             string path = Path.Combine(GetSaveFolder(key), screenshotFilename);
             byte[] data = File.ReadAllBytes(path);
 
@@ -267,7 +294,55 @@ namespace DaggerfallWorkshop.Game.Serialization
                 return screenshot;
 
             return null;
+#endif
         }
+
+#if UNITY_PSP2
+        // 2x2 average to half size
+        static Color32[] HalveVitaPixels(Color32[] pixels, int width, int height)
+        {
+            int w = width / 2, h = height / 2;
+            var half = new Color32[w * h];
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++)
+                {
+                    Color32 a = pixels[2 * y * width + 2 * x], b = pixels[2 * y * width + 2 * x + 1];
+                    Color32 c = pixels[(2 * y + 1) * width + 2 * x], d = pixels[(2 * y + 1) * width + 2 * x + 1];
+                    half[y * w + x] = new Color32((byte)((a.r + b.r + c.r + d.r + 2) >> 2), (byte)((a.g + b.g + c.g + d.g + 2) >> 2),
+                        (byte)((a.b + b.b + c.b + d.b + 2) >> 2), 255);
+                }
+            return half;
+        }
+
+        // 8-byte header (width, height) + RGB24 rows, bottom row first as Unity's texture data
+        static byte[] VitaThumbBytes(Color32[] pixels, int width, int height)
+        {
+            byte[] data = new byte[8 + width * height * 3];
+            BitConverter.GetBytes(width).CopyTo(data, 0);
+            BitConverter.GetBytes(height).CopyTo(data, 4);
+            int o = 8;
+            foreach (Color32 c in pixels)
+            {
+                data[o++] = c.r;
+                data[o++] = c.g;
+                data[o++] = c.b;
+            }
+            return data;
+        }
+
+        static Texture2D ReadVitaThumb(byte[] data)
+        {
+            int w = data.Length >= 8 ? BitConverter.ToInt32(data, 0) : 0, h = data.Length >= 8 ? BitConverter.ToInt32(data, 4) : 0;
+            if (w <= 0 || h <= 0 || data.Length != 8 + w * h * 3)
+                return null;
+            byte[] rgb = new byte[w * h * 3];
+            Buffer.BlockCopy(data, 8, rgb, 0, rgb.Length);
+            Texture2D thumb = new Texture2D(w, h, TextureFormat.RGB24, false);
+            thumb.LoadRawTextureData(rgb);
+            thumb.Apply(false, true);
+            return thumb;
+        }
+#endif
 
         /// <summary>
         /// Finds existing save folder.
@@ -323,6 +398,11 @@ namespace DaggerfallWorkshop.Game.Serialization
             // For safety only delete known save files - do not perform a recursive delete
             // This way we don't blow up folder if user has placed something custom inside
             string path = GetSaveFolder(key);
+#if UNITY_PSP2
+            VitaSaveIO.Changes++;
+            VitaFile.Delete(path);  // one file per save
+            VitaFile.Delete(path + ".tmp");
+#else
             File.Delete(Path.Combine(path, saveDataFilename));
             File.Delete(Path.Combine(path, saveInfoFilename));
             File.Delete(Path.Combine(path, screenshotFilename));
@@ -366,6 +446,7 @@ namespace DaggerfallWorkshop.Game.Serialization
                 // Unexpected files in the folder, attempt to make a backup.
                 TryBackupDeletedSaveFolder(path);
             }
+#endif
 
             // Update saves
             EnumerateSaves();
@@ -529,9 +610,23 @@ namespace DaggerfallWorkshop.Game.Serialization
             if (newSaveName != saveInfo.saveName)
             {
                 saveInfo.saveName = newSaveName;
+#if UNITY_PSP2
+                // The save info is the save file's first part: rewrite the file with the new one
+                string path = GetSaveFolder(key);
+                Dictionary<string, byte[]> parts = VitaSaveIO.ReadSave(path);
+                if (parts != null)
+                {
+                    var list = new List<KeyValuePair<string, byte[]>> { new KeyValuePair<string, byte[]>(saveInfoFilename, VitaSaveIO.Encode(saveInfo)) };
+                    foreach (var part in parts)
+                        if (part.Key != saveInfoFilename)
+                            list.Add(part);
+                    VitaSaveIO.WriteSave(path, VitaSaveIO.Pack(list));
+                }
+#else
                 string saveInfoJson = Serialize(saveInfo.GetType(), saveInfo);
                 string path = GetSaveFolder(key);
                 WriteSaveFile(Path.Combine(path, saveInfoFilename), saveInfoJson);
+#endif
             }
         }
 
@@ -624,7 +719,14 @@ namespace DaggerfallWorkshop.Game.Serialization
             _serializer.TrySerialize(type, value, out data).AssertSuccessWithoutWarnings();
 
             // Emit the data via JSON
+#if UNITY_PSP2
+            float printStart = Time.realtimeSinceStartup;
+            string json = (pretty) ? fsJsonPrinter.PrettyJson(data) : fsJsonPrinter.CompressedJson(data);
+            vitaPrintSeconds += Time.realtimeSinceStartup - printStart;
+            return json;
+#else
             return (pretty) ? fsJsonPrinter.PrettyJson(data) : fsJsonPrinter.CompressedJson(data);
+#endif
         }
 
         public static object Deserialize(Type type, string serializedState)
@@ -715,8 +817,191 @@ namespace DaggerfallWorkshop.Game.Serialization
             return result;
         }
 
+#if UNITY_PSP2
+        // Step timing for the VITASAVE / VITALOAD lines: one line per save or load, laps in seconds, JSON sizes in KB
+        float vitaLapT;
+        StringBuilder vitaLapSb;
+        static float vitaPrintSeconds;   // of the last laps, spent printing JSON (the rest is FullSerializer's reflection walk)
+
+        void VitaLapStart()
+        {
+            vitaLapSb = new StringBuilder();
+            vitaLapT = Time.realtimeSinceStartup;
+        }
+
+        void VitaLap(string name, string json = null)
+        {
+            float t = Time.realtimeSinceStartup;
+            vitaLapSb.AppendFormat(", {0} {1:F2}", name, t - vitaLapT);
+            if (json != null)
+                vitaLapSb.AppendFormat(" ({0} KB, print {1:F2})", json.Length / 1024, vitaPrintSeconds);
+            if (loadInProgress)     // stuck loading window: each load step as it happens
+                Debug.LogFormat("VITALAP {0} {1:F2}", name, t - vitaLapT);
+            vitaPrintSeconds = 0;
+            vitaLapT = t;
+            // automap 5 s); the world build moves it from "window" to "respawn"
+            float done;
+            VitaLoadingWindow window = loadInProgress ? DaggerfallUI.UIManager.TopWindow as VitaLoadingWindow : null;
+            if (window != null && vitaLoadBar.TryGetValue(name, out done))
+            {
+                window.Progress = done;
+                window.WorldFrom = 0.35f;
+                window.WorldTo = 0.92f;
+            }
+        }
+
+        static readonly Dictionary<string, float> vitaLoadBar = new Dictionary<string, float> {
+            { "read", 0.02f }, { "dSave", 0.05f }, { "dFaction", 0.1f }, { "dQuest", 0.13f }, { "dTalk", 0.33f }, { "window", 0.35f },
+            { "respawn", 0.92f }, { "automap", 1f },
+        };
+#endif
+
+#if UNITY_PSP2
+        Dictionary<string, byte[]> vitaParts;   // the native save being loaded (VitaSaveIO), null for a JSON save
+
+        string VitaReadSaveFile(string folder, string file)
+        {
+            return vitaParts != null ? null : ReadSaveFile(Path.Combine(folder, file));
+        }
+
+        bool VitaHasPart(string file, string json)
+        {
+            return vitaParts != null ? vitaParts.ContainsKey(file) : !string.IsNullOrEmpty(json);
+        }
+
+        // The Vita's save (one file per save, VitaSaveIO): everything SaveGame writes, as parts of Saves/SAVEn.vita. The game state is
+        // encoded before the screenshot frames, as SaveGame serializes it before them. No JPG: the save list shows the raw thumbnail.
+        IEnumerator VitaSaveGame(string characterName, string saveName, bool instantReload)
+        {
+            float saveStart = Time.realtimeSinceStartup;
+            VitaLapStart();
+            // Collect first: the save's 1-2 MB buffers (pixels, parts, file) otherwise made Boehm grow the heap for good when its
+            // free blocks were fragmented
+            System.GC.Collect();
+            VitaLap("gc");
+            string vitaHeapBefore = VitaMemory.GcHeapForLog();   // probes: does a save grow the managed heap?
+
+            // Look for existing save with this character and name, else the first free SAVEn
+            int key = FindSaveFolderByNames(characterName, saveName);
+            string path;
+            if (key == -1)
+            {
+                int free = 0;
+                while (enumeratedSaveFolders.ContainsKey(free))
+                    free++;
+                path = Path.Combine(UnitySavePath, savePrefix + free + VitaSaveIO.Extension);
+            }
+            else
+                path = GetSaveFolder(key);
+
+            SaveData_v1 saveData = BuildSaveData();
+            SaveInfo_v1 saveInfo = new SaveInfo_v1();
+            saveInfo.saveVersion = LatestSaveVersion;
+            saveInfo.saveName = saveName;
+            saveInfo.characterName = saveData.playerData.playerEntity.name;
+            saveInfo.dateAndTime = saveData.dateAndTime;
+            saveInfo.dfuVersion = VersionInfo.DaggerfallUnityVersion;
+            VitaLap("build");
+
+            // Save info first and the thumbnail second (the save list reads only those), then the rest
+            var parts = new List<KeyValuePair<string, byte[]>>();
+            try
+            {
+                var values = new List<KeyValuePair<string, object>>
+                {
+                    new KeyValuePair<string, object>(saveInfoFilename, saveInfo),
+                    new KeyValuePair<string, object>(saveDataFilename, saveData),
+                    new KeyValuePair<string, object>(factionDataFilename, stateManager.GetPlayerFactionData()),
+                    new KeyValuePair<string, object>(questDataFilename, QuestMachine.Instance.GetSaveData()),
+                    new KeyValuePair<string, object>(discoveryDataFilename, GameManager.Instance.PlayerGPS.GetDiscoverySaveData()),
+                    new KeyValuePair<string, object>(conversationDataFilename, GameManager.Instance.TalkManager.GetConversationSaveData()),
+                    new KeyValuePair<string, object>(notebookDataFilename, GameManager.Instance.PlayerEntity.Notebook.GetNotebookSaveData()),
+                    new KeyValuePair<string, object>(worldVariationDataFilename, WorldDataVariants.GetWorldVariationSaveData()),
+                    new KeyValuePair<string, object>(questExceptionsFilename, QuestMachine.Instance.GetStoredExceptions()),
+                    new KeyValuePair<string, object>(bioFileName, string.Join("\n", GameManager.Instance.PlayerEntity.BackStory.ToArray())),
+                };
+                try
+                {
+                    values.Add(new KeyValuePair<string, object>(automapDataFilename, GameManager.Instance.InteriorAutomap.GetState()));
+                }
+                catch (Exception ex)
+                {
+                    Debug.Log(string.Format("Failed to save automap state. Message: {0}", ex.Message));
+                }
+                if (ModManager.Instance != null)
+                    foreach (Mod mod in ModManager.Instance.GetAllModsWithSaveData())
+                    {
+                        try
+                        {
+                            object modData = mod.SaveDataInterface.GetSaveData();
+                            if (modData != null)
+                                values.Add(new KeyValuePair<string, object>(GetModDataFilename(mod), Serialize(modData.GetType(), modData)));
+                        }
+                        catch (Exception ex)
+                        {
+                            DaggerfallUI.AddHUDText(string.Format("Failed to save mod data for `{0}`. Check log for errors.", mod.ModInfo.ModTitle), 3);
+                            DaggerfallUnity.LogMessage(string.Format("Failed to save mod data for `{0}`. Exception: {1}", mod.ModInfo.ModTitle, ex.Message), true);
+                        }
+                    }
+                foreach (var value in values)
+                    if (value.Value != null)
+                        parts.Add(new KeyValuePair<string, byte[]>(value.Key, VitaSaveIO.Encode(value.Value)));
+            }
+            catch (Exception ex)
+            {
+                // The last save in this slot stays as it was
+                Debug.LogError("VITASAVE encode failed: " + ex);
+                DaggerfallUI.AddHUDText("Save failed. Check log for errors.", 3);
+                yield break;
+            }
+            VitaLap("encode");
+
+            // Screenshot: read back on the CPU only, channels fixed, half size (see SaveGame)
+            VitaMenuNav.HideCursor = true; // the D-pad arrow ended up in save pictures
+            yield return new WaitForEndOfFrame();
+            yield return new WaitForEndOfFrame();
+            Texture2D screenshot = new Texture2D(Screen.width, Screen.height, TextureFormat.RGBA32, false);
+            screenshot.ReadPixels(new Rect(0, 0, Screen.width, Screen.height), 0, 0);
+            VitaMenuNav.HideCursor = false;
+            Color32[] pixels = screenshot.GetPixels32();
+            int fullWidth = screenshot.width;
+            Destroy(screenshot);
+            for (int i = 0; i < pixels.Length; i++)
+            {
+                Color32 c = pixels[i];
+                pixels[i] = new Color32(c.g, c.b, c.a, 255);
+            }
+            pixels = HalveVitaPixels(pixels, fullWidth, Screen.height);
+            parts.Insert(1, new KeyValuePair<string, byte[]>(vitaThumbFilename, VitaThumbBytes(pixels, fullWidth / 2, Screen.height / 2)));
+            VitaLap("shot");
+
+            long fileLength = VitaSaveIO.WriteSave(path, parts);
+            VitaLap("write");
+            Debug.LogFormat("VITASAVE {0} steps:{1}, file {2} KB, total {3:F2} s | before{4} | after{5}", saveName, vitaLapSb, fileLength / 1024,
+                Time.realtimeSinceStartup - saveStart, vitaHeapBefore, VitaMemory.GcHeapForLog());
+
+            RaiseOnSaveEvent(saveData);
+            if (key == -1)
+                EnumerateSaves();
+            DaggerfallUI.Instance.PopupMessage(TextManager.Instance.GetLocalizedText("gameSaved"));
+            if (instantReload)
+                Load(saveData.playerData.playerEntity.name, saveName);
+        }
+
+        object VitaDeserialize(Type type, string file, string json, bool assertSuccess = false)
+        {
+            byte[] data;
+            if (vitaParts != null)
+                return vitaParts.TryGetValue(file, out data) ? VitaSaveCodec.Read(type, data) : null;
+            return Deserialize(type, json, assertSuccess);
+        }
+#endif
+
         void WriteSaveFile(string path, string json)
         {
+#if UNITY_PSP2
+            VitaFile.Delete(path);
+#endif
             File.WriteAllText(path, json);
         }
 
@@ -735,6 +1020,22 @@ namespace DaggerfallWorkshop.Game.Serialization
 
         Dictionary<int, string> EnumerateSaveFolders()
         {
+#if UNITY_PSP2
+            // One file per save (VitaSaveIO): one listing of the save folder, no folder per save to open. A .tmp alone is a save killed
+            // between delete and move; ReadSave falls back to it
+            Dictionary<int, string> saveFolders = new Dictionary<int, string>();
+            foreach (string file in Directory.GetFiles(UnitySavePath, savePrefix + "*", SearchOption.TopDirectoryOnly))
+            {
+                string name = Path.GetFileName(file);
+                if (name.EndsWith(".tmp"))
+                    name = name.Substring(0, name.Length - 4);
+                int key;
+                if (name.EndsWith(VitaSaveIO.Extension) && int.TryParse(name.Substring(savePrefix.Length, name.Length - savePrefix.Length - VitaSaveIO.Extension.Length), out key) &&
+                    !saveFolders.ContainsKey(key))
+                    saveFolders.Add(key, Path.Combine(UnitySavePath, name));
+            }
+            return saveFolders;
+#else
             // Get directories in save path matching prefix
             string[] directories = Directory.GetDirectories(UnitySavePath, savePrefix + "*", SearchOption.TopDirectoryOnly);
 
@@ -754,6 +1055,7 @@ namespace DaggerfallWorkshop.Game.Serialization
             }
 
             return saveFolders;
+#endif
         }
 
         Dictionary<int, SaveInfo_v1> EnumerateSaveInfo(Dictionary<int, string> saveFolders)
@@ -795,6 +1097,10 @@ namespace DaggerfallWorkshop.Game.Serialization
 
         SaveInfo_v1 ReadSaveInfo(string saveFolder)
         {
+#if UNITY_PSP2
+            Dictionary<string, byte[]> parts = VitaSaveIO.ReadSave(saveFolder, 1);
+            return (SaveInfo_v1)VitaSaveCodec.Read(typeof(SaveInfo_v1), parts[saveInfoFilename]);
+#endif
             string saveInfoJson = ReadSaveFile(Path.Combine(saveFolder, saveInfoFilename));
             SaveInfo_v1 saveInfo = Deserialize(typeof(SaveInfo_v1), saveInfoJson) as SaveInfo_v1;
 
@@ -902,7 +1208,11 @@ namespace DaggerfallWorkshop.Game.Serialization
         {
             DateAndTime_v1 data = new DateAndTime_v1();
             data.gameTime = DaggerfallUnity.Instance.WorldTime.DaggerfallDateTime.ToSeconds();
+#if UNITY_PSP2
+            data.realTime = VitaClock.Now.Ticks; // DateTime.Now reads 1601-01-01 on Vita (dates, save order, most recent save)
+#else
             data.realTime = DateTime.Now.Ticks;
+#endif
 
             return data;
         }
@@ -999,6 +1309,36 @@ namespace DaggerfallWorkshop.Game.Serialization
 
         void RestoreSaveData(SaveData_v1 saveData)
         {
+#if UNITY_PSP2
+            // One step at a time: a NullReferenceException in one of them skipped every step after it,
+            // and the release player gives no stack trace, so log the step's name and go on with the others
+            DaggerfallUnity.CurrentUID = saveData.currentUID;
+            VitaRestoreStep("dateTime", () => RestoreDateTimeData(saveData.dateAndTime));
+            VitaRestoreStep("player", () => stateManager.RestorePlayerData(saveData.playerData));
+            VitaRestoreStep("dungeon", () => RestoreDungeonData(saveData.dungeonData));
+            VitaRestoreStep("enemies", () => stateManager.RestoreEnemyData(saveData.enemyData));
+            VitaRestoreStep("loot", () => stateManager.RestoreLootContainerData(saveData.lootContainers));
+            VitaRestoreStep("bank", () => RestoreBankData(saveData.bankAccounts));
+            VitaRestoreStep("deeds", () => RestoreBankDeedData(saveData.bankDeeds));
+            VitaRestoreStep("escorts", () => RestoreEscortingFacesData(saveData.escortingFaces));
+            VitaRestoreStep("sceneCache", () => stateManager.RestoreSceneCache(saveData.sceneCache));
+        }
+
+        static void VitaRestoreStep(string name, Action step)
+        {
+            try
+            {
+                step();
+            }
+            catch (Exception ex)
+            {
+                Debug.LogFormat("VITALOAD restore step {0} failed: {1}", name, ex);
+            }
+        }
+
+        void RestoreSaveDataUpstream(SaveData_v1 saveData)
+        {
+#endif
             DaggerfallUnity.CurrentUID = saveData.currentUID;
             RestoreDateTimeData(saveData.dateAndTime);
             stateManager.RestorePlayerData(saveData.playerData);
@@ -1085,6 +1425,19 @@ namespace DaggerfallWorkshop.Game.Serialization
 
         IEnumerator SaveGame(string characterName, string saveName, bool instantReload = false)
         {
+#if UNITY_PSP2
+            yield return StartCoroutine(VitaSaveGame(characterName, saveName, instantReload));
+            yield break;
+#endif
+#if UNITY_PSP2
+            float saveStart = Time.realtimeSinceStartup;
+            VitaLapStart();
+            // Collect first: the save's 1-2 MB buffers (pixels, parts, file) otherwise made Boehm grow the heap for good when its
+            // free blocks were fragmented
+            System.GC.Collect();
+            VitaLap("gc");
+            string vitaHeapBefore = VitaMemory.GcHeapForLog();   // probes: does a save grow the managed heap?
+#endif
             // Look for existing save with this character and name
             int key = FindSaveFolderByNames(characterName, saveName);
 
@@ -1097,6 +1450,9 @@ namespace DaggerfallWorkshop.Game.Serialization
 
             // Build save data
             SaveData_v1 saveData = BuildSaveData();
+#if UNITY_PSP2
+            VitaLap("build");
+#endif
 
             // Build save info
             SaveInfo_v1 saveInfo = new SaveInfo_v1();
@@ -1108,31 +1464,73 @@ namespace DaggerfallWorkshop.Game.Serialization
 
             // Build faction data
             FactionData_v2 factionData = stateManager.GetPlayerFactionData();
+#if UNITY_PSP2
+            VitaLap("getFaction");
+#endif
 
             // Build quest data
             QuestMachine.QuestMachineData_v1 questData = QuestMachine.Instance.GetSaveData();
+#if UNITY_PSP2
+            VitaLap("getQuest");
+#endif
 
             // Get discovery data
             Dictionary<int, PlayerGPS.DiscoveredLocation> discoveryData = GameManager.Instance.PlayerGPS.GetDiscoverySaveData();
+#if UNITY_PSP2
+            VitaLap("getDisc");
+#endif
 
             // Get conversation data
             TalkManager.SaveDataConversation conversationData = GameManager.Instance.TalkManager.GetConversationSaveData();
+#if UNITY_PSP2
+            VitaLap("getTalk");
+#endif
 
             // Get notebook data
             PlayerNotebook.NotebookData_v1 notebookData = GameManager.Instance.PlayerEntity.Notebook.GetNotebookSaveData();
+#if UNITY_PSP2
+            VitaLap("getNote");
+#endif
 
             // Get WorldData Variants data
             WorldDataVariants.WorldVariationData_v1 worldVariationData = WorldDataVariants.GetWorldVariationSaveData();
+#if UNITY_PSP2
+            VitaLap("getWorldVar");
+#endif
 
             // Serialize save data to JSON strings
             string saveDataJson = Serialize(saveData.GetType(), saveData);
+#if UNITY_PSP2
+            VitaLap("sSave", saveDataJson);
+#endif
             string saveInfoJson = Serialize(saveInfo.GetType(), saveInfo);
+#if UNITY_PSP2
+            VitaLap("sInfo", saveInfoJson);
+#endif
             string factionDataJson = Serialize(factionData.GetType(), factionData);
+#if UNITY_PSP2
+            VitaLap("sFaction", factionDataJson);
+#endif
             string questDataJson = Serialize(questData.GetType(), questData);
+#if UNITY_PSP2
+            VitaLap("sQuest", questDataJson);
+#endif
             string discoveryDataJson = Serialize(discoveryData.GetType(), discoveryData);
+#if UNITY_PSP2
+            VitaLap("sDisc", discoveryDataJson);
+#endif
             string conversationDataJson = Serialize(conversationData.GetType(), conversationData);
+#if UNITY_PSP2
+            VitaLap("sTalk", conversationDataJson);
+#endif
             string notebookDataJson = Serialize(notebookData.GetType(), notebookData);
+#if UNITY_PSP2
+            VitaLap("sNote", notebookDataJson);
+#endif
             string worldVariationDataJson = Serialize(worldVariationData.GetType(), worldVariationData);
+#if UNITY_PSP2
+            VitaLap("sWorldVar", worldVariationDataJson);
+#endif
 
             //// Attempt to hide UI for screenshot
             //bool rawImageEnabled = false;
@@ -1145,11 +1543,38 @@ namespace DaggerfallWorkshop.Game.Serialization
 
             // Create screenshot for save
             // TODO: Hide UI for screenshot or use a different method
+#if UNITY_PSP2
+            VitaMenuNav.HideCursor = true; // the D-pad arrow ended up in save pictures
+#endif
             yield return new WaitForEndOfFrame();
             yield return new WaitForEndOfFrame();
+#if UNITY_PSP2
+            // Only read on the CPU (JPG + thumb): no mips, no GPU upload (RGBA32 stays: the channel fix below reads alpha). The mipmapped NPOT texture made Apply
+            // pad it to POT and ran out of memory saving in the Wayrest palace
+            Texture2D screenshot = new Texture2D(Screen.width, Screen.height, TextureFormat.RGBA32, false);
+#else
             Texture2D screenshot = new Texture2D(Screen.width, Screen.height);
+#endif
             screenshot.ReadPixels(new Rect(0, 0, Screen.width, Screen.height), 0, 0);
+#if UNITY_PSP2
+            VitaMenuNav.HideCursor = false;
+            // The Vita's backbuffer read lands each pixel one channel over: alpha in red, red in green, green in blue, blue in alpha
+            // (save pictures came out red: red 255 everywhere). Shift them back before the JPG.
+            Color32[] pixels = screenshot.GetPixels32();
+            for (int i = 0; i < pixels.Length; i++)
+            {
+                Color32 c = pixels[i];
+                pixels[i] = new Color32(c.g, c.b, c.a, 255);
+            }
+            // Keep the picture at half size (the save list shows it at about that): a quarter of the pixels to encode, write and read back
+            int fullWidth = screenshot.width;
+            Destroy(screenshot);
+            pixels = HalveVitaPixels(pixels, fullWidth, Screen.height);
+            screenshot = new Texture2D(fullWidth / 2, Screen.height / 2, TextureFormat.RGBA32, false);
+            screenshot.SetPixels32(pixels);
+#else
             screenshot.Apply();
+#endif
 
             //// Restore UI after screenshot
             //if (rawImageEnabled)
@@ -1157,6 +1582,9 @@ namespace DaggerfallWorkshop.Game.Serialization
             //    rawImage.enabled = true;
             //}
 
+#if UNITY_PSP2
+            VitaLap("shot");
+#endif
             // Save data to files
             WriteSaveFile(Path.Combine(path, saveDataFilename), saveDataJson);
             WriteSaveFile(Path.Combine(path, saveInfoFilename), saveInfoJson);
@@ -1166,11 +1594,17 @@ namespace DaggerfallWorkshop.Game.Serialization
             WriteSaveFile(Path.Combine(path, conversationDataFilename), conversationDataJson);
             WriteSaveFile(Path.Combine(path, notebookDataFilename), notebookDataJson);
             WriteSaveFile(Path.Combine(path, worldVariationDataFilename), worldVariationDataJson);
+#if UNITY_PSP2
+            VitaLap("write");
+#endif
 
             // Save quest exceptions
             QuestMachine.StoredException[] storedExceptions = QuestMachine.Instance.GetStoredExceptions();
             string questExceptionsJson = Serialize(storedExceptions.GetType(), storedExceptions);
             WriteSaveFile(Path.Combine(path, questExceptionsFilename), questExceptionsJson);
+#if UNITY_PSP2
+            VitaLap("exceptions", questExceptionsJson);
+#endif
 
             // Save backstory text
             if (!File.Exists(Path.Combine(path, bioFileName)))
@@ -1183,11 +1617,17 @@ namespace DaggerfallWorkshop.Game.Serialization
                 file.Close();
             }
 
+#if UNITY_PSP2
+            VitaLap("bio");
+#endif
             // Save automap state
             try
             {
                 Dictionary<string, Automap.AutomapDungeonState> automapState = GameManager.Instance.InteriorAutomap.GetState();
                 string automapDataJson = Serialize(automapState.GetType(), automapState);
+#if UNITY_PSP2
+                VitaLap("automapSer", automapDataJson);
+#endif
                 WriteSaveFile(Path.Combine(path, automapDataFilename), automapDataJson);
             }
             catch(Exception ex)
@@ -1196,6 +1636,9 @@ namespace DaggerfallWorkshop.Game.Serialization
                 Debug.Log(message);
             }
 
+#if UNITY_PSP2
+            VitaLap("automapWrite");
+#endif
             // Save mod data
             if (ModManager.Instance != null)
             {
@@ -1222,9 +1665,19 @@ namespace DaggerfallWorkshop.Game.Serialization
                 }
             }
 
+#if UNITY_PSP2
+            VitaLap("mods");
+#endif
             // Save screenshot
             byte[] bytes = screenshot.EncodeToJPG();
             File.WriteAllBytes(Path.Combine(path, screenshotFilename), bytes);
+#if UNITY_PSP2
+            File.WriteAllBytes(Path.Combine(path, vitaThumbFilename), VitaThumbBytes(pixels, screenshot.width, screenshot.height));
+            Destroy(screenshot); // nothing else holds it, every save leaked one until the next UnloadUnusedAssets
+            VitaLap("jpg");
+            Debug.LogFormat("VITASAVE {0} steps:{1}, JPG {2} KB, total {3:F2} s | before{4} | after{5}", saveName, vitaLapSb, bytes.Length / 1024,
+                Time.realtimeSinceStartup - saveStart, vitaHeapBefore, VitaMemory.GcHeapForLog());
+#endif
 
             // Raise OnSaveEvent
             RaiseOnSaveEvent(saveData);
@@ -1268,8 +1721,15 @@ namespace DaggerfallWorkshop.Game.Serialization
                 path = GetSaveFolder(key);
 
             // Set 'out' params and read save game data
+#if UNITY_PSP2
+            vitaParts = VitaSaveIO.ReadSave(path);
+            saveDataJson = vitaParts != null ? null : ReadSaveFile(Path.Combine(path, saveDataFilename));
+            saveData = VitaDeserialize(typeof(SaveData_v1), saveDataFilename, saveDataJson) as SaveData_v1;
+            vitaParts = null;
+#else
             saveDataJson = ReadSaveFile(Path.Combine(path, saveDataFilename));
             saveData = Deserialize(typeof(SaveData_v1), saveDataJson) as SaveData_v1;
+#endif
 
             // Use dictionary for faster indexing
             Dictionary<string, Mod> dict = ModManager.Instance.Mods.ToDictionary(m => m.GUID);
@@ -1329,6 +1789,10 @@ namespace DaggerfallWorkshop.Game.Serialization
 
         IEnumerator LoadGame(string path)
         {
+#if UNITY_PSP2
+            float loadStart = Time.realtimeSinceStartup;
+            VitaLapStart();
+#endif
             GameManager.Instance.PlayerDeath.ClearDeathAnimation();
             GameManager.Instance.PlayerMotor.CancelMovement = true;
             InputManager.Instance.ClearAllActions();
@@ -1337,7 +1801,27 @@ namespace DaggerfallWorkshop.Game.Serialization
             PlayerEntity playerEntity = GameManager.Instance.PlayerEntity;
             playerEntity.Reset();
 
+#if UNITY_PSP2
+            VitaLap("reset");
+#endif
             // Read save data from files
+#if UNITY_PSP2
+            // Native save (VitaSaveIO): one binary file read by generated code; older saves still load from their JSON files
+            vitaParts = VitaSaveIO.ReadSave(path);
+            string saveDataJson = saveDataJsonCache ?? VitaReadSaveFile(path, saveDataFilename);
+            string factionDataJson = VitaReadSaveFile(path, factionDataFilename);
+            string questDataJson = VitaReadSaveFile(path, questDataFilename);
+            string discoveryDataJson = VitaReadSaveFile(path, discoveryDataFilename);
+            string conversationDataJson = VitaReadSaveFile(path, conversationDataFilename);
+            string notebookDataJson = VitaReadSaveFile(path, notebookDataFilename);
+            string worldVariantsDataJson = VitaReadSaveFile(path, worldVariationDataFilename);
+
+            // Read quest exceptions
+            if (vitaParts != null ? vitaParts.ContainsKey(questExceptionsFilename) : File.Exists(Path.Combine(path, questExceptionsFilename)))
+            {
+                string questExceptionsJson = VitaReadSaveFile(path, questExceptionsFilename);
+                QuestMachine.StoredException[] storedExceptions = VitaDeserialize(typeof(QuestMachine.StoredException[]), questExceptionsFilename, questExceptionsJson) as QuestMachine.StoredException[];
+#else
             string saveDataJson = saveDataJsonCache ?? ReadSaveFile(Path.Combine(path, saveDataFilename));
             string factionDataJson = ReadSaveFile(Path.Combine(path, factionDataFilename));
             string questDataJson = ReadSaveFile(Path.Combine(path, questDataFilename));
@@ -1351,11 +1835,18 @@ namespace DaggerfallWorkshop.Game.Serialization
             {
                 string questExceptionsJson = ReadSaveFile(Path.Combine(path, questExceptionsFilename));
                 QuestMachine.StoredException[] storedExceptions = Deserialize(typeof(QuestMachine.StoredException[]), questExceptionsJson) as QuestMachine.StoredException[];
+#endif
                 QuestMachine.Instance.SetStoredExceptions(storedExceptions);
             }
 
             // Load backstory text
             playerEntity.BackStory = new List<string>();
+#if UNITY_PSP2
+            byte[] vitaBio;
+            if (vitaParts != null && vitaParts.TryGetValue(bioFileName, out vitaBio))
+                playerEntity.BackStory.AddRange(System.Text.Encoding.UTF8.GetString(vitaBio).Split('\n'));
+            else
+#endif
             if (File.Exists(Path.Combine(path, bioFileName)))
             {
                 StreamReader file = new StreamReader(Path.Combine(path, bioFileName).ToString());
@@ -1367,8 +1858,18 @@ namespace DaggerfallWorkshop.Game.Serialization
                 file.Close();
             }
 
+#if UNITY_PSP2
+            VitaLap("read", saveDataJson + factionDataJson + questDataJson + discoveryDataJson + conversationDataJson + notebookDataJson + worldVariantsDataJson);
+#endif
             // Deserialize JSON strings
+#if UNITY_PSP2
+            SaveData_v1 saveData = saveDataCache ?? VitaDeserialize(typeof(SaveData_v1), saveDataFilename, saveDataJson) as SaveData_v1;
+#else
             SaveData_v1 saveData = saveDataCache ?? Deserialize(typeof(SaveData_v1), saveDataJson) as SaveData_v1;
+#endif
+#if UNITY_PSP2
+            VitaLap("dSave", saveDataJson);
+#endif
 
             // Must have a serializable player
             if (!stateManager.SerializablePlayer)
@@ -1389,11 +1890,24 @@ namespace DaggerfallWorkshop.Game.Serialization
                 GameManager.Instance.StreamingWorld.RestoreWorldCompensationHeight(0);
 
             // Restore discovery data
+#if UNITY_PSP2
+            if (VitaHasPart(discoveryDataFilename, discoveryDataJson))
+            {
+                Dictionary<int, PlayerGPS.DiscoveredLocation> discoveryData =
+                    VitaDeserialize(typeof(Dictionary<int, PlayerGPS.DiscoveredLocation>), discoveryDataFilename, discoveryDataJson) as Dictionary<int, PlayerGPS.DiscoveredLocation>;
+#else
             if (!string.IsNullOrEmpty(discoveryDataJson))
             {
                 Dictionary<int, PlayerGPS.DiscoveredLocation> discoveryData =
                     Deserialize(typeof(Dictionary<int, PlayerGPS.DiscoveredLocation>), discoveryDataJson) as Dictionary<int, PlayerGPS.DiscoveredLocation>;
+#endif
+#if UNITY_PSP2
+                VitaLap("dDisc", discoveryDataJson);
+#endif
                 GameManager.Instance.PlayerGPS.RestoreDiscoveryData(discoveryData);
+#if UNITY_PSP2
+                VitaLap("rDisc");
+#endif
             }
             else
             {
@@ -1419,10 +1933,22 @@ namespace DaggerfallWorkshop.Game.Serialization
 
             // Restore faction data to player entity
             // This is done early as later objects may require faction information on restore
+#if UNITY_PSP2
+            if (VitaHasPart(factionDataFilename, factionDataJson))
+            {
+                FactionData_v2 factionData = VitaDeserialize(typeof(FactionData_v2), factionDataFilename, factionDataJson) as FactionData_v2;
+#else
             if (!string.IsNullOrEmpty(factionDataJson))
             {
                 FactionData_v2 factionData = Deserialize(typeof(FactionData_v2), factionDataJson) as FactionData_v2;
+#endif
+#if UNITY_PSP2
+                VitaLap("dFaction", factionDataJson);
+#endif
                 stateManager.RestoreFactionData(factionData);
+#if UNITY_PSP2
+                VitaLap("rFaction");
+#endif
                 Debug.Log("LoadGame() restored faction state from save.");
             }
             else
@@ -1431,17 +1957,41 @@ namespace DaggerfallWorkshop.Game.Serialization
             }
 
             // Restore quest machine state
+#if UNITY_PSP2
+            if (VitaHasPart(questDataFilename, questDataJson))
+            {
+                QuestMachine.QuestMachineData_v1 questData = VitaDeserialize(typeof(QuestMachine.QuestMachineData_v1), questDataFilename, questDataJson, true) as QuestMachine.QuestMachineData_v1;
+#else
             if (!string.IsNullOrEmpty(questDataJson))
             {
                 QuestMachine.QuestMachineData_v1 questData = Deserialize(typeof(QuestMachine.QuestMachineData_v1), questDataJson, true) as QuestMachine.QuestMachineData_v1;
+#endif
+#if UNITY_PSP2
+                VitaLap("dQuest", questDataJson);
+#endif
                 QuestMachine.Instance.RestoreSaveData(questData);
+#if UNITY_PSP2
+                VitaLap("rQuest");
+#endif
             }
 
             // Restore conversation data (must be done after quest data restoration)
+#if UNITY_PSP2
+            if (VitaHasPart(conversationDataFilename, conversationDataJson))
+            {
+                TalkManager.SaveDataConversation conversationData = VitaDeserialize(typeof(TalkManager.SaveDataConversation), conversationDataFilename, conversationDataJson) as TalkManager.SaveDataConversation;
+#else
             if (!string.IsNullOrEmpty(conversationDataJson))
             {
                 TalkManager.SaveDataConversation conversationData = Deserialize(typeof(TalkManager.SaveDataConversation), conversationDataJson) as TalkManager.SaveDataConversation;
+#endif
+#if UNITY_PSP2
+                VitaLap("dTalk", conversationDataJson);
+#endif
                 GameManager.Instance.TalkManager.RestoreConversationData(conversationData);
+#if UNITY_PSP2
+                VitaLap("rTalk");
+#endif
             }
             else
             {
@@ -1449,10 +1999,22 @@ namespace DaggerfallWorkshop.Game.Serialization
             }
 
             // Restore notebook data
+#if UNITY_PSP2
+            if (VitaHasPart(notebookDataFilename, notebookDataJson))
+            {
+                PlayerNotebook.NotebookData_v1 notebookData = VitaDeserialize(typeof(PlayerNotebook.NotebookData_v1), notebookDataFilename, notebookDataJson) as PlayerNotebook.NotebookData_v1;
+#else
             if (!string.IsNullOrEmpty(notebookDataJson))
             {
                 PlayerNotebook.NotebookData_v1 notebookData = Deserialize(typeof(PlayerNotebook.NotebookData_v1), notebookDataJson) as PlayerNotebook.NotebookData_v1;
+#endif
+#if UNITY_PSP2
+                VitaLap("dNote", notebookDataJson);
+#endif
                 playerEntity.Notebook.RestoreNotebookData(notebookData);
+#if UNITY_PSP2
+                VitaLap("rNote");
+#endif
             }
 
             // Try to restore WorldData variants data
@@ -1460,10 +2022,19 @@ namespace DaggerfallWorkshop.Game.Serialization
             // Handle exception, display an informational message, and try to keep loading
             try
             {
+#if UNITY_PSP2
+                if (VitaHasPart(worldVariationDataFilename, worldVariantsDataJson))
+                {
+                    WorldDataVariants.WorldVariationData_v1 worldVariantsData = VitaDeserialize(typeof(WorldDataVariants.WorldVariationData_v1), worldVariationDataFilename, worldVariantsDataJson) as WorldDataVariants.WorldVariationData_v1;
+#else
                 if (!string.IsNullOrEmpty(worldVariantsDataJson))
                 {
                     WorldDataVariants.WorldVariationData_v1 worldVariantsData = Deserialize(typeof(WorldDataVariants.WorldVariationData_v1), worldVariantsDataJson) as WorldDataVariants.WorldVariationData_v1;
+#endif
                     WorldDataVariants.RestoreWorldVariationData(worldVariantsData);
+#if UNITY_PSP2
+                    VitaLap("worldVar", worldVariantsDataJson);
+#endif
                 }
             }
             catch (Exception ex)
@@ -1472,6 +2043,23 @@ namespace DaggerfallWorkshop.Game.Serialization
                 DaggerfallUnity.LogMessage(string.Format("Failed to load world variants. `WorldVariationData.txt` may be corrupt or variants failed to restore. Exception: {0}", ex.Message), true);
             }
 
+#if UNITY_PSP2
+            // Loading window over the whole respawn: a load from the title already shows one, a load from the pause menu doesn't.
+            // Two drawn frames before the world is torn down and rebuilt (the dungeon builds in one long frame)
+            VitaLoadWindow = DaggerfallUI.UIManager.TopWindow as VitaLoadingWindow;
+            if (VitaLoadWindow == null)
+            {
+                yield return null;      // the save window calls Load, then PopToHUD: push after that
+                VitaLoadWindow = new VitaLoadingWindow(DaggerfallUI.UIManager, saveData.playerData.playerPosition.insideDungeon ? "Dungeon" : null);
+                DaggerfallUI.UIManager.PushWindow(VitaLoadWindow);
+                yield return null;
+                yield return null;
+            }
+#endif
+
+#if UNITY_PSP2
+            VitaLap("window");
+#endif
             // Restore player position to world
             playerEnterExit.RestorePositionHelper(saveData.playerData.playerPosition, true, false);
 
@@ -1493,17 +2081,44 @@ namespace DaggerfallWorkshop.Game.Serialization
             // Wait another frame so everthing has a chance to register
             yield return new WaitForEndOfFrame();
 
+#if UNITY_PSP2
+            VitaLap("respawn");
+#endif
             // Restore save data to objects in newly spawned world
+#if UNITY_PSP2
+            // An exception here ended this coroutine without a log line anywhere:
+            // log it and finish the load
+            try
+            {
+                RestoreSaveData(saveData);
+            }
+            catch (Exception ex)
+            {
+                Debug.LogFormat("VITALOAD RestoreSaveData failed: {0}", ex);
+            }
+#else
             RestoreSaveData(saveData);
+#endif
+#if UNITY_PSP2
+            VitaLap("restoreObjects");
+#endif
 
             // Load automap state
             try
             {
+#if UNITY_PSP2
+                string automapDataJson = VitaReadSaveFile(path, automapDataFilename);
+                Dictionary<string, Automap.AutomapDungeonState> automapState = null;
+
+                if (VitaHasPart(automapDataFilename, automapDataJson))
+                    automapState = VitaDeserialize(typeof(Dictionary<string, Automap.AutomapDungeonState>), automapDataFilename, automapDataJson) as Dictionary<string, Automap.AutomapDungeonState>;
+#else
                 string automapDataJson = ReadSaveFile(Path.Combine(path, automapDataFilename));
                 Dictionary<string, Automap.AutomapDungeonState> automapState = null;
 
                 if (!string.IsNullOrEmpty(automapDataJson))
                     automapState = Deserialize(typeof(Dictionary<string, Automap.AutomapDungeonState>), automapDataJson) as Dictionary<string, Automap.AutomapDungeonState>;
+#endif
 
                 if (automapState != null)
                     GameManager.Instance.InteriorAutomap.SetState(automapState);
@@ -1514,8 +2129,14 @@ namespace DaggerfallWorkshop.Game.Serialization
                 Debug.Log(message);
             }
 
+#if UNITY_PSP2
+            VitaLap("automap");
+#endif
             // Clear any orphaned quest items
             RemoveAllOrphanedItems();
+#if UNITY_PSP2
+            VitaLap("orphans");
+#endif
 
             // Check mod manager is available
             if (ModManager.Instance != null)
@@ -1527,6 +2148,12 @@ namespace DaggerfallWorkshop.Game.Serialization
                     {
                         string modDataPath = Path.Combine(path, GetModDataFilename(mod));
                         object modData;
+#if UNITY_PSP2
+                        byte[] vitaModData;
+                        if (vitaParts != null && vitaParts.TryGetValue(GetModDataFilename(mod), out vitaModData))
+                            modData = Deserialize(mod.SaveDataInterface.SaveDataType, System.Text.Encoding.UTF8.GetString(vitaModData));
+                        else
+#endif
                         if (File.Exists(modDataPath))
                             modData = Deserialize(mod.SaveDataInterface.SaveDataType, ReadSaveFile(modDataPath));
                         else
@@ -1541,11 +2168,29 @@ namespace DaggerfallWorkshop.Game.Serialization
                 }
             }
 
+#if UNITY_PSP2
+            VitaLap("mods");
+#endif
+#if UNITY_PSP2
+            vitaParts = null;   // the save file's bytes: done with them
+#endif
             // Clamp legal reputation
             playerEntity.ClampLegalReputations();
 
             // Lower load in progress flag
             loadInProgress = false;
+
+#if UNITY_PSP2
+            // Outside, locations keep building after the respawn: wait for them (60 s at most), as the dungeon exit does
+            float vitaStart = Time.realtimeSinceStartup;
+            while (GameManager.Instance.StreamingWorld.VitaIsBuilding && Time.realtimeSinceStartup - vitaStart < 60)
+                yield return null;
+            if (VitaLoadWindow != null && DaggerfallUI.UIManager.TopWindow == VitaLoadWindow)
+                VitaLoadWindow.CloseWindow();
+            VitaLoadWindow = null;
+            VitaLap("buildWait");
+            Debug.LogFormat("VITALOAD steps:{0}, total {1:F2} s", vitaLapSb, Time.realtimeSinceStartup - loadStart);
+#endif
 
             // Fade out from black
             DaggerfallUI.Instance.FadeBehaviour.FadeHUDFromBlack(1.0f);

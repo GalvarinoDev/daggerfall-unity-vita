@@ -18,14 +18,18 @@ using DaggerfallConnect.Arena2;
 using DaggerfallWorkshop.Game.Questing;
 using DaggerfallWorkshop.Utility;
 using UnityEngine;
+#if !UNITY_PSP2
 using UnityEngine.Localization.Tables;
+#endif
 using DaggerfallWorkshop.Game;
 using DaggerfallConnect;
 using DaggerfallConnect.Save;
 using DaggerfallConnect.FallExe;
+#if !UNITY_PSP2
 #if UNITY_EDITOR
 using UnityEditor;
 using UnityEditor.Localization;
+#endif
 #endif
 
 namespace DaggerfallWorkshop.Localization
@@ -394,6 +398,7 @@ namespace DaggerfallWorkshop.Localization
 
         #region Editor Only Methods
 
+#if !UNITY_PSP2
 #if UNITY_EDITOR
         // Gets string table from collection name and locale code
         private static StringTable GetSourceStringTable(string source, string locale)
@@ -1105,6 +1110,7 @@ namespace DaggerfallWorkshop.Localization
             EditorUtility.SetDirty(collection.SharedData);
         }
 
+#endif
 #endif
 
         #endregion

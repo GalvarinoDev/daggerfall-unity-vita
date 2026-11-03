@@ -1,3 +1,4 @@
+#if !UNITY_PSP2 // Unity Localization inspector, not used by the Vita build
 // Project:         Daggerfall Unity
 // Copyright:       Copyright (C) 2009-2023 Daggerfall Workshop
 // Web Site:        http://www.dfworkshop.net
@@ -92,3 +93,4 @@ namespace DaggerfallWorkshop
         }
     }
 }
+#endif

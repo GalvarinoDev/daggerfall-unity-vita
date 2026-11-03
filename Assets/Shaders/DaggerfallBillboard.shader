@@ -25,6 +25,7 @@ Shader "Daggerfall/Billboard" {
         #pragma surface surf Lambert alphatest:_Cutoff addshadow
         #pragma multi_compile_local __ _NORMALMAP
         #pragma multi_compile_local __ _EMISSION
+        #pragma multi_compile __ _EMISSION // Vita (Unity 2018.2 skips multi_compile_local, so no glow variant was built: dull torches/fires)
 
         half4 _Color;
         sampler2D _MainTex;

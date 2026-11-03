@@ -37,7 +37,12 @@ namespace DaggerfallWorkshop
                 List<GameObject> gameObjects = new List<GameObject>();
                 foreach (var weakObject in cachedObjects)
                 {
+#if UNITY_PSP2
+                    GameObject activeObject;
+                    if (weakObject.TryGetTarget(out activeObject))
+#else
                     if (weakObject.TryGetTarget(out GameObject activeObject))
+#endif
                     {
                         // A null check on a GameObject does more than C#'s reference check,
                         // it also checks if the object has been destroyed
@@ -79,7 +84,12 @@ namespace DaggerfallWorkshop
             {
                 foreach(WeakReference<GameObject> weakObject in cachedObjects)
                 {
+#if UNITY_PSP2
+                    GameObject cachedObject;
+                    if(weakObject.TryGetTarget(out cachedObject))
+#else
                     if(weakObject.TryGetTarget(out GameObject cachedObject))
+#endif
                     {
                         // Already added
                         if (cachedObject == gameObject)
@@ -136,7 +146,11 @@ namespace DaggerfallWorkshop
 
             // Clear only null or destroyed objects
             // Objects may be inactive, but we are keeping them, in case they get activated
+#if UNITY_PSP2
+            cachedObjects.RemoveAll(weakRef => { GameObject target; return !weakRef.TryGetTarget(out target) || target == null; });
+#else
             cachedObjects.RemoveAll(weakRef => !weakRef.TryGetTarget(out GameObject target) || target == null);
+#endif
 
 #if UNITY_EDITOR
             int newCachedObjectCount = cachedObjects.Count;
@@ -158,7 +172,12 @@ namespace DaggerfallWorkshop
             {
                 foreach (var weakObject in cachedObjects)
                 {
+#if UNITY_PSP2
+                    GameObject activeObject;
+                    if (weakObject.TryGetTarget(out activeObject))
+#else
                     if (weakObject.TryGetTarget(out GameObject activeObject))
+#endif
                     {
                         if(activeObject == null)
                         {

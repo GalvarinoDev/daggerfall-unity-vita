@@ -418,7 +418,27 @@ namespace DaggerfallWorkshop.Game.Serialization
 
                 // Restore save data
                 SerializableEnemy serializableEnemy = go.GetComponent<SerializableEnemy>();
+#if UNITY_PSP2
+                // A NullReferenceException here stopped the whole load and the release
+                // player gives no stack trace: log what the new enemy has, and go on with the next one
+                try
+                {
+                    serializableEnemy.RestoreSaveData(enemies[i]);
+                }
+                catch (Exception ex)
+                {
+                    Entity.DaggerfallEntityBehaviour eb = go.GetComponent<Entity.DaggerfallEntityBehaviour>();
+                    Entity.EnemyEntity ee = eb ? eb.Entity as Entity.EnemyEntity : null;
+                    Debug.LogFormat("VITALOAD enemy {0} failed: {1} | saved {2} {3} ctx {4} quest {5} dead {6} | entity {7} {8} {9} quiesce {10} " +
+                        "motor {11} senses {12} mobile {13} effects {14} parent {15} active {16}", enemies[i].gameObjectName, ex.GetType().Name,
+                        enemies[i].entityType, enemies[i].careerIndex, enemies[i].worldContext, enemies[i].questSpawn, enemies[i].isDead,
+                        ee != null, ee != null ? ee.EntityType.ToString() : "-", ee != null ? ee.CareerIndex : -1, ee != null && ee.Quiesce,
+                        go.GetComponent<EnemyMotor>() != null, go.GetComponent<EnemySenses>() != null, go.GetComponentInChildren<MobileUnit>() != null,
+                        go.GetComponent<MagicAndEffects.EntityEffectManager>() != null, go.transform.parent ? go.transform.parent.name : "none", go.activeSelf);
+                }
+#else
                 serializableEnemy.RestoreSaveData(enemies[i]);
+#endif
 
                 GameManager.Instance?.RaiseOnEnemySpawnEvent(go);
             }

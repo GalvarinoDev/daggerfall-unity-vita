@@ -48,6 +48,10 @@ namespace DaggerfallWorkshop
         public bool copyToOppositeBorder;           // Copy texture edges to opposite border. Requires border, mutually exclusive with dilate
         public bool dilate;                         // Blend texture into surrounding empty pixels. Requires border
         public bool stayReadable;                   // Texture will remain in memory and can be read after creation
+#if UNITY_PSP2
+        public bool atlasSource;                    // Only packed into an atlas: keep CPU pixels, skip the GPU upload
+        public bool vitaPalette;                    // Albedo may be an Alpha8 palette-index texture (VitaPalette) when the texture is plain
+#endif
         public bool sharpen;                        // Sharpen image
         public bool createNormalMap;                // Normal map will be created based on strength
         public bool createEmissionMap;              // Emission map will also be created based on emissionIndex
@@ -79,6 +83,13 @@ namespace DaggerfallWorkshop
         public bool isEmissive;                     // Flag is raised is this texture is emissive
         public bool isAtlasAnimated;                // Atlas texture has one or more animations
         public TextureFile textureFile;             // Texture file used for last read operation.
+#if UNITY_PSP2
+        public Texture2D vitaPalette;               // Set when albedoMap is an Alpha8 palette-index texture (VitaPalette): its palette
+        public Texture2D vitaEmissionPalette;       // Spectral atlases (VitaPalette.Spectral), lit world textures (WorldEmission): emission per index
+        public bool vitaBaked;                      // From textures.pak (VitaWorldTextures): no textureFile, the record's info below
+        public Vector2 vitaSize, vitaScale, vitaOffset;
+        public int vitaFrameCount;
+#endif
     }
 
     /// <summary>

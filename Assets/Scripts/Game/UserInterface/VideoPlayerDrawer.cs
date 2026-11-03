@@ -10,10 +10,23 @@
 //
 
 using UnityEngine;
+#if !UNITY_PSP2
 using UnityEngine.Video;
+#endif
 
 namespace DaggerfallWorkshop.Game.UserInterface
 {
+#if UNITY_PSP2
+    /// <summary>
+    /// No VideoPlayer on Vita: replacement videos are never imported (see VideoReplacement), so this is never constructed.
+    /// </summary>
+    public class VideoPlayerDrawer : BaseScreenComponent
+    {
+        public bool IsPlaying { get { return false; } }
+        public void Play() { }
+        public void Stop() { }
+    }
+#else
     /// <summary>
     /// Draws the output of a VideoPlayer with the Daggerfall Unity UI.
     /// </summary>
@@ -100,4 +113,5 @@ namespace DaggerfallWorkshop.Game.UserInterface
             videoPlayer.Stop();
         }
     }
+#endif
 }

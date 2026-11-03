@@ -42,6 +42,18 @@ namespace DaggerfallWorkshop
         MeshFilter meshFilter = null;
         bool restartAnims = true;
         MeshRenderer meshRenderer;
+#if UNITY_PSP2
+        Vector2[] animUVs = new Vector2[4];  // Reused each frame: Mesh.uv copies it
+
+        // 152 billboards ~5 ms/frame, ~10 engine calls each). LookAt(position + dir) == LookRotation(dir) with the default up.
+        // VitaSharedFacing = false is upstream's per-billboard LookAt.
+        public static bool VitaSharedFacing = true;
+        static int facingFrame = -1;
+        static Camera facingCamera;
+        static bool facingValid, facingValidY;
+        static Quaternion facingRotation, facingRotationY;
+        Transform cachedTransform;
+#endif
 
         int framesPerSecond = 5;     // General FPS
         bool oneShot = false;        // Plays animation once then destroys GameObject
@@ -104,6 +116,29 @@ namespace DaggerfallWorkshop
             // In the case of hidden editor markers with child treasure objects, we don't want a 3D replacement spinning around like a billboard.
             // Treasure objects are parented to editor marker in this way as the moving action data for treasure is actually on editor marker parent.
             // Visible child of treasure objects have their own MeshRenderer and DaggerfallBillboard to apply rotations.
+#if UNITY_PSP2
+            if (VitaSharedFacing && mainCamera && Application.isPlaying && meshRenderer.enabled)
+            {
+                if (facingFrame != Time.frameCount || facingCamera != mainCamera)
+                {
+                    facingFrame = Time.frameCount;
+                    facingCamera = mainCamera;
+                    Vector3 forward = mainCamera.transform.forward;
+                    Vector3 view = -new Vector3(forward.x, 0, forward.z);
+                    facingValid = view != Vector3.zero;
+                    if (facingValid)
+                        facingRotation = Quaternion.LookRotation(view);
+                    facingValidY = forward != Vector3.zero;
+                    if (facingValidY)
+                        facingRotationY = Quaternion.LookRotation(-forward);
+                }
+                if (!cachedTransform)
+                    cachedTransform = transform;
+                if (FaceY ? facingValidY : facingValid)
+                    cachedTransform.rotation = FaceY ? facingRotationY : facingRotation;
+                return;
+            }
+#endif
             if (mainCamera && Application.isPlaying && meshRenderer.enabled)
             {
                 float y = (FaceY) ? mainCamera.transform.forward.y : 0;
@@ -114,6 +149,10 @@ namespace DaggerfallWorkshop
 
         IEnumerator AnimateBillboard()
         {
+#if UNITY_PSP2
+            WaitForSeconds wait = null;
+            float waitSpeed = 0;
+#endif
             while (true)
             {
                 float speed = FramesPerSecond;
@@ -130,6 +169,19 @@ namespace DaggerfallWorkshop
                             if (OneShot)
                                 GameObject.Destroy(gameObject);
                         }
+#if UNITY_PSP2
+                        // Update UVs on mesh, only if a camera drew it last frame (the frame counter still advances)
+                        if (meshRenderer.isVisible)
+                        {
+                            int index = summary.AtlasIndices[summary.Record].startIndex + summary.CurrentFrame;
+                            Rect rect = summary.AtlasRects[index];
+                            animUVs[0] = new Vector2(rect.x, rect.yMax);
+                            animUVs[1] = new Vector2(rect.xMax, rect.yMax);
+                            animUVs[2] = new Vector2(rect.x, rect.y);
+                            animUVs[3] = new Vector2(rect.xMax, rect.y);
+                            meshFilter.sharedMesh.uv = animUVs;
+                        }
+#else
                         int index = summary.AtlasIndices[summary.Record].startIndex + summary.CurrentFrame;
                         Rect rect = summary.AtlasRects[index];
 
@@ -140,6 +192,7 @@ namespace DaggerfallWorkshop
                         uvs[2] = new Vector2(rect.x, rect.y);
                         uvs[3] = new Vector2(rect.xMax, rect.y);
                         meshFilter.sharedMesh.uv = uvs;
+#endif
                     }
                     // Custom textures
                     else
@@ -161,7 +214,16 @@ namespace DaggerfallWorkshop
                     summary.CurrentFrame++;
                 }
 
+#if UNITY_PSP2
+                if (wait == null || speed != waitSpeed)
+                {
+                    wait = new WaitForSeconds(1f / speed);
+                    waitSpeed = speed;
+                }
+                yield return wait;
+#else
                 yield return new WaitForSeconds(1f / speed);
+#endif
             }
         }
 
@@ -255,7 +317,11 @@ namespace DaggerfallWorkshop
             if (material = TextureReplacement.GetStaticBillboardMaterial(gameObject, archive, record, ref summary, out scale))
             {
                 mesh = dfUnity.MeshReader.GetBillboardMesh(summary.Rect, archive, record, out size);
+#if UNITY_PSP2
+                size = Vector2.Scale(size, scale);
+#else
                 size *= scale;
+#endif
                 summary.AtlasedMaterial = false;
                 summary.AnimatedMaterial = summary.ImportedTextures.FrameCount > 1;
             }

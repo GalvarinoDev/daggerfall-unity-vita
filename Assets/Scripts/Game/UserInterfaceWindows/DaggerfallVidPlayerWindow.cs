@@ -114,6 +114,14 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             }
         }
 
+#if UNITY_PSP2
+        public override void OnPush()
+        {
+            base.OnPush();
+            VitaBootMusic.StopTitleSong();
+        }
+
+#endif
         public override void Update()
         {
             base.Update();

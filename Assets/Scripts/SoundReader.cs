@@ -193,7 +193,12 @@ namespace DaggerfallWorkshop
             // Ensure sound reader is ready
             if (soundFile == null)
             {
+#if UNITY_PSP2
+                // Vita: read each sound record from disk on demand instead of keeping all of DAGGER.SND (7.3 MB) in the heap
+                soundFile = new SndFile(Path.Combine(dfUnity.Arena2Path, SndFile.Filename), FileUsage.UseDisk, true);
+#else
                 soundFile = new SndFile(Path.Combine(dfUnity.Arena2Path, SndFile.Filename), FileUsage.UseMemory, true);
+#endif
             }
 
             return true;

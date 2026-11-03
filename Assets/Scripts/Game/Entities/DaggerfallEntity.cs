@@ -743,7 +743,11 @@ namespace DaggerfallWorkshop.Game.Entity
             List<EffectBundleSettings> sortedSpellbook = spellbook
                 .OrderBy((EffectBundleSettings spell) =>
                 {
+#if UNITY_PSP2
+                    int spellPointCost = FormulaHelper.CalculateTotalEffectCosts(spell.Effects, spell.TargetType, null, spell.MinimumCastingCost).spellPointCost;
+#else
                     (int _, int spellPointCost) = FormulaHelper.CalculateTotalEffectCosts(spell.Effects, spell.TargetType, null, spell.MinimumCastingCost);
+#endif
                     return spellPointCost;
                 })
             .ToList();
@@ -922,6 +926,12 @@ namespace DaggerfallWorkshop.Game.Entity
         /// <returns></returns>
         public static DFCareer GetMonsterCareerTemplate(MonsterCareers career)
         {
+#if UNITY_PSP2 && !UNITY_EDITOR
+            // Baked (VitaCareers): MONSTER.BSA was loaded again for every enemy set up
+            DFCareer vitaCareer = VitaCareers.Read(string.Format("ENEMY{0:000}.CFG", (int)career));
+            if (vitaCareer != null)
+                return vitaCareer;
+#endif
             MonsterFile monsterFile = new MonsterFile();
             if (!monsterFile.Load(Path.Combine(DaggerfallUnity.Instance.Arena2Path, MonsterFile.Filename), FileUsage.UseMemory, true))
                 throw new Exception("Could not load " + MonsterFile.Filename);
@@ -941,7 +951,12 @@ namespace DaggerfallWorkshop.Game.Entity
         /// <returns>The custom DFCareer template registered for this id, or null</returns>
         public static DFCareer GetCustomCareerTemplate(int enemyId)
         {
+#if UNITY_PSP2
+            DFCareer value;
+            if (!CustomCareerTemplates.TryGetValue(enemyId, out value))
+#else
             if (!CustomCareerTemplates.TryGetValue(enemyId, out DFCareer value))
+#endif
             {
                 return null;
             }

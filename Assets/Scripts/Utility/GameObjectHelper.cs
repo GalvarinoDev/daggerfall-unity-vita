@@ -283,6 +283,8 @@ namespace DaggerfallWorkshop.Utility
                 out hasAnimations,
                 dfUnity.MeshReader.AddMeshTangents,
                 dfUnity.MeshReader.AddMeshLightmapUVs);
+#if UNITY_PSP2
+#endif
 
             // Assign animated materials component if required
             if (hasAnimations)
@@ -302,6 +304,8 @@ namespace DaggerfallWorkshop.Utility
                 MeshCollider collider = go.AddComponent<MeshCollider>();
                 collider.sharedMesh = mesh;
             }
+#if UNITY_PSP2
+#endif
 
             // Assign static
             if (makeStatic)
@@ -516,8 +520,12 @@ namespace DaggerfallWorkshop.Utility
             if (!dfUnity.IsReady)
                 return null;
 
+#if UNITY_PSP2
+#endif
             // Create base object
             GameObject go = RMBLayout.CreateBaseGameObject(ref blockData, layoutX, layoutY, cloneFrom);
+#if UNITY_PSP2
+#endif
 
             // Create flats node
             GameObject flatsNode = new GameObject("Flats");
@@ -554,15 +562,26 @@ namespace DaggerfallWorkshop.Utility
 
             // Layout light billboards and gameobjects
             RMBLayout.AddLights(ref blockData, flatsNode.transform, lightsNode.transform, lightsBillboardBatch);
+#if UNITY_PSP2
+#endif
 
             // Layout nature billboards
             RMBLayout.AddNatureFlats(ref blockData, flatsNode.transform, natureBillboardBatch, climateNature, climateSeason);
+#if UNITY_PSP2
+#endif
 
             // Layout all other flats
             RMBLayout.AddMiscBlockFlats(ref blockData, flatsNode.transform, mapId, locationIndex, animalsBillboardBatch, miscBillboardAtlas, miscBillboardBatch);
+#if UNITY_PSP2
+#endif
 
             // Layout any subrecord exterior flats
             RMBLayout.AddExteriorBlockFlats(ref blockData, flatsNode.transform, lightsNode.transform, mapId, locationIndex, climateNature, climateSeason);
+#if UNITY_PSP2 && !UNITY_EDITOR
+            VitaFlatBatch.BuildCityBlock(go);
+#endif
+#if UNITY_PSP2
+#endif
 
             // Add ground plane
             if (addGroundPlane)
@@ -572,6 +591,8 @@ namespace DaggerfallWorkshop.Utility
             if (autoNatureBatch) natureBillboardBatch.Apply();
             if (autoLightsBatch) lightsBillboardBatch.Apply();
             if (autoAnimalsBatch) animalsBillboardBatch.Apply();
+#if UNITY_PSP2
+#endif
 
             return go;
         }

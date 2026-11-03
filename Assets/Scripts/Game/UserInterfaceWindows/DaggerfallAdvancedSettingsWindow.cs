@@ -150,6 +150,10 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         Checkbox runInBackground;
         HorizontalSlider qualityLevel;
         HorizontalSlider mainFilterMode;
+#if UNITY_PSP2
+        HorizontalSlider vitaTextureLimit;
+        HorizontalSlider vitaGpuMode;
+#endif
         HorizontalSlider guiFilterMode;
         HorizontalSlider videoFilterMode;
         HorizontalSlider fovSlider;
@@ -373,6 +377,11 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             mainFilterMode = AddSlider(leftPanel, "mainFilterMode", DaggerfallUnity.Settings.MainFilterMode, filterModes);
             guiFilterMode = AddSlider(leftPanel, "guiFilterMode", DaggerfallUnity.Settings.GUIFilterMode, filterModes);
             videoFilterMode = AddSlider(leftPanel, "videoFilterMode", DaggerfallUnity.Settings.VideoFilterMode, filterModes);
+#if UNITY_PSP2
+            vitaTextureLimit = AddSlider(leftPanel, "vitaTextureLimit", DaggerfallUnity.Settings.VitaTextureLimit, "Full", "Half", "Quarter");
+            vitaGpuMode = AddSlider(leftPanel, "vitaGpuMode", System.Array.IndexOf(VitaPower.MenuOrder, DaggerfallUnity.Settings.VitaGpuMode),
+                System.Array.ConvertAll(VitaPower.MenuOrder, m => VitaPower.ModeNames[m]));
+#endif
 
             y = 0;
 
@@ -517,7 +526,11 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
                     Screen.SetResolution(
                         selectedResolution.width,
                         selectedResolution.height,
+#if UNITY_PSP2 // FullScreenMode is Unity 2018.1+
+                        true);
+#else
                         FullScreenMode.ExclusiveFullScreen);
+#endif
                 }
                 else
                 {
@@ -529,11 +542,20 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
 
                 DaggerfallUnity.Settings.QualityLevel = qualityLevel.ScrollIndex;
                 QualitySettings.SetQualityLevel(qualityLevel.ScrollIndex);
+#if UNITY_PSP2
+                QualitySettings.masterTextureLimit = DaggerfallUnity.Settings.VitaTextureLimit;
+                QualitySettings.pixelLightCount = DaggerfallUnity.Settings.VitaPixelLights;
+#endif
             }
             Application.runInBackground = DaggerfallUnity.Settings.RunInBackground = runInBackground.IsChecked;
             DaggerfallUnity.Settings.MainFilterMode = mainFilterMode.ScrollIndex;
             DaggerfallUnity.Settings.GUIFilterMode = guiFilterMode.ScrollIndex;
             DaggerfallUnity.Settings.VideoFilterMode = videoFilterMode.ScrollIndex;
+#if UNITY_PSP2
+            DaggerfallUnity.Settings.VitaTextureLimit = vitaTextureLimit.ScrollIndex;
+            DaggerfallUnity.Settings.VitaGpuMode = VitaPower.MenuOrder[vitaGpuMode.ScrollIndex];
+            VitaPower.Apply();
+#endif
 
             DaggerfallUnity.Settings.FieldOfView = fovSlider.Value;
             DaggerfallUnity.Settings.TerrainDistance = terrainDistance.Value;

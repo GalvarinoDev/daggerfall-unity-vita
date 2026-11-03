@@ -43,6 +43,13 @@ namespace DaggerfallConnect.Arena2
         /// Array for directories where each item has a number for a name.
         /// </summary>
         private NumberRecordDescriptor[] numberRecordDirectory;
+#if UNITY_PSP2
+
+        /// <summary>
+        /// Patches of a FileUsage.UseDisk file, applied to each record as it is read (UseMemory patches the whole buffer once).
+        /// </summary>
+        private PatchList diskPatch;
+#endif
 
         #endregion
 
@@ -171,6 +178,9 @@ namespace DaggerfallConnect.Arena2
                     }
                 }
             }
+#if UNITY_PSP2
+            diskPatch = usage == FileUsage.UseDisk ? filePatch : null;
+#endif
 
             // Read file
             if (!Read())
@@ -240,7 +250,11 @@ namespace DaggerfallConnect.Arena2
                 case DirectoryTypes.NameRecord:
                     return nameRecordDirectory[record].RecordName;
                 case DirectoryTypes.NumberRecord:
+#if UNITY_PSP2
+                    return numberRecordDirectory[record].RecordId.ToString();   // made on demand (see ReadDirectory)
+#else
                     return numberRecordDirectory[record].RecordName;
+#endif
                 default:
                     return string.Empty;
             }
@@ -274,9 +288,31 @@ namespace DaggerfallConnect.Arena2
             // Read record data into buffer
             BinaryReader reader = managedFile.GetReader(GetRecordPosition(record));
             byte[] buffer = reader.ReadBytes(GetRecordLength(record));
+#if UNITY_PSP2
+            PatchRecord(record, buffer);
+#endif
 
             return buffer;
         }
+#if UNITY_PSP2
+
+        // Apply the UseDisk patches that fall inside this record (file offsets → record buffer offsets)
+        private void PatchRecord(int record, byte[] buffer)
+        {
+            if (diskPatch == null)
+                return;
+            long start = GetRecordPosition(record);
+            foreach (var patch in diskPatch)
+            {
+                for (int i = 0; i < patch.data.Length; i++)
+                {
+                    long at = patch.offset + i - start;
+                    if (at >= 0 && at < buffer.Length)
+                        buffer[at] = patch.data[i];
+                }
+            }
+        }
+#endif
 
         /// <summary>
         /// Save new record data back to BSA file. WARNING: This will modify the BSA file. Ensure you have backups.
@@ -338,6 +374,9 @@ namespace DaggerfallConnect.Arena2
             // Read record data into buffer
             BinaryReader reader = managedFile.GetReader(GetRecordPosition(record));
             byte[] buffer = reader.ReadBytes(GetRecordLength(record));
+#if UNITY_PSP2
+            PatchRecord(record, buffer);
+#endif
 
             return new FileProxy(buffer, GetRecordName(record));
         }
@@ -391,15 +430,33 @@ namespace DaggerfallConnect.Arena2
                 // Create name record directory
                 nameRecordDirectory = new NameRecordDescriptor[header.DirectoryCount];
 
+#if UNITY_PSP2
+                // Read directory in one go: with FileUsage.UseDisk every seek below would refill the FileStream buffer
+#else
                 // Read directory
+#endif
                 long recordPosition = header.FirstRecordPosition;
+#if UNITY_PSP2
+                long directoryPosition = managedFile.Length - 18 * header.DirectoryCount;
+                reader.BaseStream.Position = directoryPosition;
+                BinaryReader directoryReader = new BinaryReader(new MemoryStream(reader.ReadBytes(18 * header.DirectoryCount)));
+#else
                 reader.BaseStream.Position = managedFile.Length - 18 * header.DirectoryCount;
+#endif
                 for (int i = 0; i < header.DirectoryCount; i++)
                 {
+#if UNITY_PSP2
+                    long entryPosition = directoryReader.BaseStream.Position;
+                    nameRecordDirectory[i].Position = directoryPosition + entryPosition;
+                    nameRecordDirectory[i].RecordName = FileProxy.ReadCString(directoryReader, 0);
+                    directoryReader.BaseStream.Position = entryPosition + 14;
+                    nameRecordDirectory[i].RecordSize = directoryReader.ReadInt32();
+#else
                     nameRecordDirectory[i].Position = reader.BaseStream.Position;
                     nameRecordDirectory[i].RecordName = FileProxy.ReadCString(reader, 0);
                     reader.BaseStream.Position = nameRecordDirectory[i].Position + 14;
                     nameRecordDirectory[i].RecordSize = reader.ReadInt32();
+#endif
                     nameRecordDirectory[i].RecordPosition = recordPosition;
                     recordPosition += nameRecordDirectory[i].RecordSize;
                 }
@@ -416,7 +473,12 @@ namespace DaggerfallConnect.Arena2
                 {
                     numberRecordDirectory[i].Position = reader.BaseStream.Position;
                     numberRecordDirectory[i].RecordId = reader.ReadUInt32();
+#if UNITY_PSP2
+                    // Vita: no name string per record;
+                    // GetRecordName makes it from RecordId, the same text
+#else
                     numberRecordDirectory[i].RecordName = numberRecordDirectory[i].RecordId.ToString();
+#endif
                     numberRecordDirectory[i].RecordSize = reader.ReadInt32();
                     numberRecordDirectory[i].RecordPosition = recordPosition;
                     recordPosition += numberRecordDirectory[i].RecordSize;

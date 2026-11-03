@@ -68,6 +68,15 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         {
             base.Update();
             InputManager.Instance.CursorVisible = true;
+#if UNITY_PSP2
+            VitaBootMusic.PlayTitleSong();
+        }
+
+        public override void OnPop()
+        {
+            base.OnPop();
+            VitaBootMusic.StopTitleSong();
+#endif
         }
 
         float timer = 0;
@@ -96,7 +105,11 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
 
         void ExitGame()
         {
+#if UNITY_PSP2
+            VitaPower.Exit();
+#else
             Application.Quit();
+#endif
         }
 
         public override void ProcessMessages()

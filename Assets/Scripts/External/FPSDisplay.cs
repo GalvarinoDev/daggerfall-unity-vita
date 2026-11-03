@@ -27,6 +27,8 @@ public class FPSDisplay : MonoBehaviour
         deltaTime += (Time.unscaledDeltaTime - deltaTime) * 0.1f;
     }
 
+    // Vita: no OnGUI for this console-only debug overlay; an idle OnGUI still costs ~0.1 ms per frame
+#if !UNITY_PSP2
     void OnGUI()
     {
         if (!ShowDebugString)
@@ -66,4 +68,5 @@ public class FPSDisplay : MonoBehaviour
             }            
         }
     }
+#endif
 }

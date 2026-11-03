@@ -186,7 +186,12 @@ namespace DaggerfallWorkshop.Game
         {
             // Gender flag is invalid for RMB exterior NPCs: get it from FLATS.CFG instead
             int flatID = FlatsFile.GetFlatID(obj.TextureArchive, obj.TextureRecord);
+#if UNITY_PSP2
+            FlatsFile.FlatData flatCFG;
+            if (DaggerfallUnity.Instance.ContentReader.FlatsFileReader.GetFlatData(flatID, out flatCFG))
+#else
             if (DaggerfallUnity.Instance.ContentReader.FlatsFileReader.GetFlatData(flatID, out FlatsFile.FlatData flatCFG))
+#endif
             {
                 if (flatCFG.gender.Contains("2"))
                     obj.Flags |= 32;

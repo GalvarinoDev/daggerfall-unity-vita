@@ -13,7 +13,9 @@ using UnityEngine;
 using System;
 using System.Collections.Generic;
 using System.Text;
+#if !UNITY_PSP2
 using TMPro;
+#endif
 
 namespace DaggerfallWorkshop.Game.UserInterface
 {
@@ -260,7 +262,12 @@ namespace DaggerfallWorkshop.Game.UserInterface
                 if (glyph.code == DaggerfallFont.SpaceCode)
                     continue;
 
+#if UNITY_PSP2
+                DaggerfallFont.SDFGlyphInfo glyphInfo;
+                if (!font.SDFInfo.glyphs.TryGetValue(glyph.code, out glyphInfo))
+#else
                 if (!font.SDFInfo.glyphs.TryGetValue(glyph.code, out DaggerfallFont.SDFGlyphInfo glyphInfo))
+#endif
                     continue;
 
                 if (glyphInfo.size.x <= 0 || glyphInfo.size.y <= 0)
@@ -353,14 +360,22 @@ namespace DaggerfallWorkshop.Game.UserInterface
                 if (!font.IsSDFCapable)
                 {
                     if (shadowPosition != Vector2.zero && shadowColor != Color.clear)
+#if UNITY_PSP2
+                        DrawLabelSingleCallClassic(shadowColor, Vector2.Scale(shadowPosition, LocalScale));
+#else
                         DrawLabelSingleCallClassic(shadowColor, shadowPosition * LocalScale);
+#endif
 
                     DrawLabelSingleCallClassic(textColor, Vector2.zero);
                 }
                 else
                 {
                     if (shadowPosition != Vector2.zero && shadowColor != Color.clear)
+#if UNITY_PSP2
+                        DrawLabelSingleCallSDF(shadowColor, Vector2.Scale(shadowPosition, LocalScale) * 0.4f);
+#else
                         DrawLabelSingleCallSDF(shadowColor, shadowPosition * LocalScale * 0.4f);
+#endif
 
                     DrawLabelSingleCallSDF(textColor, Vector2.zero);
                 }
@@ -393,7 +408,11 @@ namespace DaggerfallWorkshop.Game.UserInterface
                         (int)(glyph.width * LocalScale.x * textScale),
                         (int)(font.GlyphHeight * LocalScale.y * textScale));
 
+#if UNITY_PSP2
+                    font.DrawClassicGlyph((byte)glyph.code, targetRect, textColor, Vector2.Scale(shadowPosition, LocalScale), shadowColor);
+#else
                     font.DrawClassicGlyph((byte)glyph.code, targetRect, textColor, shadowPosition * LocalScale, shadowColor);
+#endif
                 }
             }
             else
@@ -407,7 +426,11 @@ namespace DaggerfallWorkshop.Game.UserInterface
                         (int)(totalRect.x + glyph.x * LocalScale.x * textScale + HorzPixelScrollOffset * LocalScale.x * textScale),
                         (int)(totalRect.y + glyph.y * LocalScale.y * textScale));
 
+#if UNITY_PSP2
+                    font.DrawSDFGlyph(glyph.code, position, LocalScale * textScale, textColor, Vector2.Scale(shadowPosition, LocalScale), shadowColor);
+#else
                     font.DrawSDFGlyph(glyph.code, position, LocalScale * textScale, textColor, shadowPosition * LocalScale, shadowColor);
+#endif
                 }
             }
         }
@@ -598,7 +621,11 @@ namespace DaggerfallWorkshop.Game.UserInterface
             glyphLayout.Clear();
 
             if (Parent != null)
+#if UNITY_PSP2
+                { Rect discard = Rectangle; } //Calling GetRectangle() to establish LocalScale; discarding return value
+#else
                 _ = Rectangle; //Calling GetRectangle() to establish LocalScale; discarding return value
+#endif
 
             // Set a local maxWidth that compensates for textScale
             int maxWidth = (int)(this.maxWidth / textScale);

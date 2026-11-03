@@ -200,6 +200,19 @@ namespace DaggerfallWorkshop.Game.Utility.ModSupport
         /// </summary>
         /// <param name="modTitle">The title of a mod.</param>
         /// <returns>The mod with the given title or null if not found.</returns>
+#if UNITY_PSP2
+        /// <summary>Vita: adds a mod built into the game (Mod's resource-folder ctor) after the Start-state mod setup, last in load order.</summary>
+        public void VitaAddBuiltInMod(Mod mod)
+        {
+            mod.LoadPriority = mods.Count;
+            mods.Add(mod);
+            VitaBuiltInModCount++;
+        }
+
+        /// <summary>Vita: how many of the loaded mods are built into the game (their world data is baked into the packs).</summary>
+        public int VitaBuiltInModCount { get; private set; }
+#endif
+
         public Mod GetMod(string modTitle)
         {
             int index = GetModIndex(modTitle);

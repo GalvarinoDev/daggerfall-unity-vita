@@ -12,6 +12,9 @@
 #region Using Statements
 using System;
 using System.IO;
+#if UNITY_PSP2
+using System.Collections.Generic;
+#endif
 using DaggerfallConnect.Utility;
 #endregion
 
@@ -52,6 +55,9 @@ namespace DaggerfallConnect.Arena2
         /// Record array.
         /// </summary>
         private Record[] records;
+#if UNITY_PSP2 && !UNITY_EDITOR
+        private int vitaArchive = -1;   // baked archive (VitaTextureFiles), -1 = parsed from the file
+#endif
 
         #endregion
 
@@ -276,6 +282,7 @@ namespace DaggerfallConnect.Arena2
                 return false;
             }
 
+
             // Handle solid types
             if (fn == "TEXTURE.000")
                 solidType = SolidTypes.SolidColoursA;
@@ -284,6 +291,32 @@ namespace DaggerfallConnect.Arena2
             else
                 solidType = SolidTypes.None;
 
+#if UNITY_PSP2 && !UNITY_EDITOR
+            // Baked by VitaTextureFileBaker: the record headers here, each record's frames when first read (VitaTextureFiles, item 20)
+            int vitaIndex;
+            short[] vitaHeader = int.TryParse(fn.Substring(8), out vitaIndex) ? VitaTextureFiles.Header(vitaIndex) : null;
+            if (vitaHeader != null)
+            {
+                records = new Record[vitaHeader.Length / VitaTextureFiles.HeaderFields];
+                for (int r = 0, i = 0; r < records.Length; r++, i += VitaTextureFiles.HeaderFields)
+                {
+                    records[r].OffsetX = vitaHeader[i];
+                    records[r].OffsetY = vitaHeader[i + 1];
+                    records[r].Width = vitaHeader[i + 2];
+                    records[r].Height = vitaHeader[i + 3];
+                    records[r].ScaleX = vitaHeader[i + 4];
+                    records[r].ScaleY = vitaHeader[i + 5];
+                    records[r].FrameCount = (UInt16)vitaHeader[i + 6];
+                    records[r].Frames = new DFBitmap[records[r].FrameCount];
+                }
+                header.RecordCount = (Int16)records.Length;
+                recordHeaders = new RecordHeader[records.Length];
+                vitaArchive = vitaIndex;
+                managedFile.Load(new byte[0], filePath);
+                LoadPalette(Path.Combine(Path.GetDirectoryName(filePath), PaletteName));
+                return true;
+            }
+#endif
             // Load file
             if (!managedFile.Load(filePath, usage, readOnly))
                 return false;
@@ -480,6 +513,80 @@ namespace DaggerfallConnect.Arena2
         /// Reads file header.
         /// </summary>
         /// <param name="reader">Source reader.</param>
+#if UNITY_PSP2
+        // Parsed once per file and shared: TextureReader makes a new TextureFile for every texture it reads
+        static readonly Dictionary<string, Record[]> vitaRecords = new Dictionary<string, Record[]>();
+        static readonly Dictionary<string, DFPalette> vitaPalettes = new Dictionary<string, DFPalette>();   // own palettes (VTEX 2)
+
+        // "VTEX" int32 2, int32 count, int32 own palette (then 768 bytes RGB), per record: int16 offsetX, offsetY, scaleX, scaleY, int32 width,
+        // height, frame count, frames (mod flats, vita/tools/flatpack.py)
+        private bool VitaLoad(string path, string arena2Path)
+        {
+            solidType = SolidTypes.None;
+            if (!vitaRecords.TryGetValue(path, out records))
+            {
+                byte[] bytes;
+                try
+                {
+                    bytes = File.ReadAllBytes(path);
+                }
+                catch (IOException)
+                {
+                    vitaRecords[path] = null;   // a mod archive the Vita doesn't have: fail like a missing TEXTURE file, once
+                    return false;
+                }
+                using (BinaryReader reader = new BinaryReader(new MemoryStream(bytes)))
+                {
+                    if (new string(reader.ReadChars(4)) != "VTEX")
+                        return false;
+                    int version = reader.ReadInt32();
+                    if (version != 1 && version != 2)
+                        return false;
+                    records = new Record[reader.ReadInt32()];
+                    DFPalette own = null;
+                    if (version == 2 && reader.ReadInt32() == 1)
+                    {
+                        own = new DFPalette();
+                        own.Set(reader.ReadBytes(768));
+                        vitaPalettes[path] = own;
+                    }
+                    for (int r = 0; r < records.Length; r++)
+                    {
+                        if (version == 2)
+                        {
+                            records[r].OffsetX = reader.ReadInt16();
+                            records[r].OffsetY = reader.ReadInt16();
+                            records[r].ScaleX = reader.ReadInt16();
+                            records[r].ScaleY = reader.ReadInt16();
+                        }
+                        int width = reader.ReadInt32(), height = reader.ReadInt32();
+                        int frames = version == 2 ? reader.ReadInt32() : 1;
+                        records[r].Width = (Int16)width;
+                        records[r].Height = (Int16)height;
+                        records[r].FrameCount = (UInt16)frames;
+                        records[r].Frames = new DFBitmap[frames];
+                        for (int f = 0; f < frames; f++)
+                            records[r].Frames[f] = new DFBitmap() { Width = width, Height = height, Data = reader.ReadBytes(width * height) };
+                    }
+                }
+                vitaRecords[path] = records;
+            }
+            if (records == null)
+                return false;
+            DFPalette palette;
+            if (vitaPalettes.TryGetValue(path, out palette))
+                myPalette = palette;
+            else
+                LoadPalette(Path.Combine(arena2Path, PaletteName));
+            foreach (Record record in records)
+                foreach (DFBitmap bitmap in record.Frames)
+                    bitmap.Palette = Palette;
+            header.RecordCount = (Int16)records.Length;
+            recordHeaders = new RecordHeader[records.Length];
+            return true;
+        }
+#endif
+
         private void ReadHeader(ref BinaryReader reader)
         {
             reader.BaseStream.Position = 0;
@@ -556,6 +663,11 @@ namespace DaggerfallConnect.Arena2
             // Exit if this image already read
             if (records[record].Frames[frame] != null)
                 return true;
+
+#if UNITY_PSP2 && !UNITY_EDITOR
+            if (vitaArchive >= 0)
+                return VitaTextureFiles.ReadFrames(vitaArchive, record, records[record].Frames, Palette) && records[record].Frames[frame] != null;
+#endif
 
             // Handle solid types
             if (solidType != SolidTypes.None)

@@ -160,6 +160,11 @@ namespace DaggerfallWorkshop.Utility
             ModelCombiner combiner = null;
             if (dfUnity.Option_CombineRDB)
                 combiner = new ModelCombiner();
+#if UNITY_PSP2 && !UNITY_EDITOR
+            // Baked block (VitaBlockBake): the combiner is sealed with the PC's combined models, so AddModels adds only what it doesn't combine
+            if (combiner != null)
+                VitaBlockBake.TrySealRdb(ref blockData, allowExitDoors, combiner);
+#endif
 
             // Add parent node
             GameObject modelsNode = new GameObject("Models");

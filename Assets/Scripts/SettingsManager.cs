@@ -169,6 +169,26 @@ namespace DaggerfallWorkshop
         public int ShadowResolutionMode { get; set; }
         public int MainFilterMode { get; set; }
         public int QualityLevel { get; set; }
+#if UNITY_PSP2
+        public int VitaTextureLimit { get; set; }
+        public bool VitaCulling { get; set; }
+        public bool VitaTerrainGrid2x2 { get; set; }
+        public bool VitaStaticBatching { get; set; }
+        public int VitaCityMerge { get; set; }
+        public int VitaTownDistance { get; set; }
+        public int VitaFogDistance { get; set; }
+        public bool VitaSyncGuard { get; set; }
+        public bool VitaPinAudioThread { get; set; }
+        public bool VitaExteriorLowRes { get; set; }
+        public int VitaPixelLights { get; set; }
+        public int VitaGpuMode { get; set; }
+        public bool VitaAtlas { get; set; }
+        public bool VitaFlatBatch { get; set; }
+        public bool VitaModelBatch { get; set; }
+        public int VitaFireLight { get; set; }
+        public int VitaFireColour { get; set; }     // VitaLights warmth 0-3 (White / Slightly warm / Warm / Warmest)
+        public int VitaTorchReach { get; set; }     // the player torch's range in metres (6 = stock)
+#endif
         public bool DungeonLightShadows { get; set; }
         public bool InteriorLightShadows { get; set; }
         public bool ExteriorLightShadows { get; set; }
@@ -384,6 +404,13 @@ namespace DaggerfallWorkshop
             MyDaggerfallPath = GetString(sectionDaggerfall, "MyDaggerfallPath");
             MyDaggerfallUnitySavePath = GetString(sectionDaggerfall, "MyDaggerfallUnitySavePath");
             MyDaggerfallUnityScreenshotsPath = GetString(sectionDaggerfall, "MyDaggerfallUnityScreenshotsPath");
+#if UNITY_PSP2
+#if UNITY_PSP2 && !UNITY_EDITOR
+            // No folder browser on Vita: game files (folder containing ARENA2) go here
+            if (string.IsNullOrEmpty(MyDaggerfallPath))
+                MyDaggerfallPath = "ux0:/data/DaggerfallUnity";
+#endif
+#endif
 
             // In Portable Install mode, we save those paths as relative to the current directory
             // This allows users to move the directory around without breaking the settings
@@ -405,6 +432,18 @@ namespace DaggerfallWorkshop
 
             ResolutionWidth = GetInt(sectionVideo, "ResolutionWidth");
             ResolutionHeight = GetInt(sectionVideo, "ResolutionHeight");
+#if UNITY_PSP2
+#if UNITY_PSP2 && !UNITY_EDITOR
+            // The Vita display is always 960x544; the PC default (1920x1080) made Screen.SetResolution size buffers for 1080p.
+            // Smaller sizes the display scaler upscales for free (720x408, 640x368, 480x272) are kept.
+            string vitaResolution = ResolutionWidth + "x" + ResolutionHeight;
+            if (vitaResolution != "720x408" && vitaResolution != "640x368" && vitaResolution != "480x272")
+            {
+                ResolutionWidth = 960;
+                ResolutionHeight = 544;
+            }
+#endif
+#endif
             RetroRenderingMode = GetInt(sectionVideo, "RetroRenderingMode", 0, 2);
             PostProcessingInRetroMode = GetInt(sectionVideo, "PostProcessingInRetroMode");
             UseMipMapsInRetroMode = GetBool(sectionVideo, "UseMipMapsInRetroMode");
@@ -419,6 +458,54 @@ namespace DaggerfallWorkshop
             MainFilterMode = GetInt(sectionVideo, "MainFilterMode", 0, 2);
             ShadowResolutionMode = GetInt(sectionVideo, "ShadowResolutionMode", 0, 3);
             QualityLevel = GetInt(sectionVideo, "QualityLevel", 0, 5);
+#if UNITY_PSP2
+            // Vita texture size: 0 = full, 1 = half, 2 = quarter. Drops the top
+            // mip levels of every mipmapped texture (QualitySettings.masterTextureLimit), so world/sprite textures take 1/4 (1/16) of the memory.
+            int vitaTextureLimit;
+            VitaTextureLimit = int.TryParse(GetData(sectionVideo, "VitaTextureLimit"), out vitaTextureLimit) ? Mathf.Clamp(vitaTextureLimit, 0, 2) : 0;
+            // Vita: switch off far dungeon objects; on unless "False"
+            VitaCulling = GetData(sectionVideo, "VitaCulling") != "False";
+            // Vita: 2x2 terrain tiles around the player instead of 3x3 at TerrainDistance 1; on unless "False"
+            VitaTerrainGrid2x2 = GetData(sectionVideo, "VitaTerrainGrid2x2") != "False";
+            // Vita: Unity static batching of the city blocks (StreamingWorld; cities are draw-call bound, ~45 us per draw); off unless "True"
+            VitaStaticBatching = GetData(sectionVideo, "VitaStaticBatching") == "True";
+            // Vita: merge city block meshes per texture in chunks of N x N blocks (VitaCityMerge.cs); 0 = off
+            int vitaCityMerge;
+            VitaCityMerge = int.TryParse(GetData(sectionVideo, "VitaCityMerge"), out vitaCityMerge) ? Mathf.Clamp(vitaCityMerge, 0, 8) : 0;
+            // Vita: hide town block models and flats beyond N metres; 0 = off
+            int vitaTownDistance;
+            VitaTownDistance = int.TryParse(GetData(sectionVideo, "VitaTownDistance"), out vitaTownDistance) ? Mathf.Max(0, vitaTownDistance) : 300;
+            // Vita: outdoor fog at least this thick by N metres; 0 = weather fog only
+            int vitaFogDistance;
+            VitaFogDistance = int.TryParse(GetData(sectionVideo, "VitaFogDistance"), out vitaFogDistance) ? Mathf.Max(0, vitaFogDistance) : 360;
+            // Vita: GC when free kernel sync objects run low; off unless "True"
+            VitaSyncGuard = GetData(sectionVideo, "VitaSyncGuard") == "True";
+            // Vita: keep FMOD's threads attached to IL2CPP after the first C# audio callback; on unless "False"
+            VitaPinAudioThread = GetData(sectionVideo, "VitaPinAudioThread") != "False";
+            // Vita: 720x408 outside, where the frame is fragment bound (VitaResolution.cs); off unless "True" (native 960x544 is the goal)
+            VitaExteriorLowRes = GetData(sectionVideo, "VitaExteriorLowRes") == "True";
+            // Vita: Unity per-pixel lights (forward-add passes) on top of the Fastest quality level. Default 0: the palette wall shader
+            // 60/41/27/16 fps, exterior 21/13/13/13, dungeon 25/21/20/20). PC's Fantastic has 4.
+            int vitaPixelLights;
+            VitaPixelLights = int.TryParse(GetData(sectionVideo, "VitaPixelLights"), out vitaPixelLights) ? Mathf.Clamp(vitaPixelLights, 0, 4) : 0;
+            // Vita: power configuration mode A/B/C = 0/1/2, 3 = A with a high GPU clock (VitaPower.cs). Default 2: high GPU clock with Wi-Fi kept (exterior 25 → 35.6 FPS)
+            int vitaGpuMode;
+            VitaGpuMode = int.TryParse(GetData(sectionVideo, "VitaGpuMode"), out vitaGpuMode) ? Mathf.Clamp(vitaGpuMode, 0, 3) : 2;
+            // Vita: one texture atlas per dungeon, one draw per model (VitaAtlas.cs); on unless "False"
+            VitaAtlas = GetData(sectionVideo, "VitaAtlas") != "False";
+            // Vita: a dungeon block's plain flats merged per material, one draw each (VitaFlatBatch.cs); on unless "False"
+            VitaFlatBatch = GetData(sectionVideo, "VitaFlatBatch") != "False";
+            // Vita: a dungeon block's standalone models (doors, levers, banners) merged per material (VitaModelBatch.cs); on unless "False"
+            VitaModelBatch = GetData(sectionVideo, "VitaModelBatch") != "False";
+            // Vita: torch/lantern light strength and reach in % for the palette shaders' 4 near lights (VitaLights.cs); same GPU cost at any value
+            int vitaFireLight;
+            // New key names (were VitaFireLight 150 / VitaFireColour 2): saved inis get the new PC-matched defaults
+            VitaFireLight = int.TryParse(GetData(sectionVideo, "VitaFireLevel"), out vitaFireLight) ? Mathf.Clamp(vitaFireLight, 50, 300) : 100;
+            int vitaFireColour, vitaTorchReach;
+            VitaFireColour = int.TryParse(GetData(sectionVideo, "VitaFireTone"), out vitaFireColour) ? Mathf.Clamp(vitaFireColour, 0, 3) : 0;
+            VitaTorchReach = int.TryParse(GetData(sectionVideo, "VitaTorchReach"), out vitaTorchReach) ? Mathf.Clamp(vitaTorchReach, 3, 20) : 6;
+            // No-mods alpha (vita/nomods.txt): no mod is in the build, whatever an older ini says
+#endif
             DungeonLightShadows = GetBool(sectionVideo, "DungeonLightShadows");
             InteriorLightShadows = GetBool(sectionVideo, "InteriorLightShadows");
             ExteriorLightShadows = GetBool(sectionVideo, "ExteriorLightShadows");
@@ -619,6 +706,26 @@ namespace DaggerfallWorkshop
             SetInt(sectionVideo, "MainFilterMode", MainFilterMode);
             SetInt(sectionVideo, "ShadowResolutionMode", ShadowResolutionMode);
             SetInt(sectionVideo, "QualityLevel", QualityLevel);
+#if UNITY_PSP2
+            SetInt(sectionVideo, "VitaTextureLimit", VitaTextureLimit);
+            SetBool(sectionVideo, "VitaCulling", VitaCulling);
+            SetBool(sectionVideo, "VitaTerrainGrid2x2", VitaTerrainGrid2x2);
+            SetBool(sectionVideo, "VitaStaticBatching", VitaStaticBatching);
+            SetInt(sectionVideo, "VitaCityMerge", VitaCityMerge);
+            SetInt(sectionVideo, "VitaTownDistance", VitaTownDistance);
+            SetInt(sectionVideo, "VitaFogDistance", VitaFogDistance);
+            SetBool(sectionVideo, "VitaSyncGuard", VitaSyncGuard);
+            SetBool(sectionVideo, "VitaPinAudioThread", VitaPinAudioThread);
+            SetBool(sectionVideo, "VitaExteriorLowRes", VitaExteriorLowRes);
+            SetInt(sectionVideo, "VitaPixelLights", VitaPixelLights);
+            SetInt(sectionVideo, "VitaGpuMode", VitaGpuMode);
+            SetBool(sectionVideo, "VitaAtlas", VitaAtlas);
+            SetBool(sectionVideo, "VitaFlatBatch", VitaFlatBatch);
+            SetBool(sectionVideo, "VitaModelBatch", VitaModelBatch);
+            SetInt(sectionVideo, "VitaFireLevel", VitaFireLight);
+            SetInt(sectionVideo, "VitaFireTone", VitaFireColour);
+            SetInt(sectionVideo, "VitaTorchReach", VitaTorchReach);
+#endif
             SetBool(sectionVideo, "DungeonLightShadows", DungeonLightShadows);
             SetBool(sectionVideo, "InteriorLightShadows", InteriorLightShadows);
             SetBool(sectionVideo, "ExteriorLightShadows", ExteriorLightShadows);
@@ -822,7 +929,12 @@ namespace DaggerfallWorkshop
 
             // Must have settings.ini in persistent data path
             string userIniPath = Path.Combine(PersistentDataPath, SettingsName());
+#if UNITY_PSP2
+            bool createdIni = !File.Exists(userIniPath);
+            if (createdIni)
+#else
             if (!File.Exists(userIniPath))
+#endif
                 CreateDefaultSettingsFile(userIniPath);
 
             // Load settings.ini and try to handle exception
@@ -851,6 +963,24 @@ namespace DaggerfallWorkshop
             // Log ini path in use
             Debug.LogFormat("Using '{0}' at path '{1}'", SettingsName(), userIniPath);
 
+#if UNITY_PSP2
+            // Vita first run: the classic button bar gives touch access to rest, transport, modes, etc.
+            // Lowest-cost graphics: Fastest quality (no shadows), no light/spell shadows or spell lights, no texture arrays, nearest terrain
+            if (createdIni)
+            {
+                userIniData[sectionGUI]["LargeHUD"] = "True";
+                userIniData[sectionVideo]["QualityLevel"] = "0";
+                userIniData[sectionVideo]["DungeonLightShadows"] = "False";
+                userIniData[sectionVideo]["InteriorLightShadows"] = "False";
+                userIniData[sectionVideo]["ExteriorLightShadows"] = "False";
+                userIniData[sectionVideo]["EnableTextureArrays"] = "False";
+                userIniData[sectionVideo]["RetroRenderingMode"] = "0";
+                userIniData[sectionSpells]["EnableSpellLighting"] = "False";
+                userIniData[sectionSpells]["EnableSpellShadows"] = "False";
+                userIniData[sectionExperimental]["TerrainDistance"] = "1";
+            }
+
+#endif
             // Create a backup after successfully parsing ini data
             WriteSettingsFile(true);
 
@@ -866,6 +996,9 @@ namespace DaggerfallWorkshop
                 try
                 {
                     string path = Path.Combine(PersistentDataPath, name);
+#if UNITY_PSP2
+                    VitaFile.Delete(path);
+#endif
                     iniParser.WriteFile(path, userIniData);
                 }
                 catch

@@ -14,6 +14,9 @@ using UnityEngine;
 using System;
 using System.Text;
 using System.IO;
+#if UNITY_PSP2
+using System.Collections.Generic;
+#endif
 #endregion
 
 namespace DaggerfallConnect
@@ -206,6 +209,17 @@ namespace DaggerfallConnect.Utility
         /// <returns>True if successful, otherwise false.</returns>
         public bool Load(string filePath, FileUsage usage = FileUsage.UseMemory, bool readOnly = true)
         {
+#if UNITY_PSP2
+            System.Diagnostics.Stopwatch vitaWatch = VitaMemory.Probes ? System.Diagnostics.Stopwatch.StartNew() : null;
+            bool vitaLoaded = VitaLoad(filePath, usage, readOnly);
+            if (vitaWatch != null)
+                VitaMemory.LogFile(filePath, usage, vitaLoaded ? Length : -1, vitaWatch.Elapsed.TotalMilliseconds);
+            return vitaLoaded;
+        }
+
+        bool VitaLoad(string filePath, FileUsage usage, bool readOnly)
+        {
+#endif
             // Determine file access settings
             FileAccess fileAccess;
             FileShare fileShare;
@@ -519,6 +533,35 @@ namespace DaggerfallConnect.Utility
         /// <param name="fileAccess">Defines access to file.</param>
         /// <param name="fileShare">Defines shared access to file.</param>
         /// <returns>True if successful, otherwise false.</returns>
+#if UNITY_PSP2
+        // UI images and palettes (IMG, CIF, RCI, COL) and small tables (CFG, and BSAs such as MONSTER.BSA, 26 KB, read once per enemy:
+        // BSS: the HUD compass read CMPA00I0.BSS (60 KB) once per frame image, ~36 times at boot, 30-190 ms each
+        static readonly Dictionary<string, byte[]> vitaFileCache = new Dictionary<string, byte[]>();
+        static int vitaFileCacheBytes;
+        const int vitaFileCacheLimit = 8 * 1024 * 1024, vitaFileCacheMaxFile = 256 * 1024;
+
+        static bool IsVitaCachedFile(string fileName)
+        {
+            string ext = Path.GetExtension(fileName).ToUpperInvariant();
+            if (ext != ".IMG" && ext != ".CIF" && ext != ".RCI" && ext != ".COL" && ext != ".CFG" && ext != ".BSA" && ext != ".BSS")
+                return false;
+            return true;
+        }
+
+        // TEXTURE.### files for the level being built: a Palace load read 66 of them 351 times,
+        // since every flat, model and enemy loads its archive again. Kept until VitaClearLevelCache (the level unload points), 16 MB at most
+        static readonly Dictionary<string, byte[]> vitaLevelCache = new Dictionary<string, byte[]>();
+        static int vitaLevelCacheBytes;
+        const int vitaLevelCacheLimit = 16 * 1024 * 1024, vitaLevelCacheMaxFile = 1024 * 1024;
+
+        public static void VitaClearLevelCache()
+        {
+            vitaLevelCache.Clear();
+            vitaLevelCacheBytes = 0;
+            DaggerfallWorkshop.Utility.AssetInjection.WorldDataReplacement.VitaClearPackBlocks();
+        }
+#endif
+
         private bool LoadMemory(string filePath, FileAccess fileAccess, FileShare fileShare)
         {
 #if UNITY_WEBGL && !UNITY_EDITOR
@@ -536,6 +579,53 @@ namespace DaggerfallConnect.Utility
             }
             else
             {
+#if UNITY_PSP2
+                // Each lookup in ARENA2 (1443 entries) costs ~90 ms on the Vita, and File.Exists + File.Open was two: the inventory read ~15
+                // UI images (+ ART_PAL.COL before each) and took 3 s to open. So: open directly (a missing file still returns
+                // false), and keep small read-only UI files after the first read (copies handed out, so callers can't change the cached one)
+                byte[] cached;
+                bool level = fileAccess == FileAccess.Read && fileName.StartsWith("TEXTURE.", StringComparison.OrdinalIgnoreCase);
+                bool cacheable = level || (fileAccess == FileAccess.Read && IsVitaCachedFile(fileName));
+                Dictionary<string, byte[]> cache = level ? vitaLevelCache : vitaFileCache;
+                if (cacheable && cache.TryGetValue(fileName.ToUpperInvariant(), out cached))
+                {
+                    // TEXTURE.### is only read (TextureFile never writes into it), so it is shared: the per-hit copy was ~21 ms
+                    fileBuffer = level ? cached : (byte[])cached.Clone();
+                }
+                else
+                {
+                    // Small ARENA2 files come from one pack on app0: (VitaFilePack): no 40-370 ms ARENA2 lookup on the first read
+                    fileBuffer = !level && cacheable ? VitaFilePack.Read(filePath) : null;
+                    if (fileBuffer == null)
+                    {
+                        try
+                        {
+                            using (FileStream file = File.Open(filePath, FileMode.Open, fileAccess, fileShare))
+                            {
+                                fileBuffer = new byte[file.Length];
+                                if (file.Length != file.Read(fileBuffer, 0, (int)file.Length))
+                                    return false;
+                            }
+                        }
+                        catch (Exception e)
+                        {
+                            myLastException = e;
+                            Console.WriteLine(e.Message);
+                            return false;
+                        }
+                    }
+                    if (level && fileBuffer.Length <= vitaLevelCacheMaxFile && vitaLevelCacheBytes + fileBuffer.Length <= vitaLevelCacheLimit)
+                    {
+                        vitaLevelCache[fileName.ToUpperInvariant()] = fileBuffer;
+                        vitaLevelCacheBytes += fileBuffer.Length;
+                    }
+                    else if (!level && cacheable && fileBuffer.Length <= vitaFileCacheMaxFile && vitaFileCacheBytes + fileBuffer.Length <= vitaFileCacheLimit)
+                    {
+                        vitaFileCache[fileName.ToUpperInvariant()] = (byte[])fileBuffer.Clone();
+                        vitaFileCacheBytes += fileBuffer.Length;
+                    }
+                }
+#else
                 // File must exist
                 if (!File.Exists(filePath))
                     return false;
@@ -557,6 +647,7 @@ namespace DaggerfallConnect.Utility
                     Console.WriteLine(e.Message);
                     return false;
                 }
+#endif
             }
 
             // Store filename

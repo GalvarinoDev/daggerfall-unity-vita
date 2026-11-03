@@ -94,11 +94,22 @@ namespace DaggerfallWorkshop.Game
                 filename = fileNoExt + localizedFilenameSuffix + fileExtension;
 
             // Seek localized book file from mods
+#if UNITY_PSP2
+            TextAsset _;
+            if (ModManager.Instance != null && ModManager.Instance.TryGetAsset(filename, false, out _))
+#else
             if (ModManager.Instance != null && ModManager.Instance.TryGetAsset(filename, false, out TextAsset _))
+#endif
             {
                 return true;
             }
 
+#if UNITY_PSP2 && !UNITY_EDITOR
+            // The bake took every -LOC file (VitaLocBooks): no File.Exists on the card
+            bool? vitaExists = VitaLocBooks.Exists(filename);
+            if (vitaExists.HasValue)
+                return vitaExists.Value;
+#endif
             // Get path to localized book file and check it exists
             string path = Path.Combine(Application.streamingAssetsPath, textFolderName, booksFolderName, filename);
             return File.Exists(path);
@@ -166,7 +177,12 @@ namespace DaggerfallWorkshop.Game
             string[] lines = null;
 
             // Seek localized book file from mods
+#if UNITY_PSP2
+            TextAsset textAsset;
+            if (ModManager.Instance != null && ModManager.Instance.TryGetAsset(filename, false, out textAsset))
+#else
             if (ModManager.Instance != null && ModManager.Instance.TryGetAsset(filename, false, out TextAsset textAsset))
+#endif
             {
                 if (!string.IsNullOrWhiteSpace(textAsset.text))
                 {
@@ -174,6 +190,15 @@ namespace DaggerfallWorkshop.Game
                 }
             }
 
+#if UNITY_PSP2 && !UNITY_EDITOR
+            // Baked by VitaLocBookBaker (VitaLocBooks, item 12): the parsed fields, no file read or tag parse
+            if (lines == null)
+            {
+                bool? vitaApplied = VitaLocBooks.Apply(this, filename);
+                if (vitaApplied.HasValue)
+                    return vitaApplied.Value;
+            }
+#endif
             if (lines == null)
             {
                 // Get path to localized book file and check it exists

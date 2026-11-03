@@ -629,7 +629,13 @@ namespace DaggerfallWorkshop.Game.Entity
                 var enterExit = GameManager.Instance.PlayerEnterExit;
                 if (enterExit.IsPlayerInside && (enterExit.IsPlayerInsideOpenShop || enterExit.IsPlayerInsideTavern || enterExit.IsPlayerInsideResidence))
                 {
+#if UNITY_PSP2
+                    Vector3 lowestDoorPos;
+                    Vector3 lowestDoorNormal;
+                    if (enterExit.Interior.FindLowestOuterInteriorDoor(out lowestDoorPos, out lowestDoorNormal))
+#else
                     if (enterExit.Interior.FindLowestOuterInteriorDoor(out Vector3 lowestDoorPos, out Vector3 lowestDoorNormal))
+#endif
                     {
                         lowestDoorPos += lowestDoorNormal * (GameManager.Instance.PlayerController.radius + 0.1f);
                         int guardCount = UnityEngine.Random.Range(2, 6);

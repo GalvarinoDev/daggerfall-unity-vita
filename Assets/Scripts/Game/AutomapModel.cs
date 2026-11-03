@@ -76,16 +76,36 @@ namespace DaggerfallWorkshop
 
         private void UpdateMaterialsOfMeshRenderer(Vector3 playerAdvancedPos, Material automapMaterial, MeshRenderer meshRenderer, bool visitedInThisEntering = false)
         {
+#if UNITY_PSP2
+            // Read the shared materials once: the .materials getter cloned every material of the renderer (all replaced right
+            // below, so the clones were orphans until the next UnloadUnusedAssets) and made a new array per call
+            Material[] curMaterials = meshRenderer.sharedMaterials;
+            Material[] newMaterials = new Material[curMaterials.Length];
+            for (int i = 0; i < curMaterials.Length; i++)
+            {
+                Material curMaterial = curMaterials[i];
+#else
             Material[] newMaterials = new Material[meshRenderer.materials.Length];
             for (int i = 0; i < meshRenderer.materials.Length; i++)
             {
                 Material curMaterial = meshRenderer.materials[i];
+#endif
+#if UNITY_PSP2
+                bool vitaPalette = curMaterial.HasProperty(VitaPalette.PaletteTex);
+                Material newMaterial = Instantiate(vitaPalette ? VitaPaletteTemplate(automapMaterial) : automapMaterial);
+#else
                 Material newMaterial = Instantiate(automapMaterial);
+#endif
 
                 //newMaterial.CopyPropertiesFromMaterial(material);
                 newMaterial.name = "AutomapBelowSclicePlane injected for: " + curMaterial.name;
                 if (curMaterial.HasProperty(Uniforms.MainTex))
                     newMaterial.SetTexture(Uniforms.MainTex, curMaterial.GetTexture(Uniforms.MainTex));
+#if UNITY_PSP2
+                // Palette-index textures (VitaPalette) need the automap shader's palette variant
+                if (vitaPalette)
+                    newMaterial.SetTexture(VitaPalette.PaletteTex, curMaterial.GetTexture(VitaPalette.PaletteTex));
+#endif
                 if (curMaterial.HasProperty(Uniforms.BumpMap))
                     newMaterial.SetTexture(Uniforms.BumpMap, curMaterial.GetTexture(Uniforms.BumpMap));
                 if (curMaterial.HasProperty(Uniforms.EmissionMap))
@@ -102,5 +122,27 @@ namespace DaggerfallWorkshop
             }
             meshRenderer.materials = newMaterials;
         }
+
+#if UNITY_PSP2
+        // automapMaterial with the palette shader, made once per frame (all models inject in the same frame), instead of a
+        // Shader.Find + shader swap on every injected material
+        static Material vitaPaletteTemplate;
+        static Material vitaPaletteTemplateSource;
+        static int vitaPaletteTemplateFrame = -1;
+
+        static Material VitaPaletteTemplate(Material automapMaterial)
+        {
+            if (vitaPaletteTemplate == null || vitaPaletteTemplateSource != automapMaterial || vitaPaletteTemplateFrame != Time.frameCount)
+            {
+                if (vitaPaletteTemplate != null)
+                    Destroy(vitaPaletteTemplate);
+                vitaPaletteTemplate = Instantiate(automapMaterial);
+                vitaPaletteTemplate.shader = Shader.Find(VitaPalette.AutomapShaderName);
+                vitaPaletteTemplateSource = automapMaterial;
+                vitaPaletteTemplateFrame = Time.frameCount;
+            }
+            return vitaPaletteTemplate;
+        }
+#endif
     }
 }

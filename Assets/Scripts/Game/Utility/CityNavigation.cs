@@ -208,7 +208,11 @@ namespace DaggerfallWorkshop.Game.Utility
         /// <param name="blockData">RMB block data.</param>
         /// <param name="xBlock">X block to set.</param>
         /// <param name="yBlock">Y block to set.</param>
+#if UNITY_PSP2
+        public void SetRMBData(DFBlock blockData, int xBlock, int yBlock)
+#else
         public void SetRMBData(in DFBlock blockData, int xBlock, int yBlock)
+#endif
         {
             // Validate
             if (xBlock < 0 || xBlock >= cityWidth ||

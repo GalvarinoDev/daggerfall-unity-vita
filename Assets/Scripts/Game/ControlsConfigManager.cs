@@ -53,7 +53,11 @@ namespace DaggerfallWorkshop.Game
 
         #region Public Properties
 
+#if UNITY_PSP2
+        public static string ElongatedButtonText { get { return "..."; } }
+#else
         public static string ElongatedButtonText { get => "..."; }
+#endif
 
         public bool UsingPrimary { get; set; } = true;
 
@@ -61,7 +65,11 @@ namespace DaggerfallWorkshop.Game
 
         #region Private Properties
 
+#if UNITY_PSP2
+        private int maxButtonTextLength { get { return DaggerfallUnity.Settings.SDFFontRendering ? 16 : 10; } }
+#else
         private int maxButtonTextLength { get => DaggerfallUnity.Settings.SDFFontRendering ? 16 : 10; }
+#endif
 
         private Dictionary<InputManager.Actions, string> CurrentUnsavedKeybindDict
         {

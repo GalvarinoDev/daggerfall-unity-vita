@@ -104,6 +104,12 @@ namespace DaggerfallConnect.Arena2
                 !filePath.EndsWith("POLITIC.PAK", StringComparison.InvariantCultureIgnoreCase))
                 return false;
 
+#if UNITY_PSP2 && !UNITY_EDITOR
+            // Baked (VitaMaps.cs): the unrolled buffer
+            if (VitaMaps.ReadPak(Path.GetFileName(filePath), pakExtractedBuffer))
+                return true;
+#endif
+
             // Load file
             if (!managedFile.Load(filePath, FileUsage.UseMemory, true))
                 return false;

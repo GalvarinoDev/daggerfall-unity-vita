@@ -20,7 +20,9 @@ using DaggerfallWorkshop.Game.UserInterfaceWindows;
 using DaggerfallWorkshop.Game.Questing.Actions;
 using DaggerfallWorkshop.Game.Serialization;
 using DaggerfallWorkshop.Game.Utility.ModSupport;
+#if !UNITY_PSP2
 using UnityEngine.Localization.Settings;
+#endif
 using System.Globalization;
 
 namespace DaggerfallWorkshop.Game.Questing
@@ -643,6 +645,12 @@ namespace DaggerfallWorkshop.Game.Questing
         /// <returns>Quest object if successfully parsed, otherwise null.</returns>
         private Quest ParseQuest(string questName)
         {
+#if UNITY_PSP2 && !UNITY_EDITOR
+            // Baked by VitaQuestBaker (VitaQuests, item 12): no file read or text split
+            VitaQuests.Split vitaSplit = VitaQuests.Read(QuestSourceFolder, questName);
+            if (vitaSplit != null)
+                return VitaParseQuest(questName, vitaSplit);
+#endif
             string[] source = GetQuestSourceText(questName);
             if (source == null || source.Length == 0)
             {
@@ -686,6 +694,34 @@ namespace DaggerfallWorkshop.Game.Questing
                 return null;
             }
         }
+
+#if UNITY_PSP2
+        /// <summary>
+        /// Vita: ParseQuest(questName, questSource, ...) from a baked split (VitaQuests): same seed step, log lines and failure handling.
+        /// </summary>
+        public Quest VitaParseQuest(string questName, VitaQuests.Split split, int factionId = 0, bool partialParse = false)
+        {
+            LogFormat("\r\n\r\nParsing quest {0}", questName);
+
+            UnityEngine.Random.InitState(internalSeed.Next());
+
+            try
+            {
+                Parser parser = new Parser();
+                Quest quest = parser.VitaParse(split, factionId, partialParse);
+                if (ParseLocalizedQuestText(questName))
+                    quest.DisplayName = GetLocalizedQuestDisplayName(questName);
+
+                return quest;
+            }
+            catch (Exception ex)
+            {
+                LogFormat("Parsing quest {0} FAILED!\r\n{1}", questName, ex.Message);
+
+                return null;
+            }
+        }
+#endif
 
         /// <summary>
         /// Localized quest messages need to be restored when game is loaded.
@@ -1659,7 +1695,12 @@ namespace DaggerfallWorkshop.Game.Questing
             string[] lines = null;
 
             // Seek localized quest file from mods
+#if UNITY_PSP2
+            TextAsset textAsset;
+            if (ModManager.Instance != null && ModManager.Instance.TryGetAsset(filename, false, out textAsset))
+#else
             if (ModManager.Instance != null && ModManager.Instance.TryGetAsset(filename, false, out TextAsset textAsset))
+#endif
             {
                 if (!string.IsNullOrWhiteSpace(textAsset.text))
                 {
@@ -1707,7 +1748,11 @@ namespace DaggerfallWorkshop.Game.Questing
             }
 
             // Get string database
+#if UNITY_PSP2
+            var stringTable = TextProvider.GetVitaStringTable(TextManager.Instance.runtimeQuestsStrings);
+#else
             var stringTable = LocalizationSettings.StringDatabase.GetTable(TextManager.Instance.runtimeQuestsStrings);
+#endif
             if (stringTable == null)
             {
                 Debug.LogErrorFormat("ParseLocalizedQuestText() failed to get string table `{0}`.", TextManager.Instance.runtimeQuestsStrings);
@@ -1718,9 +1763,14 @@ namespace DaggerfallWorkshop.Game.Questing
             foreach(var item in messages)
             {
                 string key = fileNoExt + "." + item.Key.ToString();
+#if UNITY_PSP2
+                if (!stringTable.ContainsKey(key))
+                    stringTable.Add(key, item.Value);
+#else
                 var targetEntry = stringTable.GetEntry(key);
                 if (targetEntry == null)
                     stringTable.AddEntry(key, item.Value);
+#endif
             }
 
             // Store localized display name

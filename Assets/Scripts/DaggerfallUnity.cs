@@ -418,6 +418,11 @@ namespace DaggerfallWorkshop
             RaiseOnReadyEvent();
         }
 
+#if UNITY_PSP2
+        static ContentReader vitaSharedReader;
+        static string vitaSharedReaderPath;
+
+#endif
         private void SetupContentReaders(bool force = false)
         {
             if (reader == null || force)
@@ -426,7 +431,21 @@ namespace DaggerfallWorkshop
                 if (isPathValidated)
                 {
                     DaggerfallUnity.LogMessage(string.Format("Setting up content readers with arena2 path '{0}'.", Arena2Path));
+#if UNITY_PSP2
+                    // Each scene (VitaBoot, startup, game) has its own DaggerfallUnity, and each built the readers again (~1.6 s each on the
+                    // still get a new one. Safe because only the game scene uses the readers' data in play.
+                    if (!force && vitaSharedReader != null && vitaSharedReaderPath == Arena2Path)
+                        reader = vitaSharedReader;
+                    else
+                    {
+                        VitaMemory.Mark("before ContentReader");
+                        reader = vitaSharedReader = new ContentReader(Arena2Path);
+                        vitaSharedReaderPath = Arena2Path;
+                        VitaMemory.Mark("ContentReader");
+                    }
+#else
                     reader = new ContentReader(Arena2Path);
+#endif
                 }
                 else
                 {
@@ -471,11 +490,24 @@ namespace DaggerfallWorkshop
                 return string.Empty;
         }
 
+#if UNITY_PSP2
+        // Each validation lists ARENA2 (~1400 entries) seven times; on Vita that ran again on every scene load
+        static string validatedArena2Path;
+
+#endif
         public static bool ValidateArena2Path(string path)
         {
+#if UNITY_PSP2
+            if (path != null && path == validatedArena2Path)
+                return true;
+#endif
             DFValidator.ValidationResults results;
             DFValidator.ValidateArena2Folder(path, out results);
 
+#if UNITY_PSP2
+            if (results.AppearsValid)
+                validatedArena2Path = path;
+#endif
             return results.AppearsValid;
         }
 
@@ -503,6 +535,11 @@ namespace DaggerfallWorkshop
         /// </summary>
         internal void PruneCache()
         {
+#if UNITY_PSP2
+            // Vita: MeshReader keeps every model's vertex data (managed arrays) for good; runs at each world init, after the old area is gone
+            MeshReader.ClearCache();
+            DaggerfallConnect.Utility.FileProxy.VitaClearLevelCache();
+#endif
             if (Settings.AssetCacheThreshold == 0)
                 return;
 

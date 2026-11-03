@@ -12,6 +12,11 @@ namespace DaggerfallWorkshop.AudioSynthesis.Bank.Components
         private double cutOff;
         private double resonance;
         private bool coeffUpdateRequired;
+#if UNITY_PSP2
+        // Vita: GenerateFilterCoeff ran per voice per block (~375/s each, up to 40 voices) with a new float[4] each time: ~80% of the
+        // dungeon's per-frame garbage. Callers copy it out at once.
+        private readonly float[] coeffScratch = new float[4];
+#endif
 
         public FilterTypeEnum FilterMethod
         {
@@ -171,7 +176,12 @@ namespace DaggerfallWorkshop.AudioSynthesis.Bank.Components
         private float[] GenerateFilterCoeff(double fc, double q)
         {
             fc = SynthHelper.Clamp(fc, Synthesizer.DenormLimit, .49);
+#if UNITY_PSP2
+            float[] coeff = coeffScratch;
+            Array.Clear(coeff, 0, coeff.Length);
+#else
             float[] coeff = new float[4];
+#endif
             switch (filterType)
             {
                 case FilterTypeEnum.BiquadLowpass:

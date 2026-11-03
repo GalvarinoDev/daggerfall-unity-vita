@@ -1,3 +1,6 @@
+#if UNITY_PSP2 // Client.Embed is missing in 2017.4: leave this editor tool out
+#undef UNITY_2017_3_OR_NEWER
+#endif
 using UnityEditor.PackageManager;
 using UnityEngine;
 
