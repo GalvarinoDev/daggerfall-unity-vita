@@ -153,6 +153,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
 #if UNITY_PSP2
         HorizontalSlider vitaTextureLimit;
         HorizontalSlider vitaGpuMode;
+        HorizontalSlider vitaFrameLimit;
 #endif
         HorizontalSlider guiFilterMode;
         HorizontalSlider videoFilterMode;
@@ -381,6 +382,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             vitaTextureLimit = AddSlider(leftPanel, "vitaTextureLimit", DaggerfallUnity.Settings.VitaTextureLimit, "Full", "Half", "Quarter");
             vitaGpuMode = AddSlider(leftPanel, "vitaGpuMode", System.Array.IndexOf(VitaPower.MenuOrder, DaggerfallUnity.Settings.VitaGpuMode),
                 System.Array.ConvertAll(VitaPower.MenuOrder, m => VitaPower.ModeNames[m]));
+            vitaFrameLimit = AddSlider(leftPanel, "vitaFrameLimit", DaggerfallUnity.Settings.VitaFrameLimit, "Unlocked", "30 FPS");
 #endif
 
             y = 0;
@@ -555,6 +557,8 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             DaggerfallUnity.Settings.VitaTextureLimit = vitaTextureLimit.ScrollIndex;
             DaggerfallUnity.Settings.VitaGpuMode = VitaPower.MenuOrder[vitaGpuMode.ScrollIndex];
             VitaPower.Apply();
+            DaggerfallUnity.Settings.VitaFrameLimit = vitaFrameLimit.ScrollIndex;
+            QualitySettings.vSyncCount = DaggerfallUnity.Settings.VitaFrameLimit == 1 ? 2 : DaggerfallUnity.Settings.VSync ? 1 : 0;
 #endif
 
             DaggerfallUnity.Settings.FieldOfView = fovSlider.Value;

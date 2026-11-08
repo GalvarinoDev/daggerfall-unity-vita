@@ -138,6 +138,7 @@ public class VitaLoadingWindow : DaggerfallBaseWindow
     {
         base.OnPop();
         Showing = false;
+        VitaMemory.IdleCollect("load end");   // last frame behind the picture: play starts with the count at 0
         Debug.LogFormat("VITALOADGC {0} load collections so far", VitaMemory.LoadCollections);
         KeepScreenOn();
         AudioListener.pause = audioWasPaused;

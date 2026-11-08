@@ -60,6 +60,8 @@ namespace DaggerfallWorkshop
         bool vitaClipPlaying;               // last logged clip state (VITAMUSIC)
         float vitaClipStarted = -10f;       // unscaled time of the last clip Play()
         AudioClip vitaClip;                 // loaded VitaMusic clip (Resources), unloaded on the next song
+        bool vitaSourceLoop;                // the AudioSource's own loop flag (the MIDI path's LateUpdate reads it)
+        DaggerfallWorkshop.Game.SongManager vitaSongManager;   // on the same object in the game scene; none on the title
 #endif
         MidiFileSequencer midiSequencer = null;
         string currentMidiName;
@@ -96,6 +98,9 @@ namespace DaggerfallWorkshop
         void Awake()
         {
             audioSource = GetComponent<AudioSource>();
+            if (audioSource)
+                vitaSourceLoop = audioSource.loop;
+            vitaSongManager = GetComponent<DaggerfallWorkshop.Game.SongManager>();
             if (audioSource && audioSource.playOnAwake)
                 PlaySilence();
         }
@@ -179,6 +184,10 @@ namespace DaggerfallWorkshop
                 IsPlaying = audioSource.isPlaying || isLoading;
 #endif
 #if UNITY_PSP2
+                // A pre-rendered song loops in place while SongManager would replay it at its end anyway (a quest's PlaySong song still
+                // ends and hands back to SongManager; no manager = the source's own flag, which upstream's MIDI path loops by). Stopping
+                // and restarting the MP3 stream froze the game 0.4-1.6 s and left 0.4-1.4 s of silence.
+                audioSource.loop = vitaSongManager ? vitaSongManager.VitaReplays(Song) : vitaSourceLoop;
                 if (audioSource.isPlaying != vitaClipPlaying)
                 {
                     vitaClipPlaying = audioSource.isPlaying;
@@ -340,6 +349,7 @@ namespace DaggerfallWorkshop
                 isImported = false;
                 audioSource.Stop();
 #if UNITY_PSP2
+                audioSource.loop = vitaSourceLoop;
                 PlaySilence();
 #else
                 audioSource.clip = null;
@@ -387,6 +397,9 @@ namespace DaggerfallWorkshop
             // Create synthesizer and load bank
             if (midiSynthesizer == null)
             {
+#if UNITY_PSP2
+                gameObject.AddComponent<VitaSongFilter>().Owner = this;
+#endif
                 // Get number of channels
                 if (AudioSettings.driverCapabilities.ToString() == "Mono")
                     channels = 1;
@@ -642,7 +655,13 @@ namespace DaggerfallWorkshop
 
 #endif
         // Called when audio filter needs more sound data
+#if UNITY_PSP2
+        // Called through VitaSongFilter, which only exists once the synth does. A method named OnAudioFilterRead here would run on the
+        // mixer thread for every playing song, pre-rendered ones included, each call with a new float[] from Unity.
+        internal void VitaFilterRead(float[] data, int channels)
+#else
         void OnAudioFilterRead(float[] data, int channels)
+#endif
         {
 #if UNITY_PSP2
             VitaMemory.PinAudioThread();

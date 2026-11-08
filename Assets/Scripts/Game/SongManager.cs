@@ -137,6 +137,17 @@ namespace DaggerfallWorkshop.Game
             get { return songPlayer; }
         }
 
+#if UNITY_PSP2
+        /// <summary>
+        /// Vita: true when UpdateSong would play this song again at its end (music on and it is the current song: the playlist is picked
+        /// from the same context UpdateSong compares every frame). DaggerfallSongPlayer then loops the pre-rendered clip in place.
+        /// </summary>
+        internal bool VitaReplays(SongFiles song)
+        {
+            return playSong && currentSong == song;
+        }
+#endif
+
         #endregion
 
         #region Unity

@@ -25,6 +25,10 @@ namespace DaggerfallWorkshop.Utility
         public float FramesPerSecond = 12;
 
         bool restartAnims;
+#if UNITY_PSP2
+        static readonly int BumpMapId = Shader.PropertyToID("_BumpMap");
+        static readonly int EmissionMapId = Shader.PropertyToID("_EmissionMap");
+#endif
 
         void Start()
         {
@@ -49,6 +53,23 @@ namespace DaggerfallWorkshop.Utility
         IEnumerator AnimateTextures()
         {
             int currentTexture = 0;
+#if UNITY_PSP2
+            // Every tick of every animated model: no new WaitForSeconds, no string property lookups (garbage at 12 Hz x 26 models)
+            WaitForSeconds wait = new WaitForSeconds(1f / FramesPerSecond);
+            while (true)
+            {
+                if (AnimationFrames != null && TargetMaterial != null)
+                {
+                    TargetMaterial.mainTexture = AnimationFrames[currentTexture].albedoMap;
+                    TargetMaterial.SetTexture(BumpMapId, AnimationFrames[currentTexture].normalMap);
+                    TargetMaterial.SetTexture(EmissionMapId, AnimationFrames[currentTexture].emissionMap);
+                    if (++currentTexture >= AnimationFrames.Length)
+                        currentTexture = 0;
+                }
+
+                yield return wait;
+            }
+#else
             while (true)
             {
                 if (AnimationFrames != null && TargetMaterial != null)
@@ -62,6 +83,7 @@ namespace DaggerfallWorkshop.Utility
 
                 yield return new WaitForSeconds(1f / FramesPerSecond);
             }
+#endif
         }
     }
 }

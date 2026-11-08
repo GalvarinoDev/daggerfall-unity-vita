@@ -45,6 +45,8 @@ namespace DaggerfallWorkshop.Game
 #if UNITY_PSP2
             Lighten(RainParticles);
             Lighten(SnowParticles);
+            VitaFindBoxes();
+            VitaSetBox(VitaWeatherBox);
             if (VitaGroundPlane)
             {
                 Transform ground = new GameObject("VitaWeatherGround").transform;
@@ -73,6 +75,50 @@ namespace DaggerfallWorkshop.Game
         const float density = 0.3f;
         public static bool VitaGroundPlane = true;
         const int maxParticles = 1500;
+
+        // Trial s71 (revert candidate): the emitters are boxes 150 m (snow) and 100 m (rain) across around the player, so most particles
+        // fall 40-75 m away as 1-2 pixel specks in the weather fog, and the cost follows the particle count (snow at half rate won back
+        // ~2/3 of its ~4 FPS, collision off nothing: s71 snow1). A smaller box with the rate cut by the area ratio keeps the density near
+        // the player the same.
+        public static bool VitaWeatherBox = true;
+        const float vitaSnowBox = 80, vitaRainBox = 60;
+        ParticleSystem[] vitaBoxSystems;
+        Vector3[] vitaBoxScales;
+        float[] vitaBoxRates;
+
+        void VitaFindBoxes()
+        {
+            var systems = new System.Collections.Generic.List<ParticleSystem>();
+            foreach (GameObject weather in new[] { RainParticles, SnowParticles })
+                if (weather)
+                    foreach (ParticleSystem particles in weather.GetComponentsInChildren<ParticleSystem>(true))
+                        if (particles.shape.enabled && particles.shape.shapeType == ParticleSystemShapeType.Box && particles.emission.rateOverTimeMultiplier > 0)
+                            systems.Add(particles);
+            vitaBoxSystems = systems.ToArray();
+            vitaBoxScales = new Vector3[vitaBoxSystems.Length];
+            vitaBoxRates = new float[vitaBoxSystems.Length];
+            for (int i = 0; i < vitaBoxSystems.Length; i++)
+            {
+                vitaBoxScales[i] = vitaBoxSystems[i].shape.scale;
+                vitaBoxRates[i] = vitaBoxSystems[i].emission.rateOverTimeMultiplier;
+            }
+        }
+
+        public void VitaSetBox(bool small)
+        {
+            if (vitaBoxSystems == null)
+                return;
+            for (int i = 0; i < vitaBoxSystems.Length; i++)
+            {
+                Vector3 scale = vitaBoxScales[i];
+                float size = SnowParticles && vitaBoxSystems[i].transform.IsChildOf(SnowParticles.transform) ? vitaSnowBox : vitaRainBox;
+                bool shrink = small && scale.x > size && scale.z > size;
+                var shape = vitaBoxSystems[i].shape;
+                shape.scale = shrink ? new Vector3(size, scale.y, size) : scale;
+                var emission = vitaBoxSystems[i].emission;
+                emission.rateOverTimeMultiplier = shrink ? vitaBoxRates[i] * size * size / (scale.x * scale.z) : vitaBoxRates[i];
+            }
+        }
 
         static void Lighten(GameObject weather)
         {

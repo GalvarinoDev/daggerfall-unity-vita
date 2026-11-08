@@ -199,6 +199,12 @@ namespace DaggerfallWorkshop.Game.UserInterface
                 SetCurrentQuest(QuestMachine.Instance.GetQuest(allQuests[0]));
             }
 
+#if UNITY_PSP2
+            // Hidden labels get new text 10 times a second otherwise (formatted strings + a label layout per tick: 12 KB, 3/4 of all standing garbage)
+            if (displayState == DisplayState.Nothing)
+                return;
+#endif
+
             // Update task and timer status
             UpdateQuestStatus();
         }

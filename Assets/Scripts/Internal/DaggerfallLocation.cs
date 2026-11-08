@@ -162,6 +162,73 @@ namespace DaggerfallWorkshop
             lastCityLightsFlag = dfUnity.WorldTime.Now.IsCityLightsOn;
         }
 
+        /// <summary>
+        /// Vita: ApplyClimateSettings for one newly placed block. Upstream reapplies the whole town after every block of a staged build
+        /// (O(n^2): 16 -> 57 ms per block in Wayrest); the blocks placed before already carry the same settings. The nature batch keeps
+        /// upstream's per-block refresh (its material is rebuilt on the first block only: same archive every time).
+        /// </summary>
+        public void VitaApplyClimateToBlock(GameObject block, bool firstBlock)
+        {
+            if (!ReadyCheck())
+                return;
+
+            foreach (var dm in block.GetComponentsInChildren<DaggerfallMesh>())
+            {
+                switch (ClimateUse)
+                {
+                    case LocationClimateUse.UseLocation:
+                        dm.SetClimate(Summary.Climate, CurrentSeason, WindowTextureStyle);
+                        break;
+                    case LocationClimateUse.Custom:
+                        dm.SetClimate(CurrentClimate, CurrentSeason, WindowTextureStyle);
+                        break;
+                    case LocationClimateUse.Disabled:
+                        dm.DisableClimate(dfUnity);
+                        break;
+                }
+            }
+
+            foreach (var gm in block.GetComponentsInChildren<DaggerfallGroundPlane>())
+            {
+                switch (ClimateUse)
+                {
+                    case LocationClimateUse.UseLocation:
+                        gm.SetClimate(dfUnity, Summary.Climate, CurrentSeason);
+                        break;
+                    case LocationClimateUse.Custom:
+                        gm.SetClimate(dfUnity, CurrentClimate, CurrentSeason);
+                        break;
+                    case LocationClimateUse.Disabled:
+                        gm.SetClimate(dfUnity, ClimateBases.Temperate, ClimateSeason.Summer);
+                        break;
+                }
+            }
+
+            int natureArchive = GetNatureArchive();
+            foreach (var db in block.GetComponentsInChildren<Billboard>())
+            {
+                if (db.Summary.FlatType == FlatTypes.Nature)
+                {
+                    Vector3 offset = Vector3.zero;
+                    offset.y = (db.Summary.Size.y / 2);
+                    db.transform.position -= offset;
+                    db.SetMaterial(natureArchive, db.Summary.Record);
+                    offset.y = (db.Summary.Size.y / 2);
+                    db.transform.position += offset;
+                }
+                else
+                {
+                    db.SetMaterial(db.Summary.Archive, db.Summary.Record);
+                }
+            }
+
+            if (summary.NatureBillboardBatch != null)
+            {
+                summary.NatureBillboardBatch.SetMaterial(natureArchive, firstBlock);
+                summary.NatureBillboardBatch.Apply();
+            }
+        }
+
 #endif
         public void SetLocation(DFLocation location, bool performLayout = true)
         {

@@ -16,6 +16,9 @@ using System.Linq;
 using UnityEngine;
 using DaggerfallConnect.Utility;
 using DaggerfallWorkshop.Utility;
+#if UNITY_PSP2
+using DaggerfallWorkshop.Utility.AssetInjection;
+#endif
 using DaggerfallWorkshop.Game.MagicAndEffects;
 using DaggerfallWorkshop.Game.Serialization;
 using DaggerfallWorkshop.Game.Utility.ModSupport;
@@ -109,6 +112,10 @@ namespace DaggerfallWorkshop.Game.UserInterface
         public SpellIconCollection()
         {
             LoadSpellIconPacks();
+#if UNITY_PSP2
+            if (VitaTryLoadClassicBaked())
+                return;
+#endif
             LoadClassicSpellIcons();
             LoadClassicSpellTargetAndElementIcons();
         }
@@ -297,6 +304,41 @@ namespace DaggerfallWorkshop.Game.UserInterface
         }
 
 #if UNITY_PSP2
+        // Classic icons cut on the PC by VitaSpellIconBaker. False = no bake or a mod replaces them: upstream path. VitaSkipClassicBake is for the bake's in-game check.
+        public static bool VitaSkipClassicBake;
+
+        bool VitaTryLoadClassicBaked()
+        {
+            string bakedPath = Path.Combine(Path.Combine(Application.streamingAssetsPath, "VitaNative"), "spellicons-classic.bin");
+            Texture2D replacement;
+            if (VitaSkipClassicBake || !File.Exists(bakedPath) || TextureReplacement.TryImportImage(spellIconsFile, true, out replacement)
+                || TextureReplacement.TryImportImage(spellTargetAndElementIconsFile, true, out replacement))
+                return false;
+            spellIcons.Clear();
+            spellTargetIcons.Clear();
+            spellElementIcons.Clear();
+            using (BinaryReader reader = new BinaryReader(new MemoryStream(File.ReadAllBytes(bakedPath))))
+            {
+                VitaReadClassicIcons(reader, spellIcons, DaggerfallUnity.Instance.MaterialReader.MainFilterMode);
+                VitaReadClassicIcons(reader, spellTargetIcons, DaggerfallUI.Instance.GlobalFilterMode);
+                VitaReadClassicIcons(reader, spellElementIcons, DaggerfallUI.Instance.GlobalFilterMode);
+            }
+            return true;
+        }
+
+        static void VitaReadClassicIcons(BinaryReader reader, List<Texture2D> icons, FilterMode filterMode)
+        {
+            int width = reader.ReadInt32(), height = reader.ReadInt32(), count = reader.ReadInt32();
+            for (int i = 0; i < count; i++)
+            {
+                Texture2D iconTexture = new Texture2D(width, height, TextureFormat.RGBA32, false);
+                iconTexture.LoadRawTextureData(reader.ReadBytes(width * height * 4));
+                iconTexture.Apply(false, false);    // readable, as GetSubTexture leaves them
+                iconTexture.filterMode = filterMode;
+                icons.Add(iconTexture);
+            }
+        }
+
         // Baked packs whose icons are loaded on first use (VitaGetPackIcon)
         readonly Dictionary<SpellIconPack, string> vitaBakedPacks = new Dictionary<SpellIconPack, string>();
 

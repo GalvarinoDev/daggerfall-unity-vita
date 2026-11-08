@@ -284,6 +284,8 @@ namespace DaggerfallWorkshop.Game.Utility
             // Before any world texture is made: see SettingsManager.VitaTextureLimit
             QualitySettings.masterTextureLimit = DaggerfallUnity.Settings.VitaTextureLimit;
             QualitySettings.pixelLightCount = DaggerfallUnity.Settings.VitaPixelLights;
+            if (DaggerfallUnity.Settings.VitaFrameLimit == 1)
+                QualitySettings.vSyncCount = 2;
 #endif
 
             // Filter settings

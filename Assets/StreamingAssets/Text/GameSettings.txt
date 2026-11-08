@@ -167,6 +167,8 @@ vitaTextureLimit,                                   Texture Size
 vitaTextureLimitInfo,                               Smaller textures use less memory (PS Vita)
 vitaGpuMode,                                        CPU/GPU Speed
 vitaGpuModeInfo,                                    Fast modes = more FPS and more battery use. No Wi-Fi: Wi-Fi may stay off after quitting (PS Vita)
+vitaFrameLimit,                                     Frame Rate
+vitaFrameLimitInfo,                                 30 FPS = even frame times and smoother motion but a lower top speed (PS Vita)
 guiFilterMode,                                      GUI Filter
 guiFilterModeInfo,                                  Filter for HUD images
 videoFilterMode,                                    Video Filter

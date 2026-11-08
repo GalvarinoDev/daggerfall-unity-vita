@@ -59,6 +59,13 @@ namespace DaggerfallWorkshop.Game.Entity
             SetEntityType(EntityType);
         }
 
+#if UNITY_PSP2
+        void OnEnable()
+        {
+            ActiveGameObjectDatabase.VitaEnemyMayHaveJoined();  // the shared enemy list rebuilds before its next use
+        }
+#endif
+
         void FixedUpdate()
         {
             Entity.FixedUpdate();

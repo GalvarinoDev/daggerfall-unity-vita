@@ -45,6 +45,8 @@ public class VitaFlatBatch : MonoBehaviour
         public MeshRenderer renderer;
         public int firstVertex;
         public int shownFrame;
+        public int frame, frameCount;   // animated: the batch's own frame timer (DaggerfallBillboard.AnimateBillboard's rates)
+        public float interval, nextTick;
     }
 
     /// <summary>Merges root's plain flats per block and material into one camera-facing mesh each.</summary>
@@ -199,8 +201,20 @@ public class VitaFlatBatch : MonoBehaviour
             var item = new Item { billboard = billboard, renderer = billboard.GetComponent<MeshRenderer>(), firstVertex = v0, shownFrame = -1 };
             batch.items.Add(item);
             if (billboard.Summary.AnimatedMaterial)
+            {
+                // Same rates as AnimateBillboard (animals 5, lights 12 frames/s, else the flat's own), on game time like its WaitForSeconds
+                BillboardSummary summary = billboard.Summary;
+                float speed = summary.Archive == TextureReader.AnimalsTextureArchive ? 5 : summary.Archive == TextureReader.LightsTextureArchive ? 12 : billboard.FramesPerSecond;
+                item.frameCount = Mathf.Max(summary.AtlasIndices[summary.Record].frameCount, 1);
+                item.interval = speed > 0 ? 1f / speed : float.MaxValue;
+                item.nextTick = Time.time + item.interval;
                 batch.animated.Add(item);
+            }
             item.renderer.enabled = false;
+            // Its Update and animation coroutine only count frames for a hidden renderer: 348 of them cost ~2.5 ms a frame in Daggerfall
+            // castle (s71 dfab1), and 260 were animated (torches, candles), so the batch keeps their frame timers instead
+            billboard.StopAllCoroutines();
+            billboard.enabled = false;
         }
         MeshRenderer first = billboards[0].GetComponent<MeshRenderer>();
         MakeMesh(go, batch, material, vertices, tangents, normals, triangles, min, max, reach, height, first.shadowCastingMode, first.receiveShadows);
@@ -248,7 +262,7 @@ public class VitaFlatBatch : MonoBehaviour
     /// sizeRecord: the record whose size the quad takes (-1 = its own); anyType: also nature archives (fixed records, no climate swap).
     public static bool AddCityFlat(int archive, int record, Vector3 position, int sizeRecord = -1, bool anyType = false)
     {
-        if (!DaggerfallUnity.Settings.VitaFlatBatch || (!anyType && MaterialReader.GetFlatType(archive) != FlatTypes.Decoration) || RDBLayout.IsNPCFlat(archive) ||
+        if (!DaggerfallUnity.Settings.VitaFlatBatch || (!anyType && MaterialReader.GetFlatType(archive) != FlatTypes.Decoration && !IsSilentAnimal(archive, record)) || RDBLayout.IsNPCFlat(archive) ||
             DaggerfallWorkshop.Game.PlayerActivate.HasCustomActivation(archive, record) || HasImportedTexture(archive, record))
             return false;
         MaterialReader reader = DaggerfallUnity.Instance.MaterialReader;
@@ -278,6 +292,13 @@ public class VitaFlatBatch : MonoBehaviour
             pendingCity.Add(source, list = new List<CityFlat>());
         list.Add(flat);
         return true;
+    }
+
+    // Animal records GameObjectHelper.AddAnimalAudioSource gives no sound: with one frame, nothing sets them apart from a decoration. Hammerfell
+    // towns place 150-240 of record 2, each its own object, draw and Update (Bergama 38.4 FPS, about 45-50 us a flat in view).
+    static bool IsSilentAnimal(int archive, int record)
+    {
+        return archive == DaggerfallWorkshop.Utility.TextureReader.AnimalsTextureArchive && (record == 2 || record > 10);
     }
 
     public const int WinterCropArchive = 511, WinterCropRecord = 22;
@@ -472,7 +493,8 @@ public class VitaFlatBatch : MonoBehaviour
 
         if (!shown)
             return;
-        // Animated flats: the billboard's timer still runs (its renderer is off, so it only counts frames); show its current frame
+        // Animated flats: step each frame timer, show its current frame
+        float now = Time.time;
         foreach (Batch batch in batches)
         {
             bool changed = false;
@@ -480,8 +502,16 @@ public class VitaFlatBatch : MonoBehaviour
             {
                 if (!item.billboard)
                     continue;
+                if (now - item.nextTick > 1f)
+                    item.nextTick = now;      // a long pause or load: don't spin through the missed frames
+                while (now >= item.nextTick)
+                {
+                    if (++item.frame >= item.frameCount)
+                        item.frame = 0;
+                    item.nextTick += item.interval;
+                }
                 BillboardSummary summary = item.billboard.Summary;
-                int frame = Mathf.Max(summary.CurrentFrame - 1, 0);     // AnimateBillboard draws CurrentFrame, then counts on
+                int frame = item.frame;
                 if (frame == item.shownFrame)
                     continue;
                 item.shownFrame = frame;
@@ -505,8 +535,16 @@ public class VitaFlatBatch : MonoBehaviour
         {
             batch.renderer.enabled = on;
             foreach (Item item in batch.items)
+            {
                 if (item.renderer)
                     item.renderer.enabled = !on;
+                if (item.billboard)
+                {
+                    item.billboard.enabled = !on;   // shown as billboards again: they face the camera and animate themselves
+                    if (on)
+                        item.billboard.StopAllCoroutines();
+                }
+            }
             foreach (Item item in batch.animated)
                 item.shownFrame = -1;
         }

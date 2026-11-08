@@ -460,6 +460,18 @@ namespace DaggerfallWorkshop.Game
                     ambientSounds = null;
                     break;
             }
+#if UNITY_PSP2
+            // Build the preset's sounds now, while the area loads: SoundReader makes each sound's float[] on first play, and these are
+            // the biggest (wind/moan/roar 110-276 KB of garbage each in play)
+            if (ambientSounds != null)
+                foreach (SoundClips clip in ambientSounds)
+                    dfAudioSource.GetAudioClip((int)clip);
+            if (Presets == AmbientSoundPresets.Dungeon)
+            {
+                dfAudioSource.GetAudioClip((int)SoundClips.WaterGentle);
+                dfAudioSource.GetAudioClip((int)SoundClips.AmbientWaterBubbles);
+            }
+#endif
 
             lastPresets = Presets;
         }

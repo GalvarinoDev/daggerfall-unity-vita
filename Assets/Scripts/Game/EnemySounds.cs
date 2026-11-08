@@ -73,7 +73,21 @@ namespace DaggerfallWorkshop.Game
 
             // Start attract timer
             StartWaiting();
+#if UNITY_PSP2
+            // Build the shared combat sounds now (enemies are made behind the loading screen): SoundReader makes each sound's float[]
+            // on first play, 20-70 KB of garbage per sound in fight frames. Cached after the first enemy, so the rest only look up.
+            foreach (SoundClips clip in vitaCombatSounds)
+                dfAudioSource.GetAudioClip((int)clip);
+#endif
         }
+
+#if UNITY_PSP2
+        static readonly SoundClips[] vitaCombatSounds = {
+            SoundClips.Hit1, SoundClips.Hit2, SoundClips.Hit3, SoundClips.Hit4, SoundClips.Hit5,
+            SoundClips.Parry1, SoundClips.Parry2, SoundClips.Parry3, SoundClips.Parry4, SoundClips.Parry5, SoundClips.Parry6, SoundClips.Parry7, SoundClips.Parry8, SoundClips.Parry9,
+            SoundClips.SwingLowPitch, SoundClips.SwingMediumPitch, SoundClips.SwingHighPitch, SoundClips.BodyFall,
+        };
+#endif
 
         void FixedUpdate()
         {

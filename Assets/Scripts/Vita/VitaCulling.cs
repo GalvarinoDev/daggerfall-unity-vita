@@ -44,6 +44,68 @@ public class VitaCulling : MonoBehaviour
     static readonly Dictionary<GameObject, TownRenderer[]> towns = new Dictionary<GameObject, TownRenderer[]>();
     static readonly List<GameObject> deadTowns = new List<GameObject>();
 
+    // A town built in play renders with its pre-atlas materials for the whole 10-15 s build before AddTown takes it over (Wayrest's
+    // neighbour: render 11 -> 19 ms a frame for that window, s70 rn-9). Its far blocks are hidden as they are made; bounds relative to the block.
+    struct PreCulled
+    {
+        public Transform block;
+        public Bounds bounds;
+    }
+    static readonly Dictionary<Renderer, PreCulled> preCulled = new Dictionary<Renderer, PreCulled>();
+    static readonly List<Renderer> preCullDone = new List<Renderer>();
+
+    static bool IsTownRenderer(MeshRenderer renderer, Billboard billboard)
+    {
+        return billboard ? billboard.Summary.FlatType != FlatTypes.Editor :
+            renderer.name == "CombinedModels" || renderer.name == "Merged" || renderer.name == "VitaFlatBatch";
+    }
+
+    // VitaAtlas still takes these in
+    public static bool IsPreCulled(Renderer renderer)
+    {
+        return preCulled.ContainsKey(renderer);
+    }
+
+    public static void PreCullBlock(GameObject block)
+    {
+        float range = DaggerfallUnity.Settings.VitaTownDistance;
+        if (range <= 0 || !GameManager.HasInstance)
+            return;
+        Vector3 player = GameManager.Instance.PlayerObject.transform.position;
+        foreach (MeshRenderer renderer in block.GetComponentsInChildren<MeshRenderer>())
+        {
+            if (!renderer.enabled || !IsTownRenderer(renderer, renderer.GetComponent<Billboard>()))
+                continue;
+            Bounds bounds = renderer.bounds;
+            if (bounds.SqrDistance(player) <= range * range)
+                continue;
+            PreCulled entry;
+            entry.block = block.transform;
+            entry.bounds = bounds;
+            entry.bounds.center -= block.transform.position;
+            preCulled[renderer] = entry;
+            renderer.enabled = false;
+        }
+    }
+
+    // Shows pre-culled renderers the player has come near before their town was registered
+    static void UnPreCull(Vector3 player, float range)
+    {
+        preCullDone.Clear();
+        foreach (var pair in preCulled)
+        {
+            if (!pair.Key || !pair.Value.block)
+                preCullDone.Add(pair.Key);
+            else if (range <= 0 || pair.Value.bounds.SqrDistance(player - pair.Value.block.position) < (range - hysteresis) * (range - hysteresis))
+            {
+                pair.Key.enabled = true;
+                preCullDone.Add(pair.Key);
+            }
+        }
+        foreach (Renderer renderer in preCullDone)
+            preCulled.Remove(renderer);
+    }
+
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     static void Create()
     {
@@ -60,14 +122,26 @@ public class VitaCulling : MonoBehaviour
         foreach (MeshRenderer renderer in location.GetComponentsInChildren<MeshRenderer>(true))
         {
             Billboard billboard = renderer.GetComponent<Billboard>();
-            if (billboard ? billboard.Summary.FlatType == FlatTypes.Editor : renderer.name != "CombinedModels" && renderer.name != "Merged" && renderer.name != "VitaFlatBatch")
+            if (!IsTownRenderer(renderer, billboard))
                 continue;
             TownRenderer town;
             town.renderer = renderer;
             town.billboard = billboard;
-            town.bounds = renderer.bounds;
-            town.bounds.center -= location.transform.position;
-            town.culled = false;
+            PreCulled pre;
+            if (preCulled.TryGetValue(renderer, out pre) && pre.block)
+            {
+                // Hidden since it was made: CullTowns shows it when the player comes near
+                town.bounds = pre.bounds;
+                town.bounds.center += pre.block.position - location.transform.position;
+                town.culled = true;
+                preCulled.Remove(renderer);
+            }
+            else
+            {
+                town.bounds = renderer.bounds;
+                town.bounds.center -= location.transform.position;
+                town.culled = false;
+            }
             list.Add(town);
         }
         towns[location] = list.ToArray();
@@ -129,6 +203,8 @@ public class VitaCulling : MonoBehaviour
         if (playerEnterExit && !playerEnterExit.IsPlayerInside)
         {
             // range 0 (setting off) switches back on what was culled
+            if (preCulled.Count > 0)
+                UnPreCull(GameManager.Instance.PlayerObject.transform.position, DaggerfallUnity.Settings.VitaTownDistance);
             int townsCulled = CullTowns(GameManager.Instance.PlayerObject.transform.position, DaggerfallUnity.Settings.VitaTownDistance);
             TownRenderersCulled = townsCulled;
             if (VitaMemory.Probes && Time.realtimeSinceStartup - lastLog > 10)

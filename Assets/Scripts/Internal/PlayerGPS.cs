@@ -69,6 +69,9 @@ namespace DaggerfallWorkshop
         string locationRevealedByMapItem;
 
         float nearbyObjectsUpdateTimer = 0f;
+#if UNITY_PSP2
+        float vitaNearbyObjectsDue = 0f;
+#endif
         List<NearbyObject> nearbyObjects = new List<NearbyObject>();
 
         Dictionary<int, DiscoveredLocation> discoveredLocations = new Dictionary<int, DiscoveredLocation>();
@@ -355,6 +358,7 @@ namespace DaggerfallWorkshop
             // Check if player is inside actual location rect
             PlayerLocationRectCheck();
 
+#if !UNITY_PSP2
             // Update nearby objects
             nearbyObjectsUpdateTimer += Time.deltaTime;
             if (nearbyObjectsUpdateTimer > refreshNearbyObjectsInterval)
@@ -362,6 +366,7 @@ namespace DaggerfallWorkshop
                 UpdateNearbyObjects();
                 nearbyObjectsUpdateTimer = 0;
             }
+#endif
         }
 
         private void LateUpdate()
@@ -547,6 +552,16 @@ namespace DaggerfallWorkshop
             if (flags == NearbyObjectFlags.None)
                 return null;
 
+#if UNITY_PSP2
+            // Built when asked for, at most as often as upstream's timer: only spells and enchantments read it, and three rebuilds a second
+            // were steady garbage whatever the frame rate
+            if (Time.time >= vitaNearbyObjectsDue)
+            {
+                UpdateNearbyObjects();
+                vitaNearbyObjectsDue = Time.time + refreshNearbyObjectsInterval;
+            }
+
+#endif
             var query =
                 from no in nearbyObjects
                 where ((no.flags & flags) == flags) && no.distance < maxRange && no.gameObject != null && no.gameObject.activeInHierarchy == activeInHierarchy

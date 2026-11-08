@@ -25,6 +25,9 @@ namespace DaggerfallWorkshop.Game.Entity
         protected DaggerfallEntityBehaviour entityBehaviour;
         protected EntityEffectManager entityEffectManager;
         protected MeshRenderer meshRenderer;
+#if UNITY_PSP2
+        bool vitaConcealedSet, vitaConcealed;
+#endif
 
         #region Unity
 
@@ -39,6 +42,13 @@ namespace DaggerfallWorkshop.Game.Entity
                 return;
 
             bool isConcealed = (entityBehaviour && entityBehaviour.Entity.IsMagicallyConcealed);
+#if UNITY_PSP2
+            // Nothing else switches this renderer: write it when the state changes, not per enemy per frame
+            if (vitaConcealedSet && isConcealed == vitaConcealed)
+                return;
+            vitaConcealedSet = true;
+            vitaConcealed = isConcealed;
+#endif
             MakeConcealed(isConcealed);
         }
 

@@ -52,6 +52,8 @@ namespace DaggerfallWorkshop.Game
         // to walk (Palace: ~41 sight rays per frame, ~80 us each in the dev player). false = upstream's length.
         public static bool VitaShortSightRay = true;
         int playerSightFrame = -1;
+        static readonly List<DaggerfallEntityBehaviour> vitaTargets = new List<DaggerfallEntityBehaviour>();
+        static bool vitaInGetTargets;   // TEMP s65 probe
 #endif
         bool targetInEarshot;
         Vector3 directionToTarget;
@@ -263,8 +265,25 @@ namespace DaggerfallWorkshop.Game
 #if UNITY_PSP2
         void FixedUpdate()
         {
+            if (!VitaSenseProbe)
+            {
+                SensesFixedUpdate();
+                return;
+            }
+            long vitaT0 = System.Diagnostics.Stopwatch.GetTimestamp();   // TEMP s65 probe
             SensesFixedUpdate();
+            VitaSenseTicks[0] += System.Diagnostics.Stopwatch.GetTimestamp() - vitaT0;
+            VitaSenseCalls[0]++;
         }
+
+        // TEMP s65 probe: 0 whole step, 1 classic spawn range, 2 far-path sight, 3 GetTargets, 4 near sight, 5 hearing, 6 stealth + detect otherwise,
+        // inside GetTargets: 7 sight checks, 8 enemy list (calls = entries), 9 unused, 10 sight rays cast (calls only)
+        public static bool VitaSenseProbe;   // set by the test bot only, so play pays no timer reads
+        public static long[] VitaSenseTicks = new long[11];
+        public static int[] VitaSenseCalls = new int[11];
+        static long vitaMark;
+        static void VitaProbeStart() { if (VitaSenseProbe) vitaMark = System.Diagnostics.Stopwatch.GetTimestamp(); }
+        static void VitaProbeEnd(int slot) { if (VitaSenseProbe) { VitaSenseTicks[slot] += System.Diagnostics.Stopwatch.GetTimestamp() - vitaMark; VitaSenseCalls[slot]++; } }
 
         void SensesFixedUpdate()
 #else
@@ -285,6 +304,9 @@ namespace DaggerfallWorkshop.Game
 
             // Update whether enemy would be spawned or not in classic.
             // Only check if within the maximum possible distance (Just under 1094 classic units)
+#if UNITY_PSP2
+            VitaProbeStart();
+#endif
             if (GameManager.ClassicUpdate)
             {
                 if (distanceToPlayer < 1094 * MeshReader.GlobalScale)
@@ -336,6 +358,9 @@ namespace DaggerfallWorkshop.Game
                 else
                     wouldBeSpawnedInClassic = false;
             }
+#if UNITY_PSP2
+            VitaProbeEnd(1);
+#endif
 
             if (GameManager.ClassicUpdate)
             {
@@ -419,7 +444,9 @@ namespace DaggerfallWorkshop.Game
                         (!VitaFriendlySightOnTargetTick || !cannotTargetPlayer || classicTargetUpdateTimer > 5))
                     {
                         playerSightFrame = Time.frameCount;
+                        VitaProbeStart();
                         playerInSight = CanSeeTargetHandler(player);
+                        VitaProbeEnd(2);
                     }
 #else
                     playerInSight = CanSeeTargetHandler(player);
@@ -434,7 +461,9 @@ namespace DaggerfallWorkshop.Game
                     if (wouldBeSpawnedInClassic || playerInSight)
                     {
 #if UNITY_PSP2
+                        VitaProbeStart();
                         GetTargets();
+                        VitaProbeEnd(3);
 #else
                         GetTargets();
 #endif
@@ -474,13 +503,27 @@ namespace DaggerfallWorkshop.Game
                     Vector3 toTarget = target.transform.position - transform.position;
                     distanceToTarget = toTarget.magnitude;
                     directionToTarget = toTarget.normalized;
+#if UNITY_PSP2
+                    VitaProbeStart();
                     targetInSight = CanSeeTargetHandler(target);
+                    VitaProbeEnd(4);
+#else
+                    targetInSight = CanSeeTargetHandler(target);
+#endif
                 }
 
                 // Classic stealth mechanics would be interfered with by hearing, so only enable
                 // hearing if the enemy has detected the target. If target is visible we can omit hearing.
                 if (detectedTarget && !targetInSight)
+#if UNITY_PSP2
+                {
+                    VitaProbeStart();
                     targetInEarshot = CanHearTargetHandler();
+                    VitaProbeEnd(5);
+                }
+#else
+                    targetInEarshot = CanHearTargetHandler();
+#endif
                 else
                     targetInEarshot = false;
 
@@ -503,7 +546,11 @@ namespace DaggerfallWorkshop.Game
                     lastKnownTargetPos = target.transform.position;
                     lastHadLOSTimer = 200f;
                 }
+#if UNITY_PSP2
+                else if (VitaProbeStealth())
+#else
                 else if (!blockedByIllusionEffect && StealthCheck())
+#endif
                 {
                     detectedTarget = true;
 
@@ -664,6 +711,16 @@ namespace DaggerfallWorkshop.Game
             return prediction;
         }
 
+#if UNITY_PSP2
+        bool VitaProbeStealth()     // TEMP s65 probe
+        {
+            VitaProbeStart();
+            bool result = !blockedByIllusionEffect && StealthCheck();
+            VitaProbeEnd(6);
+            return result;
+        }
+#endif
+
         public bool StealthCheck()
         {
             if (GameManager.Instance.PlayerEnterExit.IsPlayerInsideDungeonCastle && !motor.IsHostile)
@@ -807,8 +864,24 @@ namespace DaggerfallWorkshop.Game
             Vector3 directionToTargetHolder = directionToTarget;
             float distanceToTargetHolder = distanceToTarget;
 
+#if UNITY_PSP2
+            long vitaT = VitaSenseProbe ? System.Diagnostics.Stopwatch.GetTimestamp() : 0;   // TEMP s65 probe
+            vitaTargets.Clear();
+            ActiveGameObjectDatabase.FillActiveEnemyBehaviours(vitaTargets);
+            vitaTargets.Add(player);
+            if (VitaSenseProbe)
+            {
+                VitaSenseTicks[8] += System.Diagnostics.Stopwatch.GetTimestamp() - vitaT;
+                VitaSenseCalls[8] += vitaTargets.Count;
+            }
+            vitaInGetTargets = VitaSenseProbe;
+            for (int vitaIndex = 0; vitaIndex < vitaTargets.Count; vitaIndex++)
+            {
+                DaggerfallEntityBehaviour targetBehaviour = vitaTargets[vitaIndex];
+#else
             foreach (DaggerfallEntityBehaviour targetBehaviour in GetActiveTargetEntityBehaviours())
             {
+#endif
                 EnemyEntity targetEntity = null;
                 if (targetBehaviour != player)
                     targetEntity = targetBehaviour.Entity as EnemyEntity;
@@ -867,7 +940,18 @@ namespace DaggerfallWorkshop.Game
                     directionToTarget = toTarget.normalized;
                     distanceToTarget = toTarget.magnitude;
 
+#if UNITY_PSP2
+                    if (VitaSenseProbe)
+                        vitaT = System.Diagnostics.Stopwatch.GetTimestamp();   // TEMP s65 probe
                     bool see = CanSeeTargetHandler(targetBehaviour);
+                    if (VitaSenseProbe)
+                    {
+                        VitaSenseTicks[7] += System.Diagnostics.Stopwatch.GetTimestamp() - vitaT;
+                        VitaSenseCalls[7]++;
+                    }
+#else
+                    bool see = CanSeeTargetHandler(targetBehaviour);
+#endif
 
                     // Is potential target neither visible nor in area around player? If so, reject as target.
                     if (targetSenses && !targetSenses.WouldBeSpawnedInClassic && !see)
@@ -907,6 +991,10 @@ namespace DaggerfallWorkshop.Game
                     }
                 }
             }
+
+#if UNITY_PSP2
+            vitaInGetTargets = false;
+#endif
 
             // Restore direction and distance values
             directionToTarget = directionToTargetHolder;
@@ -974,6 +1062,8 @@ namespace DaggerfallWorkshop.Game
                     Ray ray = new Ray(eyePos, eyeDirectionToTarget);
 
 #if UNITY_PSP2
+                    if (vitaInGetTargets)
+                        VitaSenseCalls[10]++;   // TEMP s65 probe
                     float rayLength = VitaShortSightRay ? Mathf.Min(SightRadius, eyeToTarget.magnitude + 1f) : SightRadius;
                     if (Physics.Raycast(ray, out hit, rayLength))
 #else

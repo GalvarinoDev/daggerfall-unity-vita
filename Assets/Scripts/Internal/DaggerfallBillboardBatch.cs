@@ -185,6 +185,9 @@ namespace DaggerfallWorkshop
         void OnDisable()
         {
             restartAnims = true;
+#if UNITY_PSP2
+            VitaFinishPush(true);
+#endif
         }
 
         void Update()
@@ -231,6 +234,17 @@ namespace DaggerfallWorkshop
                 {
                     // schedule jobs:
                     ___schedule.Begin();
+#if UNITY_PSP2
+                    // Views of the cached arrays: the managed stand-in's (T[], Allocator) copies them, and a copy of both per tick per batch
+                    // was ~40 KB/s of a town's ~65 KB/s standing garbage. The job only reads them.
+                    AnimateUVJob animateUVJob = new AnimateUVJob
+                    {
+                        atlasRects = new NativeArray<Rect>(cachedMaterial.atlasRects, cachedMaterial.atlasRects.Length),
+                        atlasIndices = new NativeArray<RecordIndex>(cachedMaterial.atlasIndices, cachedMaterial.atlasIndices.Length),
+                        billboards = billboardData,
+                        uv = meshUVs,
+                    };
+#else
                     AnimateUVJob animateUVJob = new AnimateUVJob
                     {
                         atlasRects = new NativeArray<Rect>(cachedMaterial.atlasRects, Allocator.TempJob),
@@ -238,6 +252,7 @@ namespace DaggerfallWorkshop
                         billboards = billboardData,
                         uv = meshUVs,
                     };
+#endif
                     UvAnimationDependency = animateUVJob.Schedule(numBillboardsToAnimate, 128, Dependency);
                     ___schedule.End();
 
@@ -1012,6 +1027,9 @@ namespace DaggerfallWorkshop
 
             // Create mesh
             ___createMesh.Begin();
+#if UNITY_PSP2
+            VitaFinishPush(false);  // this Apply's own PushNewMeshData refills the mesh
+#endif
             if (billboardMesh == null)
             {
                 // New mesh
@@ -1062,13 +1080,17 @@ namespace DaggerfallWorkshop
                 // Octagons around the sprites' opaque pixels instead of quads where possible (VitaBillboardTrim sets the whole mesh)
                 int[] vitaTrimRecords = VitaTrimRecords();
                 bool vitaTrimmed = vitaTrimRecords != null && VitaBillboardTrim.Set(billboardMesh, currentArchive, vitaTrimRecords, meshVertices, meshTangents, meshUVs);
-                if (!vitaTrimmed)
+                // A terrain tile's ~21k-vertex nature batch took ~80 ms here in one frame (the four list copies + sets, s71 push1): in play, one
+                // channel per frame with the triangles last, so the batch draws nothing until it is whole
+                bool vitaSpread = !vitaTrimmed && isActiveAndEnabled && !VitaPushSpreadOff;
+                if (vitaSpread)
                 {
-                    billboardMesh.SetVertices(meshVertices.ToList(vitaVertices));
-                    billboardMesh.SetNormals(meshNormals.ToList(vitaNormals));
-                    billboardMesh.SetTangents(meshTangents.ToList(vitaTangents));
-                    billboardMesh.SetUVs(0, meshUVs.ToList(vitaUVs));
+                    if (vitaPush != null)
+                        StopCoroutine(vitaPush);
+                    vitaPush = StartCoroutine(VitaPushSpread());
                 }
+                else if (!vitaTrimmed)
+                    VitaPushChannels();
 #else
                 billboardMesh.SetVertices(meshVertices);// Each vertex is positioned at billboard origin
                 billboardMesh.SetNormals(meshNormals);// Standard normals
@@ -1079,7 +1101,7 @@ namespace DaggerfallWorkshop
 
                 ___indexBuffer.Begin();
 #if UNITY_PSP2
-                if (!vitaTrimmed)
+                if (!vitaTrimmed && !vitaSpread)
                 {
                     billboardMesh.SetTriangles(meshIndices.ToList(vitaTriangles), 0, false);
                 }
@@ -1099,6 +1121,48 @@ namespace DaggerfallWorkshop
         }
 
 #if UNITY_PSP2
+        public static bool VitaPushSpreadOff;   // test harness A/B
+        Coroutine vitaPush;
+
+        void VitaPushChannels()
+        {
+            billboardMesh.SetVertices(meshVertices.ToList(vitaVertices));
+            billboardMesh.SetNormals(meshNormals.ToList(vitaNormals));
+            billboardMesh.SetTangents(meshTangents.ToList(vitaTangents));
+            billboardMesh.SetUVs(0, meshUVs.ToList(vitaUVs));
+        }
+
+        // The rest of PushNewMeshData's fill for the spread path (the mesh was cleared there)
+        IEnumerator VitaPushSpread()
+        {
+            billboardMesh.SetVertices(meshVertices.ToList(vitaVertices));
+            yield return null;
+            billboardMesh.SetNormals(meshNormals.ToList(vitaNormals));
+            yield return null;
+            billboardMesh.SetTangents(meshTangents.ToList(vitaTangents));
+            yield return null;
+            billboardMesh.SetUVs(0, meshUVs.ToList(vitaUVs));
+            yield return null;
+            billboardMesh.SetTriangles(meshIndices.ToList(vitaTriangles), 0, false);
+            billboardMesh.bounds = meshAABB[0];
+            vitaPush = null;
+        }
+
+        // A spread fill cut off (batch switched off, or a new Apply) is redone whole, so the mesh is never left without triangles
+        void VitaFinishPush(bool redo)
+        {
+            if (vitaPush == null)
+                return;
+            StopCoroutine(vitaPush);
+            vitaPush = null;
+            if (!redo)
+                return;
+            billboardMesh.Clear();
+            VitaPushChannels();
+            billboardMesh.SetTriangles(meshIndices.ToList(vitaTriangles), 0, false);
+            billboardMesh.bounds = meshAABB[0];
+        }
+
         // Each billboard's record for VitaBillboardTrim, or null when the batch must keep quads (custom material, animated, too big)
         int[] VitaTrimRecords()
         {

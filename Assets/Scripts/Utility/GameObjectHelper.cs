@@ -253,6 +253,24 @@ namespace DaggerfallWorkshop.Utility
             dfMesh.name = GetGoModelName(newModelID);
         }
 
+#if UNITY_PSP2
+        // In-play town builds: PhysX cooks a block's collider when the mesh is assigned, so a block costs one long frame. With this set
+        // (StreamingWorld, around each block) the collider is added by VitaAddDeferredColliders on the next frame, before the next block.
+        public static bool VitaDeferColliders;
+        static readonly List<GameObject> vitaDeferredColliders = new List<GameObject>();
+
+        public static void VitaAddDeferredColliders()
+        {
+            for (int i = 0; i < vitaDeferredColliders.Count; i++)
+            {
+                GameObject go = vitaDeferredColliders[i];
+                if (go)
+                    go.AddComponent<MeshCollider>().sharedMesh = go.GetComponent<MeshFilter>().sharedMesh;
+            }
+            vitaDeferredColliders.Clear();
+        }
+
+#endif
         public static GameObject CreateCombinedMeshGameObject(
             ModelCombiner combiner,
             string meshName,
@@ -299,6 +317,11 @@ namespace DaggerfallWorkshop.Utility
             }
 
             // Assign collider
+#if UNITY_PSP2
+            if (dfUnity.Option_AddMeshColliders && VitaDeferColliders)
+                vitaDeferredColliders.Add(go);
+            else
+#endif
             if (dfUnity.Option_AddMeshColliders)
             {
                 MeshCollider collider = go.AddComponent<MeshCollider>();

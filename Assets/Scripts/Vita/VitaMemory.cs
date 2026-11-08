@@ -39,6 +39,9 @@ public static class VitaMemory
         PlayerEnterExit.OnTransitionExterior += args => Unload("exterior");
         Debug.Log(heapStepLog); // logged here: BeforeSceneLoad runs before DFU's log file is open
         CheckAudioThreadPin();
+        var menuCollect = new GameObject("VitaMenuCollect");
+        Object.DontDestroyOnLoad(menuCollect);
+        menuCollect.AddComponent<MenuCollect>();
         if (DaggerfallUnity.Settings.VitaSyncGuard)
         {
             var guard = new GameObject("VitaSyncGuard");
@@ -182,7 +185,9 @@ public static class VitaMemory
         heapStepLog += string.Format(" | video pool → heap: phycont free {0:F1} MB", Diagnostics.GetFreeMemoryPHYSCONT() / 1048576.0);
         PSVitaVideoPlayer.TransferMemToHeap();
         heapStepLog += string.Format(" → {0:F1} MB", Diagnostics.GetFreeMemoryPHYSCONT() / 1048576.0);
-        heapStepLog += " | " + SetGcFreeSpaceDivisor(16);
+        // TRIAL 2026-11-05 (revert candidate, was 16): 8 measured same build vs 16: city tour GC heap max 78.6 vs 82.6 MB, min free main
+        // 69 vs 68 MB, collections -21%, loads -7%; castle walk equal. The ~110 MB heap crash above was the 2017.4 player at divisor 3.
+        heapStepLog += " | " + SetGcFreeSpaceDivisor(8);
 #endif
     }
 
@@ -230,18 +235,37 @@ public static class VitaMemory
     static int gcArrays;            // address (above 2 GB on the Vita, so negative as an int: don't test its sign)
     static int gcArraysState;       // 0 not looked up, 1 found, -1 missing
 
+    static bool FindGcArrays()
+    {
+        if (gcArraysState == 0)
+        {
+            int offset = GcOffset("GC_arrays");
+            int data = offset < 0 ? 0 : ModuleData("LIBIL2CPP_PRX");
+            gcArraysState = data == 0 ? -1 : 1;
+            gcArrays = data + offset;
+        }
+        return gcArraysState > 0;
+    }
+
+    // Boehm's bytes allocated since the last collection (GC_arrays._bytes_allocd, word 8 in the player's gc_priv.h), -1 if unknown
+    public static int GcBytesSinceCollect()
+    {
+        try
+        {
+            return FindGcArrays() ? System.Runtime.InteropServices.Marshal.ReadInt32(new IntPtr(gcArrays + 32)) : -1;
+        }
+        catch (Exception)
+        {
+            gcArraysState = -1;
+            return -1;
+        }
+    }
+
     static string GcHeap()
     {
         try
         {
-            if (gcArraysState == 0)
-            {
-                int offset = GcOffset("GC_arrays");
-                int data = offset < 0 ? 0 : ModuleData("LIBIL2CPP_PRX");
-                gcArraysState = data == 0 ? -1 : 1;
-                gcArrays = data + offset;
-            }
-            if (gcArraysState < 0)
+            if (!FindGcArrays())
                 return "";
             int heap = System.Runtime.InteropServices.Marshal.ReadInt32(new IntPtr(gcArrays));
             int largeFree = System.Runtime.InteropServices.Marshal.ReadInt32(new IntPtr(gcArrays + 16));
@@ -274,6 +298,8 @@ public static class VitaMemory
             return "GC_free_space_divisor: " + e.Message;
         }
     }
+#else
+    public static int GcBytesSinceCollect() { return -1; }
 #endif
 
     static long lastMark;
@@ -629,6 +655,55 @@ public static class VitaMemory
         LoadCollections++;
     }
 
+    // Collections where nobody sees them (no gameplay change). Boehm's full collection is a 120-180 ms stop (it scans the
+    // whole live heap), and in play it comes every 20-140 s wherever the garbage tips it over. A paused menu (inventory, map, spellbook,
+    // rest, talk) or the end of a loading screen already holds the picture still, so collect there once enough garbage has built up:
+    // the collector's count restarts at 0 and the next stop in play moves out by the same amount. Only timing changes, never what lives.
+    public const int IdleCollectMinBytes = 512 << 10;
+    public static int IdleCollections;
+    public static bool IdleCollectOff;  // test harness A/B
+    public static bool IdleCollect(string where)
+    {
+        if (IdleCollectOff)
+            return false;
+        int bytes = GcBytesSinceCollect();
+        if (bytes >= 0 && bytes < IdleCollectMinBytes)
+            return false;
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        System.GC.Collect();
+        IdleCollections++;
+        if (Probes)
+            Debug.Log(string.Format("VITAIDLEGC {0} t={1:F1}s garbage {2} KB, {3} ms, #{4}", where, Time.realtimeSinceStartup, bytes >> 10,
+                sw.ElapsedMilliseconds, IdleCollections));
+        return true;
+    }
+
+    // Once per paused window, on its second drawn frame (the first shows it before the stop). Not the loading screen (it collects
+    // when it closes) or videos (a stop would show as a skipped frame there).
+    class MenuCollect : MonoBehaviour
+    {
+        object window;
+        int framesShown;
+        void LateUpdate()
+        {
+            if (!GameManager.HasInstance || !GameManager.IsGamePaused || DaggerfallUI.Instance == null)
+            {
+                window = null;
+                return;
+            }
+            DaggerfallWorkshop.Game.UserInterface.IUserInterfaceWindow top = DaggerfallUI.Instance.UserInterfaceManager.TopWindow;
+            if (top == null || top is VitaLoadingWindow || top is DaggerfallWorkshop.Game.UserInterfaceWindows.DaggerfallVidPlayerWindow)
+                return;
+            if (top != window)
+            {
+                window = top;
+                framesShown = 0;
+            }
+            if (++framesShown == 2)
+                IdleCollect(top.GetType().Name);
+        }
+    }
+
     /// <summary>Free main memory (LPDDR) in bytes; long.MaxValue in the editor.</summary>
     public static long FreeMain()
     {
@@ -812,6 +887,7 @@ public static class VitaMemory
 
     internal static void Unload(string tag)
     {
+        ActiveGameObjectDatabase.VitaClearEnemyList();
         if (Probes)
             ReportTextures(tag);
         Mark(tag);

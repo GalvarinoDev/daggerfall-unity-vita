@@ -37,6 +37,11 @@ namespace DaggerfallWorkshop.Game
         public float smoothFollowerLerpSpeed = 25.0f;   // Multiplied by dt.
         Vector3 smoothFollowerPrevWorldPos;
         bool smoothFollowerReset = true;
+#if UNITY_PSP2
+        public static bool VitaCameraGlide = true;
+        float vitaGlideFixedTime = -1f;
+        Vector3 vitaGlideFrom, vitaGlideTo;
+#endif
 
         [HideInInspector, NonSerialized]
         public CharacterController controller;
@@ -480,6 +485,27 @@ namespace DaggerfallWorkshop.Game
                     smoothFollowerReset = false;
                 }
 
+#if UNITY_PSP2
+                // Vita: the motor steps at 20 Hz (VitaTime), and at 60 FPS the lerp below turns each step into a burst: camera speed 6.5, 3.8, 2.3 m/s
+                // on a 3-frame beat at a steady pace. Glide between the last two fixed positions instead: same path, about the same lag, even speed.
+                if (VitaCameraGlide)
+                {
+                    if (vitaGlideFixedTime != Time.fixedTime)
+                    {
+                        vitaGlideFixedTime = Time.fixedTime;
+                        vitaGlideFrom = vitaGlideTo;
+                        vitaGlideTo = transform.position;
+                        // Teleport or floating origin shift, not a step
+                        if ((vitaGlideTo - vitaGlideFrom).magnitude > speedChanger.RefreshRunSpeed() * Time.fixedDeltaTime * 3f)
+                            vitaGlideFrom = vitaGlideTo;
+                    }
+                    else if ((transform.position - vitaGlideTo).sqrMagnitude > 1f)
+                        vitaGlideFrom = vitaGlideTo = transform.position;       // moved outside the fixed step
+                    smoothFollower.position = Vector3.Lerp(vitaGlideFrom, vitaGlideTo, (Time.time - Time.fixedTime) / Time.fixedDeltaTime);
+                    smoothFollowerPrevWorldPos = smoothFollower.position;
+                    return;
+                }
+#endif
                 smoothFollower.position = Vector3.Lerp(smoothFollowerPrevWorldPos, transform.position, smoothFollowerLerpSpeed * Time.smoothDeltaTime);
                 smoothFollowerPrevWorldPos = smoothFollower.position;
             }

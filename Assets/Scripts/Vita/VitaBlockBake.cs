@@ -143,6 +143,16 @@ public static class VitaBlockBake
     /// Builds the block's models, doors and buildings into go from the bake, exactly as RMBLayout.CreateBaseGameObject would.
     /// False (and nothing added) when there is no matching record or the block needs DFU's path (mod models, custom activations).
     /// </summary>
+    // In-play town builds: the card read + inflate on a frame of its own, 40-75 ms per block in Wayrest's neighbour. Whatever reads next
+    // overwrites the buffer and bufferOffset, so a stale prefetch only means TryBuild reads again.
+    static int bufferOffset = -1;
+    public static void Prefetch(ref DFBlock blockData)
+    {
+        int[] entry;
+        if (DaggerfallUnity.Instance.Option_CombineRMB && NeedsRuntimePath(ref blockData) == null && Index().TryGetValue(Key(blockData.Name, Hash(ref blockData)), out entry))
+            Read(entry[0], entry[1], entry[2]);
+    }
+
     public static bool TryBuild(ref DFBlock blockData, int layoutX, int layoutY, GameObject go)
     {
         DaggerfallUnity dfUnity = DaggerfallUnity.Instance;
@@ -160,7 +170,10 @@ public static class VitaBlockBake
             return false;
         }
 
-        Read(entry[0], entry[1], entry[2]);
+        if (bufferOffset == entry[0])
+            pos = 0;    // Prefetch read it on an earlier frame
+        else
+            Read(entry[0], entry[1], entry[2]);
 
         int vertexCount;
         ModelCombiner.CombinedModel combined = ReadCombined(out vertexCount);
@@ -373,8 +386,10 @@ public static class VitaBlockBake
             buffer = new byte[length];
         file.Seek(offset, SeekOrigin.Begin);
         ReadAll(file, deflated, deflatedLength);
+        bufferOffset = -1;
         using (DeflateStream inflate = new DeflateStream(new MemoryStream(deflated, 0, deflatedLength), CompressionMode.Decompress))
             ReadAll(inflate, buffer, length);
+        bufferOffset = offset;
         pos = 0;
     }
 

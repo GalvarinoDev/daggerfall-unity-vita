@@ -28,6 +28,10 @@ namespace DaggerfallWorkshop.Game.Utility
     {
         #region Fields
 
+#if UNITY_PSP2
+        public static bool VitaFreezeOff;                       // test harness A/B
+        public static float VitaFreezeDistance = 10f;           // civilians this close keep walking even behind the player
+#endif
         const float ticksPerSecond = 10;                        // How often population manager will tick per second
 
         const string mobileNPCName = "MobileNPC";               // Name displayed in scene view
@@ -191,6 +195,9 @@ namespace DaggerfallWorkshop.Game.Utility
                     !suppressPopulationSpawns)
                 {
                     poolItem.npc.Motor.gameObject.SetActive(true);
+#if UNITY_PSP2
+                    poolItem.npc.Motor.enabled = true;  // may have been frozen before it was recycled
+#endif
                     poolItem.scheduleEnable = false;
 
                     if (MobileNPCGenerator != null)
@@ -242,6 +249,15 @@ namespace DaggerfallWorkshop.Game.Utility
                     MeshRenderer billboardRenderer = poolItem.npc.Asset.GetComponent<MeshRenderer>();
                     if (billboardRenderer)
                         billboardRenderer.enabled = (poolItem.npc.Motor.MoveCount > 0) ? true : false;
+#if UNITY_PSP2
+                    // TRIAL (2026-11-04, revert candidate): ~44 us per civilian per frame at noon (96 in Daggerfall = 4.2 ms, the city's
+                    // biggest script cost). Freeze civilians nobody can see: off screen, past VitaFreezeDistance, and done aligning to the
+                    // grid (MoveCount > 0, so the renderer is on and isVisible can wake them). Turning the motor off skips its Update.
+                    bool vitaFreeze = !VitaFreezeOff && billboardRenderer && poolItem.npc.Motor.MoveCount > 0 &&
+                        poolItem.distanceToPlayer > VitaFreezeDistance && !billboardRenderer.isVisible;
+                    if (poolItem.npc.Motor.enabled == vitaFreeze)
+                        poolItem.npc.Motor.enabled = !vitaFreeze;
+#endif
                 }
             }
         }

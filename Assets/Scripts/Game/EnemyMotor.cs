@@ -155,7 +155,70 @@ namespace DaggerfallWorkshop.Game
 #if UNITY_PSP2
         void FixedUpdate()
         {
-            MotorFixedUpdate();
+            if (VitaMotorProbe)
+                VitaMotorFixedUpdateTimed();
+            else
+                MotorFixedUpdate();
+        }
+
+        // TEMP s65 probe: MotorFixedUpdate's calls in the same order, timed. Slots: 0 all, 1 CanFly, 2 paralysis+knockback, 3 gravity,
+        // 4 noaction+bashing+timers, 5 TakeAction, 6 fall damage, 7 anim, 8 OpenDoors, 9 HeightAdjust; inside TakeAction (inclusive):
+        // 10 GetDestination, 11 AttemptMove, 12 FindDetour
+        public static bool VitaMotorProbe;
+        public static long[] VitaMotorTicks = new long[13];
+        public static int[] VitaMotorCalls = new int[13];
+        static long vitaMotorMark;
+        static void VitaMotorLap(int slot)
+        {
+            long now = System.Diagnostics.Stopwatch.GetTimestamp();
+            VitaMotorTicks[slot] += now - vitaMotorMark;
+            VitaMotorCalls[slot]++;
+            vitaMotorMark = now;
+        }
+
+        void VitaMotorFixedUpdateTimed()
+        {
+            long start = System.Diagnostics.Stopwatch.GetTimestamp();
+            vitaMotorMark = start;
+            if (!GameManager.Instance.DisableAI)
+            {
+                flies = CanFly();
+                CanAct = true;
+                flyerFalls = false;
+                Falls = false;
+                VitaMotorLap(1);
+                HandleParalysis();
+                KnockbackMovement();
+                VitaMotorLap(2);
+                ApplyGravity();
+                VitaMotorLap(3);
+                HandleNoAction();
+                HandleBashing();
+                UpdateTimers();
+                VitaMotorLap(4);
+                if (CanAct)
+                    TakeActionHandler();
+                VitaMotorLap(5);
+                ApplyFallDamage();
+                VitaMotorLap(6);
+                UpdateToIdleOrMoveAnim();
+                VitaMotorLap(7);
+                OpenDoors();
+                VitaMotorLap(8);
+                HeightAdjust();
+                VitaMotorLap(9);
+            }
+            VitaMotorTicks[0] += System.Diagnostics.Stopwatch.GetTimestamp() - start;
+            VitaMotorCalls[0]++;
+        }
+
+        // TEMP s65 probe: inclusive time of a nested call (own timestamps, leaves vitaMotorMark alone)
+        static void VitaMotorAdd(int slot, long start)
+        {
+            if (!VitaMotorProbe)
+                return;
+            VitaMotorTicks[slot] += System.Diagnostics.Stopwatch.GetTimestamp() - start;
+            VitaMotorCalls[slot]++;
         }
 
         // Vita probes: upstream's FixedUpdate, timed
@@ -560,7 +623,9 @@ namespace DaggerfallWorkshop.Game
 #if UNITY_PSP2
         void GetDestination()
         {
+            long vitaT = VitaMotorProbe ? System.Diagnostics.Stopwatch.GetTimestamp() : 0;   // TEMP s65 probe
             GetDestinationUpstream();
+            VitaMotorAdd(10, vitaT);
         }
 
         // Vita probes: upstream's GetDestination, timed
@@ -922,7 +987,9 @@ namespace DaggerfallWorkshop.Game
 #if UNITY_PSP2
         void AttemptMove(Vector3 direction, float moveSpeed, bool backAway = false, bool strafe = false, float strafeDist = 0)
         {
+            long vitaT = VitaMotorProbe ? System.Diagnostics.Stopwatch.GetTimestamp() : 0;   // TEMP s65 probe
             AttemptMoveUpstream(direction, moveSpeed, backAway, strafe, strafeDist);
+            VitaMotorAdd(11, vitaT);
         }
 
         // Vita probes: upstream's AttemptMove, timed
@@ -1052,7 +1119,9 @@ namespace DaggerfallWorkshop.Game
 #if UNITY_PSP2
         void FindDetour(Vector3 direction2d)
         {
+            long vitaT = VitaMotorProbe ? System.Diagnostics.Stopwatch.GetTimestamp() : 0;   // TEMP s65 probe
             FindDetourUpstream(direction2d);
+            VitaMotorAdd(12, vitaT);
         }
 
         // Vita probes: upstream's FindDetour, timed

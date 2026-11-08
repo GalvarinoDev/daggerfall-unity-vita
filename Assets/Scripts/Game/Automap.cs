@@ -1043,6 +1043,19 @@ namespace DaggerfallWorkshop.Game
             long startTime = stopwatch.ElapsedMilliseconds;
 #endif
 
+#if UNITY_PSP2
+            if (VitaScanMode == 4 && vitaRayReady)
+                return VitaScanWithOwnRays(rayStartPos, rayDirection, rayDistance, offsetSecondProtectionRaycast, offsetThirdProtectionRaycast);
+            // Vita: the 5 Hz scan's waste. These hits only matter if all 3 automap rays hit the same collider, so test that first. The nearest hit on
+            // the Default layer (the player isn't on it) is what Raycast returns, without RaycastAll's arrays and the name strings per hit.
+            if (!(Physics.Raycast(rayStartPos, rayDirection, out hit1, rayDistance, 1 << layerAutomap)
+                && Physics.Raycast(rayStartPos + offsetSecondProtectionRaycast, rayDirection, out hit2, rayDistance, 1 << layerAutomap) && hit1.collider == hit2.collider
+                && Physics.Raycast(rayStartPos + offsetThirdProtectionRaycast, rayDirection, out hit3, rayDistance, 1 << layerAutomap) && hit1.collider == hit3.collider))
+                return (null);
+            Physics.Raycast(rayStartPos, rayDirection, out hitTrueLevelGeometry1, rayDistance, 1 << 0);
+            Physics.Raycast(rayStartPos + offsetSecondProtectionRaycast, rayDirection, out hitTrueLevelGeometry2, rayDistance, 1 << 0);
+            Physics.Raycast(rayStartPos + offsetThirdProtectionRaycast, rayDirection, out hitTrueLevelGeometry3, rayDistance, 1 << 0);
+#else
             RaycastHit[] hitsTrueLevelGeometry1 = Physics.RaycastAll(rayStartPos, rayDirection, rayDistance, 1 << 0);
             RaycastHit[] hitsTrueLevelGeometry2 = Physics.RaycastAll(rayStartPos + offsetSecondProtectionRaycast, rayDirection, rayDistance, 1 << 0);
             RaycastHit[] hitsTrueLevelGeometry3 = Physics.RaycastAll(rayStartPos + offsetThirdProtectionRaycast, rayDirection, rayDistance, 1 << 0);
@@ -1081,18 +1094,24 @@ namespace DaggerfallWorkshop.Game
                 }
             }
 
+#endif
+
 #if DEBUG_SHOW_RAYCAST_TIMES
             // Show timer
             long totalTime = stopwatch.ElapsedMilliseconds - startTime;
             DaggerfallUnity.LogMessage(string.Format("Time to do RaycastAll: {0}ms", totalTime), true);
 #endif
 
+#if UNITY_PSP2
+            const bool didHit1 = true, didHit2 = true, didHit3 = true;  // tested above
+#else
             // main raycast (on Colliders in layer "Automap")
             bool didHit1 = Physics.Raycast(rayStartPos, rayDirection, out hit1, rayDistance, 1 << layerAutomap);
             // 2nd (protection) raycast (on Colliders in layer "Automap") with offset (protection against hole in daggerfall geometry prevention)
             bool didHit2 = Physics.Raycast(rayStartPos + offsetSecondProtectionRaycast, rayDirection, out hit2, rayDistance, 1 << layerAutomap);
             // 3rd (protection) raycast (on Colliders in layer "Automap") with offset (protection against hole in daggerfall geometry prevention)
             bool didHit3 = Physics.Raycast(rayStartPos + offsetThirdProtectionRaycast, rayDirection, out hit3, rayDistance, 1 << layerAutomap);
+#endif
 
 #if DEBUG_RAYCASTS
             //Debug.Log(String.Format("hitTG1: {0}, hitTG2: {1}, hitTG3: {2}, hit1: {3}, hit2: {4}, hit3: {5}", didHitTrueLevelGeometry1, didHitTrueLevelGeometry2, didHitTrueLevelGeometry3, didHit1, didHit2, didHit3));
@@ -1129,6 +1148,11 @@ namespace DaggerfallWorkshop.Game
                 if (meshCollider != null)
                 {
                     MeshRenderer hitMeshRenderer = meshCollider.gameObject.GetComponent<MeshRenderer>();
+#if UNITY_PSP2
+                    // Already discovered and visited, as most hits are: .materials would clone the array and the keyword calls change nothing
+                    if (hitMeshRenderer.enabled && !VitaAnyGrayscale(hitMeshRenderer))
+                        return (hitTrueLevelGeometry1);
+#endif
                     hitMeshRenderer.enabled = true; // mark mesh renderer as discovered (by enabling it)
 
                     Material[] mats = hitMeshRenderer.materials;
@@ -1156,7 +1180,13 @@ namespace DaggerfallWorkshop.Game
             {
                 // enable automap level geometry for revealing (so raycasts can hit colliders of automap level geometry)
 #if UNITY_PSP2
+                vitaScanWatch.Reset();  // TEMP s64
+                vitaScanWatch.Start();
                 VitaScanGeometry(true);
+                VitaScanTicks[0] += vitaScanWatch.ElapsedTicks;
+                VitaScanTicks[3] += vitaScanColliders.Count;
+                vitaScanWatch.Reset();
+                vitaScanWatch.Start();
 #else
                 gameobjectGeometry.SetActive(true);
 #endif
@@ -1196,7 +1226,11 @@ namespace DaggerfallWorkshop.Game
 
                 // disable gameobjectGeometry so player movement won't be affected by geometry colliders of automap level geometry
 #if UNITY_PSP2
+                VitaScanTicks[1] += vitaScanWatch.ElapsedTicks;     // TEMP s64
+                vitaScanWatch.Reset();
+                vitaScanWatch.Start();
                 VitaScanGeometry(false);
+                VitaScanTicks[2] += vitaScanWatch.ElapsedTicks;
 #else
                 gameobjectGeometry.SetActive(false);
 #endif
@@ -1720,12 +1754,55 @@ namespace DaggerfallWorkshop.Game
         // Mode 2 switches on only the colliders the scan's rays can reach: they start at the player's head and go at most
         // raycastDistanceViewDirection forward, then raycastDistanceDown down from points along that ray (+10 cm offsets).
         // VitaScanMode 0 = upstream's SetActive, 1 = all colliders, 2 = nearby colliders.
-        public static int VitaScanMode = 2;
+        // Mode 3 switches on only the colliders those rays can actually touch: switching a collider is what costs (the hidden copy's 30-40 ms
+        // spike 5 times a second), and a ray can only hit a collider whose bounds it enters. Bounds are raised by the down rays' length.
+        public static int VitaScanMode = 3;
+        public static long[] VitaScanTicks = new long[4];   // TEMP s64: begin, rays, end, colliders switched on
+        System.Diagnostics.Stopwatch vitaScanWatch = new System.Diagnostics.Stopwatch();
+
+        // Segment against an axis-aligned box (slab test)
+        static bool VitaSegmentHits(Vector3 origin, Vector3 direction, float length, Vector3 min, Vector3 max)
+        {
+            float t0 = 0, t1 = length;
+            for (int axis = 0; axis < 3; axis++)
+            {
+                float o = origin[axis], d = direction[axis], lo = min[axis], hi = max[axis];
+                if (Mathf.Abs(d) < 1e-5f)
+                {
+                    if (o < lo || o > hi)
+                        return false;
+                    continue;
+                }
+                float a = (lo - o) / d, b = (hi - o) / d;
+                if (a > b)
+                {
+                    float swap = a;
+                    a = b;
+                    b = swap;
+                }
+                t0 = Mathf.Max(t0, a);
+                t1 = Mathf.Min(t1, b);
+                if (t0 > t1)
+                    return false;
+            }
+            return true;
+        }
         Collider[] vitaGeometryColliders;
         Bounds[] vitaGeometryColliderBounds;
         readonly List<Collider> vitaScanColliders = new List<Collider>();
         GameObject vitaGeometryCollidersOwner;
         bool vitaGeometryCollidersEnabled;
+
+        readonly List<Material> vitaSharedMaterials = new List<Material>();
+
+        bool VitaAnyGrayscale(MeshRenderer renderer)
+        {
+            renderer.GetSharedMaterials(vitaSharedMaterials);
+            for (int i = 0; i < vitaSharedMaterials.Count; i++)
+                if (vitaSharedMaterials[i] && vitaSharedMaterials[i].IsKeywordEnabled("RENDER_IN_GRAYSCALE"))
+                    return true;
+            return false;
+        }
 
         void VitaScanGeometry(bool begin)
         {
@@ -1738,6 +1815,18 @@ namespace DaggerfallWorkshop.Game
             }
             if (begin && !gameobjectGeometry.activeSelf)
                 gameobjectGeometry.SetActive(true);
+            if (VitaScanMode == 4)
+            {
+                if (begin)
+                    VitaPrepareOwnRays();
+                if (vitaRayReady && !VitaScanVerify)
+                {
+                    if (begin)
+                        VitaSetGeometryColliders(false);    // after the map window: off once, then nothing is switched per scan
+                    return;
+                }
+                // no ray data (a collider type it can't test) or the check run: colliders as mode 3
+            }
             if (VitaScanMode == 1)
             {
                 VitaSetGeometryColliders(begin);
@@ -1748,10 +1837,22 @@ namespace DaggerfallWorkshop.Game
                 VitaSetGeometryColliders(false);
                 Vector3 rayStartPos = gameObjectPlayerAdvanced.transform.position + Camera.main.transform.localPosition;
                 float reach = raycastDistanceViewDirection + raycastDistanceDown + 1f;
+                Vector3 viewDirection = Camera.main.transform.rotation * Vector3.forward;
+                const float rayOffset = 0.2f;   // the protection rays' 10 cm offsets, and a margin
+                Vector3 margin = new Vector3(rayOffset, rayOffset, rayOffset);
                 for (int i = 0; i < vitaGeometryColliders.Length; i++)
                 {
                     Collider c = vitaGeometryColliders[i];
-                    if (c && vitaGeometryColliderBounds[i].SqrDistance(rayStartPos) <= reach * reach)
+                    bool wanted;
+                    if (VitaScanMode >= 3)
+                    {
+                        Vector3 min = vitaGeometryColliderBounds[i].min - margin, max = vitaGeometryColliderBounds[i].max + margin;
+                        max.y += raycastDistanceDown;
+                        wanted = VitaSegmentHits(rayStartPos, viewDirection, raycastDistanceViewDirection, min, max);
+                    }
+                    else
+                        wanted = vitaGeometryColliderBounds[i].SqrDistance(rayStartPos) <= reach * reach;
+                    if (c && wanted)
                     {
                         c.enabled = true;
                         vitaScanColliders.Add(c);
@@ -1765,6 +1866,268 @@ namespace DaggerfallWorkshop.Game
                         c.enabled = false;
                 vitaScanColliders.Clear();
             }
+        }
+
+        // Mode 4: the scan's rays against the automap copy's shapes in C#, so its colliders are never switched on and off (the
+        // switching and PhysX's sync after it were the ~3 FPS the scan still cost in Daggerfall castle; the ray count wasn't).
+        // The same test PhysX makes: nearest front face of each MeshCollider's mesh (backfaces aren't hit: queriesHitBackfaces is off),
+        // the entry face of each BoxCollider (a ray starting inside a box doesn't hit it), active objects only. Each mesh's triangles are
+        // kept once in its own space; each collider keeps its matrix and bounds relative to the copy's root, so a moved root (floating
+        // origin) needs nothing new. A copy with any other collider type (or a convex/unreadable mesh) keeps mode 3.
+        // VitaScanVerify (test harness): mode 3's colliders on as well, every ray cast both ways, differences counted per facing rule.
+        public static bool VitaScanVerify;
+        public static int VitaRayFacing = 1;    // which det sign is a front face; the verify run picks it
+        public static long[] VitaVerifyCounts = new long[8];    // rays, then mismatches for facing 1, -1, 0 (both), PhysX hit / own miss, own hit / PhysX miss, distance off, collider differs
+        class VitaTriMesh
+        {
+            public Vector3[] v;
+            public int[] t;
+        }
+        readonly Dictionary<Mesh, VitaTriMesh> vitaTriMeshes = new Dictionary<Mesh, VitaTriMesh>();
+        VitaTriMesh[] vitaColliderMesh;         // null = box
+        Matrix4x4[] vitaRootToLocal;
+        Bounds[] vitaRootBounds, vitaBoxLocal;
+        bool[] vitaColliderLive;
+        bool[] vitaColliderMirrored;
+        bool vitaRayReady;
+        GameObject vitaRayOwner;
+
+        void VitaPrepareOwnRays()
+        {
+            if (vitaRayOwner == gameobjectGeometry)
+                return;
+            vitaRayOwner = gameobjectGeometry;
+            vitaRayReady = false;
+            vitaTriMeshes.Clear();
+            if (vitaGeometryCollidersOwner != gameobjectGeometry)
+                VitaSetGeometryColliders(true); // builds vitaGeometryColliders
+            Transform root = gameobjectGeometry.transform;
+            if ((root.lossyScale - Vector3.one).sqrMagnitude > 1e-6f)
+            {
+                Debug.Log("VITAAUTOMAP own rays off: scaled root " + root.lossyScale);
+                return;
+            }
+            int n = vitaGeometryColliders.Length;
+            vitaColliderMesh = new VitaTriMesh[n];
+            vitaRootToLocal = new Matrix4x4[n];
+            vitaRootBounds = new Bounds[n];
+            vitaBoxLocal = new Bounds[n];
+            vitaColliderLive = new bool[n];
+            vitaColliderMirrored = new bool[n];
+            Matrix4x4 worldToRoot = root.worldToLocalMatrix;
+            for (int i = 0; i < n; i++)
+            {
+                Collider c = vitaGeometryColliders[i];
+                if (!c)
+                    continue;
+                Matrix4x4 localToRoot = worldToRoot * c.transform.localToWorldMatrix;
+                vitaRootToLocal[i] = localToRoot.inverse;
+                vitaColliderMirrored[i] = localToRoot.determinant < 0;
+                vitaColliderLive[i] = c.gameObject.activeInHierarchy;
+                Bounds local;
+                MeshCollider mc = c as MeshCollider;
+                BoxCollider box = c as BoxCollider;
+                if (mc != null)
+                {
+                    Mesh mesh = mc.sharedMesh;
+                    if (mesh == null)
+                    {
+                        vitaColliderLive[i] = false;
+                        continue;
+                    }
+                    if (mc.convex || !mesh.isReadable)
+                    {
+                        Debug.Log("VITAAUTOMAP own rays off: convex or unreadable mesh " + mesh.name);
+                        return;
+                    }
+                    VitaTriMesh tri;
+                    if (!vitaTriMeshes.TryGetValue(mesh, out tri))
+                    {
+                        tri = new VitaTriMesh { v = mesh.vertices, t = mesh.triangles };
+                        vitaTriMeshes[mesh] = tri;
+                    }
+                    vitaColliderMesh[i] = tri;
+                    local = mesh.bounds;
+                }
+                else if (box != null)
+                {
+                    local = new Bounds(box.center, box.size);
+                    vitaBoxLocal[i] = local;
+                }
+                else
+                {
+                    Debug.Log("VITAAUTOMAP own rays off: collider type " + c.GetType().Name);
+                    return;
+                }
+                // root-space bounds of the 8 corners, a little bigger so float rounding never drops a grazing ray
+                Vector3 lo = Vector3.one * float.MaxValue, hi = Vector3.one * float.MinValue;
+                for (int k = 0; k < 8; k++)
+                {
+                    Vector3 corner = new Vector3((k & 1) == 0 ? local.min.x : local.max.x, (k & 2) == 0 ? local.min.y : local.max.y, (k & 4) == 0 ? local.min.z : local.max.z);
+                    Vector3 p = localToRoot.MultiplyPoint3x4(corner);
+                    lo = Vector3.Min(lo, p);
+                    hi = Vector3.Max(hi, p);
+                }
+                Bounds b = new Bounds();
+                b.SetMinMax(lo - Vector3.one * 0.01f, hi + Vector3.one * 0.01f);
+                vitaRootBounds[i] = b;
+            }
+            vitaRayReady = true;
+            Debug.LogFormat("VITAAUTOMAP own rays: {0} colliders, {1} meshes", n, vitaTriMeshes.Count);
+        }
+
+        // Nearest hit on the copy (collider index, -1 = none) within maxDistance, origin/direction in world space (direction unit length)
+        int VitaOwnRay(Vector3 origin, Vector3 direction, float maxDistance, int facing, out float distance)
+        {
+            distance = 0;
+            Matrix4x4 worldToRoot = gameobjectGeometry.transform.worldToLocalMatrix;
+            Vector3 o = worldToRoot.MultiplyPoint3x4(origin), d = worldToRoot.MultiplyVector(direction);
+            float best = maxDistance;
+            int hit = -1;
+            for (int i = 0; i < vitaColliderLive.Length; i++)
+            {
+                if (!vitaColliderLive[i] || !VitaSegmentHits(o, d, best, vitaRootBounds[i].min, vitaRootBounds[i].max))
+                    continue;
+                // The same parameter t in collider space: affine maps keep it, so distances stay world metres
+                Vector3 lo = vitaRootToLocal[i].MultiplyPoint3x4(o), ld = vitaRootToLocal[i].MultiplyVector(d);
+                VitaTriMesh tri = vitaColliderMesh[i];
+                if (tri == null)
+                {
+                    float tBox;
+                    if (VitaBoxEntry(lo, ld, vitaBoxLocal[i], out tBox) && tBox <= best)
+                    {
+                        best = tBox;
+                        hit = i;
+                    }
+                    continue;
+                }
+                int side = vitaColliderMirrored[i] ? -facing : facing;
+                Vector3[] v = tri.v;
+                int[] t = tri.t;
+                for (int k = 0; k < t.Length; k += 3)
+                {
+                    Vector3 v0 = v[t[k]];
+                    Vector3 e1 = v[t[k + 1]] - v0, e2 = v[t[k + 2]] - v0;
+                    Vector3 p = Vector3.Cross(ld, e2);
+                    float det = Vector3.Dot(e1, p);
+                    if (side > 0 ? det < 1e-9f : side < 0 ? det > -1e-9f : Mathf.Abs(det) < 1e-9f)
+                        continue;
+                    float inv = 1f / det;
+                    Vector3 s = lo - v0;
+                    float u = Vector3.Dot(s, p) * inv;
+                    if (u < 0 || u > 1)
+                        continue;
+                    Vector3 q = Vector3.Cross(s, e1);
+                    float w = Vector3.Dot(ld, q) * inv;
+                    if (w < 0 || u + w > 1)
+                        continue;
+                    float tt = Vector3.Dot(e2, q) * inv;
+                    if (tt >= 0 && tt < best)
+                    {
+                        best = tt;
+                        hit = i;
+                    }
+                }
+            }
+            distance = best;
+            return hit;
+        }
+
+        // Entry distance of a ray into a box from outside (a ray that starts inside doesn't hit it, as in PhysX)
+        static bool VitaBoxEntry(Vector3 o, Vector3 d, Bounds box, out float t)
+        {
+            t = 0;
+            if (box.Contains(o))
+                return false;
+            float t0 = 0, t1 = float.MaxValue;
+            Vector3 min = box.min, max = box.max;
+            for (int axis = 0; axis < 3; axis++)
+            {
+                if (Mathf.Abs(d[axis]) < 1e-9f)
+                {
+                    if (o[axis] < min[axis] || o[axis] > max[axis])
+                        return false;
+                    continue;
+                }
+                float a = (min[axis] - o[axis]) / d[axis], b = (max[axis] - o[axis]) / d[axis];
+                if (a > b)
+                {
+                    float swap = a;
+                    a = b;
+                    b = swap;
+                }
+                t0 = Mathf.Max(t0, a);
+                t1 = Mathf.Min(t1, b);
+                if (t0 > t1)
+                    return false;
+            }
+            t = t0;
+            return true;
+        }
+
+        int VitaScanRay(Vector3 origin, Vector3 direction, float maxDistance, out float distance)
+        {
+            int own = VitaOwnRay(origin, direction, maxDistance, VitaRayFacing, out distance);
+            if (VitaScanVerify)
+            {
+                RaycastHit physx;
+                bool did = Physics.Raycast(origin, direction, out physx, maxDistance, 1 << layerAutomap);
+                int physxIndex = did ? Array.IndexOf(vitaGeometryColliders, physx.collider) : -1;
+                VitaVerifyCounts[0]++;
+                for (int f = 0; f < 3; f++)
+                {
+                    float df;
+                    int alt = VitaOwnRay(origin, direction, maxDistance, f == 0 ? 1 : f == 1 ? -1 : 0, out df);
+                    if (alt != physxIndex || (did && Mathf.Abs(df - physx.distance) > 0.002f))
+                        VitaVerifyCounts[1 + f]++;
+                }
+                if (did && own < 0)
+                    VitaVerifyCounts[4]++;
+                else if (!did && own >= 0)
+                    VitaVerifyCounts[5]++;
+                else if (did && own != physxIndex)
+                    VitaVerifyCounts[7]++;
+                else if (did && Mathf.Abs(distance - physx.distance) > 0.002f)
+                    VitaVerifyCounts[6]++;
+                // The game follows PhysX in the check run, so the run itself reveals what upstream would
+                distance = did ? physx.distance : 0;
+                return physxIndex;
+            }
+            return own;
+        }
+
+        // ScanWithRaycastInDirectionAndUpdateMeshesAndMaterials with the 3 automap rays cast by VitaScanRay; the rest is upstream's test
+        RaycastHit? VitaScanWithOwnRays(Vector3 rayStartPos, Vector3 rayDirection, float rayDistance, Vector3 offsetSecondProtectionRaycast, Vector3 offsetThirdProtectionRaycast)
+        {
+            Vector3 unit = rayDirection.normalized;
+            float d1, d2, d3;
+            int c1 = VitaScanRay(rayStartPos, unit, rayDistance, out d1);
+            if (c1 < 0)
+                return null;
+            if (VitaScanRay(rayStartPos + offsetSecondProtectionRaycast, unit, rayDistance, out d2) != c1)
+                return null;
+            if (VitaScanRay(rayStartPos + offsetThirdProtectionRaycast, unit, rayDistance, out d3) != c1)
+                return null;
+            RaycastHit hitTrueLevelGeometry1, hitTrueLevelGeometry2, hitTrueLevelGeometry3;
+            Physics.Raycast(rayStartPos, rayDirection, out hitTrueLevelGeometry1, rayDistance, 1 << 0);
+            Physics.Raycast(rayStartPos + offsetSecondProtectionRaycast, rayDirection, out hitTrueLevelGeometry2, rayDistance, 1 << 0);
+            Physics.Raycast(rayStartPos + offsetThirdProtectionRaycast, rayDirection, out hitTrueLevelGeometry3, rayDistance, 1 << 0);
+            if (!(Math.Abs(hitTrueLevelGeometry1.distance - d1) < 0.01f && Math.Abs(hitTrueLevelGeometry2.distance - d2) < 0.01f &&
+                Math.Abs(hitTrueLevelGeometry3.distance - d3) < 0.01f))
+                return null;
+            MeshCollider meshCollider = vitaGeometryColliders[c1] as MeshCollider;
+            if (meshCollider != null)
+            {
+                MeshRenderer hitMeshRenderer = meshCollider.gameObject.GetComponent<MeshRenderer>();
+                if (hitMeshRenderer.enabled && !VitaAnyGrayscale(hitMeshRenderer))
+                    return hitTrueLevelGeometry1;
+                hitMeshRenderer.enabled = true;
+                Material[] mats = hitMeshRenderer.materials;
+                foreach (Material mat in mats)
+                    mat.DisableKeyword("RENDER_IN_GRAYSCALE");
+                hitMeshRenderer.materials = mats;
+            }
+            return hitTrueLevelGeometry1;
         }
 
         void VitaSetGeometryColliders(bool enabled)

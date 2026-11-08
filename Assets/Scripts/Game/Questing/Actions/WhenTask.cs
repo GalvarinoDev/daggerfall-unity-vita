@@ -24,6 +24,10 @@ namespace DaggerfallWorkshop.Game.Questing
     public class WhenTask : ActionTemplate
     {
         List<Evaluation> evaluations = new List<Evaluation>();
+#if UNITY_PSP2
+        // One Symbol per evaluation, kept: every always-on condition runs 10 times a second, and a new Symbol per run was most of the quest tick's garbage
+        Symbol[] vitaSymbols;
+#endif
 
         [Serializable]
         public struct Evaluation
@@ -122,13 +126,26 @@ namespace DaggerfallWorkshop.Game.Questing
             if (evaluations.Count == 0)
                 throw new Exception("WhenTask condition has no evaluations.");
 
+#if UNITY_PSP2
+            if (vitaSymbols == null || vitaSymbols.Length != evaluations.Count)
+            {
+                vitaSymbols = new Symbol[evaluations.Count];
+                for (int i = 0; i < vitaSymbols.Length; i++)
+                    vitaSymbols[i] = new Symbol(evaluations[i].task);
+            }
+#endif
+
             // Evaluate conditions left to right
             bool left = false, right = false;
             for (int i = 0; i < evaluations.Count; i++)
             {
                 // Get task state based on operator
                 Operator op = evaluations[i].op;
+#if UNITY_PSP2
+                Symbol taskSymbol = vitaSymbols[i];
+#else
                 Symbol taskSymbol = new Symbol(evaluations[i].task);
+#endif
                 switch(op)
                 {
                     case Operator.When:
@@ -252,6 +269,9 @@ namespace DaggerfallWorkshop.Game.Questing
 
             SaveData_v1 data = (SaveData_v1)dataIn;
             evaluations = new List<Evaluation>(data.evaluations);
+#if UNITY_PSP2
+            vitaSymbols = null;
+#endif
         }
 
         #endregion

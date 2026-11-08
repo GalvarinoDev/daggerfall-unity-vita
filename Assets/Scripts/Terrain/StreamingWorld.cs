@@ -926,7 +926,11 @@ namespace DaggerfallWorkshop
 #endif
 
             // Update terrain heights and nature billboards
+#if UNITY_PSP2
             CollectTerrains();
+#else
+            CollectTerrains();
+#endif
             for (int i = 0; i < terrainArray.Length; i++)
             {
                 if (terrainArray[i].active)
@@ -1001,7 +1005,11 @@ namespace DaggerfallWorkshop
 
         private void UpdateLocations()
         {
+#if UNITY_PSP2
             CollectLooseObjects();
+#else
+            CollectLooseObjects();
+#endif
 
             for (int i = 0; i < terrainArray.Length; i++)
             {
@@ -1013,12 +1021,63 @@ namespace DaggerfallWorkshop
 #endif
             }
 
+#if UNITY_PSP2
+            VitaEndBlockKeep();     // each location's first step (BuildingDirectory.SetLocation) ran inside StartCoroutine above
+#endif
+
             // Update current player location object once location update complete
             currentPlayerLocationObject = GetPlayerLocationObject();
 
             // Raise event
             RaiseOnAvailableLocationGameObjectEvent();
         }
+
+#if UNITY_PSP2
+        // In play, a new location's blocks were decoded twice in single frames, once for its ground tiles (TerrainHelper.SetLocationTiles)
+        // and once for its buildings (RMBLayout.GetLocationBuildingData): 1.3 s + 1.1 s in Wayrest's neighbour, at ~16 ms a block. Decode them
+        // one per frame ahead of both, and keep them (BlocksFile auto-discard off) until the location has read them. Same data through
+        // the same GetBlock, so block replacements still apply. VitaBlockPredecodeOff = test harness A/B.
+        public static bool VitaBlockPredecodeOff;
+        public static bool VitaColliderDeferOff;
+        public static bool VitaPreCullOff;      // test harness A/B of VitaCulling.PreCullBlock
+        bool vitaKeepingBlocks;
+
+        IEnumerator VitaPredecodeLocationBlocks(TerrainDesc terrainDesc)
+        {
+            if (VitaBlockPredecodeOff || !terrainDesc.hasLocation)
+                yield break;
+            ContentReader reader = dfUnity.ContentReader;
+            MapPixelData data = TerrainHelper.GetMapPixelData(reader, terrainDesc.mapPixelX, terrainDesc.mapPixelY);
+            if (!data.hasLocation)
+                yield break;
+            DFLocation location = reader.MapFileReader.GetLocation(data.mapRegionIndex, data.mapLocationIndex);
+            if (!location.Loaded)
+                yield break;
+            vitaKeepingBlocks = true;
+            reader.BlockFileReader.AutoDiscard = false;
+            for (int y = 0; y < location.Exterior.ExteriorData.Height; y++)
+            {
+                for (int x = 0; x < location.Exterior.ExteriorData.Width; x++)
+                {
+                    long start = System.Diagnostics.Stopwatch.GetTimestamp();
+                    DFBlock block;
+                    reader.GetBlock(reader.MapFileReader.GetRmbBlockName(location, x, y), out block);
+                    // A block already decoded (cities repeat them) takes no time: go straight on to the next
+                    if ((System.Diagnostics.Stopwatch.GetTimestamp() - start) * 1000 / System.Diagnostics.Stopwatch.Frequency >= 2)
+                        yield return null;
+                }
+            }
+        }
+
+        void VitaEndBlockKeep()
+        {
+            if (!vitaKeepingBlocks)
+                return;
+            vitaKeepingBlocks = false;
+            dfUnity.ContentReader.BlockFileReader.AutoDiscard = true;
+            dfUnity.ContentReader.VitaDiscardBlocks();
+        }
+#endif
 
         private IEnumerator UpdateLocation(int index, bool allowYield)
         {
@@ -1051,6 +1110,13 @@ namespace DaggerfallWorkshop
                     looseObject.mapPixelY = terrainArray[index].mapPixelY;
                     looseObject.statefulObj = false;
                     looseObjectsList.Add(looseObject);
+#if UNITY_PSP2
+                    // In play a town's setup ran in one frame (Wayrest: 1168 ms); split it over a few frames. The location is already in
+                    // looseObjectsList, as upstream has it by the end of this step.
+                    bool vitaSpread = allowYield && !VitaLoadingWindow.Showing;
+                    if (vitaSpread)
+                        yield return null;
+#endif
 
                     // Create billboard batch game objects for this location
                     // Streaming world always batches for performance, regardless of options
@@ -1066,6 +1132,10 @@ namespace DaggerfallWorkshop
                     lightsBillboardBatch.hideFlags = defaultHideFlags;
                     animalsBillboardBatch.hideFlags = defaultHideFlags;
                     //miscBillboardBatch.hideFlags = defaultHideFlags;
+#if UNITY_PSP2
+                    if (vitaSpread)
+                        yield return null;
+#endif
 
                     // Position RMB blocks inside terrain area
                     int width = location.Exterior.ExteriorData.Width;
@@ -1110,6 +1180,14 @@ namespace DaggerfallWorkshop
                             //miscBillboardBatch.BlockOrigin = blockOrigin;
 
                             // Add block
+#if UNITY_PSP2
+                            if (vitaSpread && !VitaColliderDeferOff)
+                            {
+                                VitaBlockBake.Prefetch(ref blocks[blockIndex]);
+                                yield return new WaitForEndOfFrame();
+                            }
+                            GameObjectHelper.VitaDeferColliders = vitaSpread && !VitaColliderDeferOff;
+#endif
                             GameObject go = GameObjectHelper.CreateRMBBlockGameObject(
                                 blocks[blockIndex],
                                 x,
@@ -1130,8 +1208,16 @@ namespace DaggerfallWorkshop
                             go.hideFlags = defaultHideFlags;
                             go.transform.parent = locationObject.transform;
                             go.transform.localPosition = blockOrigin;
+#if UNITY_PSP2
+                            GameObjectHelper.VitaDeferColliders = false;
+                            if (allowYield)
+                                dfLocation.VitaApplyClimateToBlock(go, blockIndex == 0);
+                            if (vitaSpread && !VitaPreCullOff)
+                                VitaCulling.PreCullBlock(go);
+#else
                             if (allowYield)
                                 dfLocation.ApplyClimateSettings();
+#endif
 
                             // Set navigation info for this block
                             cityNavigation.SetRMBData(blocks[blockIndex], x, y);
@@ -1142,6 +1228,14 @@ namespace DaggerfallWorkshop
                             // Optionally yield after placing block
                             if (allowYield)
                                 yield return new WaitForEndOfFrame();
+#if UNITY_PSP2
+                            if (vitaSpread)
+                            {
+                                // Its own frame: the block before this one's colliders
+                                GameObjectHelper.VitaAddDeferredColliders();
+                                yield return new WaitForEndOfFrame();
+                            }
+#endif
                         }
                     }
                     // Only apply climate settings after entire location updated if not spanning multiple frames.
@@ -1169,7 +1263,11 @@ namespace DaggerfallWorkshop
                     }
 #endif
 
+#if UNITY_PSP2
                     RaiseOnUpdateLocationGameObjectEvent(locationObject, allowYield);
+#else
+                    RaiseOnUpdateLocationGameObjectEvent(locationObject, allowYield);
+#endif
 
                     //// TEST: Store a RAW image of navgrid
                     //string filename = string.Format("{0} [{1}x{2}].raw", location.Name, cityNavigation.CityWidth * 64, cityNavigation.CityHeight * 64);
@@ -1586,6 +1684,8 @@ namespace DaggerfallWorkshop
 #if UNITY_PSP2
             // Vita, in play: the stand-in jobs ran inside Schedule, so each new tile was one ~200 ms frame.
             // Queue them instead and run them a few ms per frame on the main thread. Loads keep the synchronous path.
+            if (vitaSliceTerrainJobs)
+                yield return StartCoroutine(VitaPredecodeLocationBlocks(terrainDesc));
             VitaJobsShim.Deferred = vitaSliceTerrainJobs;
             JobHandle updateTerrainDataJobHandle;
             try { updateTerrainDataJobHandle = dfTerrain.BeginMapPixelDataUpdate(dfUnity.TerrainTexturing); }

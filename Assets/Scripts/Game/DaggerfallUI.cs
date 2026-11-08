@@ -392,6 +392,11 @@ namespace DaggerfallWorkshop.Game
 
         void Start()
         {
+#if UNITY_PSP2
+            // Built on first use otherwise: the first spell an enemy casts stalled play for 385 ms. Boot can take it.
+            if (DaggerfallUnity.Instance.IsPathValidated)
+                spellIconCollection = SpellIconCollection;
+#endif
             // Post start message
             PostMessage(startupMessage);
 

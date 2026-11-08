@@ -669,6 +669,11 @@ namespace DaggerfallWorkshop.Utility
             if (blocksArray != null)
                 return blocksArray;
 #if UNITY_PSP2
+            // No location here (a wilderness map pixel asks too, through TalkManager): nothing to read, and clearing below would throw
+            // away the town just left, so walking back into its pixel re-read every block on one frame (Daenia 1.5 s).
+            if (location.Exterior.ExteriorData.Width == 0 || location.Exterior.ExteriorData.Height == 0)
+                return new DFBlock[0];
+
             // Vita: keep only the current location. Each cached city is ~10-20 MB of parsed blocks (live C# data at castle visits grew
             locationCache.Clear();
 #endif

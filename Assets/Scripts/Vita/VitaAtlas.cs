@@ -322,7 +322,7 @@ public class VitaAtlas : MonoBehaviour
             MeshFilter filter = renderer.GetComponent<MeshFilter>();
             Mesh mesh = filter ? filter.sharedMesh : null;
             DaggerfallMesh dfMesh = renderer.GetComponent<DaggerfallMesh>();
-            if (!renderer.enabled || !mesh || !mesh.isReadable || !dfMesh)
+            if ((!renderer.enabled && !VitaCulling.IsPreCulled(renderer)) || !mesh || !mesh.isReadable || !dfMesh)
                 continue;
             // City gates swap their mesh at dusk and dawn: the other model has no atlas submesh or rects, so its wall vanished at night
             if (renderer.GetComponent<DaggerfallCityGate>())

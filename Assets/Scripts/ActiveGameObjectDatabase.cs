@@ -72,6 +72,32 @@ namespace DaggerfallWorkshop
             }
         }
 
+#if UNITY_PSP2
+        // GetActiveComponents into a caller's list: same objects in the same order, without a new List and two iterators per call
+        // (enemies looking for targets call it several times a second each)
+        public void FillActiveComponents<T>(List<T> into) where T : MonoBehaviour
+        {
+            cacheLock.EnterReadLock();
+            try
+            {
+                foreach (var weakObject in cachedObjects)
+                {
+                    GameObject activeObject;
+                    if (weakObject.TryGetTarget(out activeObject) && activeObject != null && activeObject.activeInHierarchy)
+                    {
+                        var t = activeObject.GetComponent<T>();
+                        if (t != null && t.isActiveAndEnabled)
+                            into.Add(t);
+                    }
+                }
+            }
+            finally
+            {
+                cacheLock.ExitReadLock();
+            }
+        }
+#endif
+
         // Adds a GameObject to the cache
         // Input GameObject can be inactive in the scene. It will not be removed from the cache until Destroyed
         public void AddObject(GameObject gameObject)
@@ -233,6 +259,49 @@ namespace DaggerfallWorkshop
             return enemyCache.GetActiveComponents<DaggerfallEntityBehaviour>();
         }
 
+#if UNITY_PSP2
+        // Enemies look for targets in step with each other (their 5 s timers reset together), so one physics step can rebuild the same
+        // list several times (~1.6 ms each in a 45-enemy dungeon). Keep one list and rebuild it only when an enemy may have joined:
+        // registered, or a DaggerfallEntityBehaviour enabled (object or a parent activated, component switched on). Anything that left
+        // since (destroyed, deactivated, disabled) fails the same test the rebuild uses and is skipped, so callers get the same objects
+        // in the same order as a fresh rebuild.
+        static readonly List<DaggerfallEntityBehaviour> vitaEnemies = new List<DaggerfallEntityBehaviour>();
+        static int vitaEnemyChanges, vitaEnemiesBuiltAt = -1;
+        public static bool VitaSharedEnemyListOff;  // test harness A/B
+        public static void VitaEnemyMayHaveJoined()
+        {
+            vitaEnemyChanges++;
+        }
+
+        // Area changes: drop the old area's objects at once instead of at the next rebuild
+        public static void VitaClearEnemyList()
+        {
+            vitaEnemies.Clear();
+            vitaEnemiesBuiltAt = -1;
+        }
+
+        public static void FillActiveEnemyBehaviours(List<DaggerfallEntityBehaviour> into)
+        {
+            if (VitaSharedEnemyListOff)
+            {
+                enemyCache.FillActiveComponents(into);
+                return;
+            }
+            if (vitaEnemiesBuiltAt != vitaEnemyChanges)
+            {
+                vitaEnemies.Clear();
+                enemyCache.FillActiveComponents(vitaEnemies);
+                vitaEnemiesBuiltAt = vitaEnemyChanges;
+            }
+            for (int i = 0; i < vitaEnemies.Count; i++)
+            {
+                DaggerfallEntityBehaviour enemy = vitaEnemies[i];
+                if (enemy != null && enemy.isActiveAndEnabled)
+                    into.Add(enemy);
+            }
+        }
+#endif
+
         // Gets all the enabled DaggerfallEnemy components from active registered enemies
         public static IEnumerable<DaggerfallEnemy> GetActiveEnemyEntities()
         {
@@ -254,6 +323,9 @@ namespace DaggerfallWorkshop
         // Registers an enemy (monster or class) to the enemy cache. Does not have to be active
         public static void RegisterEnemy(GameObject enemy)
         {
+#if UNITY_PSP2
+            VitaEnemyMayHaveJoined();
+#endif
             enemyCache.AddObject(enemy);
         }
 

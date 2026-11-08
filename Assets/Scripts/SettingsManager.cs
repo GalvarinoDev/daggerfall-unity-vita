@@ -182,6 +182,7 @@ namespace DaggerfallWorkshop
         public bool VitaExteriorLowRes { get; set; }
         public int VitaPixelLights { get; set; }
         public int VitaGpuMode { get; set; }
+        public int VitaFrameLimit { get; set; }    // 0 = unlocked (VSync setting as is), 1 = 30 FPS
         public bool VitaAtlas { get; set; }
         public bool VitaFlatBatch { get; set; }
         public bool VitaModelBatch { get; set; }
@@ -491,6 +492,9 @@ namespace DaggerfallWorkshop
             // Vita: power configuration mode A/B/C = 0/1/2, 3 = A with a high GPU clock (VitaPower.cs). Default 2: high GPU clock with Wi-Fi kept (exterior 25 → 35.6 FPS)
             int vitaGpuMode;
             VitaGpuMode = int.TryParse(GetData(sectionVideo, "VitaGpuMode"), out vitaGpuMode) ? Mathf.Clamp(vitaGpuMode, 0, 3) : 2;
+            // Vita: 1 = lock to 30 FPS (vSyncCount 2: every frame 33 ms, even pacing where the rate swings 40-60); off unless set
+            int vitaFrameLimit;
+            VitaFrameLimit = int.TryParse(GetData(sectionVideo, "VitaFrameLimit"), out vitaFrameLimit) ? Mathf.Clamp(vitaFrameLimit, 0, 1) : 0;
             // Vita: one texture atlas per dungeon, one draw per model (VitaAtlas.cs); on unless "False"
             VitaAtlas = GetData(sectionVideo, "VitaAtlas") != "False";
             // Vita: a dungeon block's plain flats merged per material, one draw each (VitaFlatBatch.cs); on unless "False"
@@ -719,6 +723,7 @@ namespace DaggerfallWorkshop
             SetBool(sectionVideo, "VitaExteriorLowRes", VitaExteriorLowRes);
             SetInt(sectionVideo, "VitaPixelLights", VitaPixelLights);
             SetInt(sectionVideo, "VitaGpuMode", VitaGpuMode);
+            SetInt(sectionVideo, "VitaFrameLimit", VitaFrameLimit);
             SetBool(sectionVideo, "VitaAtlas", VitaAtlas);
             SetBool(sectionVideo, "VitaFlatBatch", VitaFlatBatch);
             SetBool(sectionVideo, "VitaModelBatch", VitaModelBatch);
