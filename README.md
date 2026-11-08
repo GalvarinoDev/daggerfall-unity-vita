@@ -10,6 +10,24 @@ This is an alpha, so expect bugs. Back up your saves before updating.
 
 ## Changelog
 
+### v.0.2.0-alpha
+
+This update is mostly about smoother play. Mods still aren't included because I'm waiting on permission for a couple of them.
+
+- Towns that load while you walk build a little at a time, so the long freezes at town edges are mostly gone.
+- When a town builds nearby, its far blocks are hidden right away. They used to be drawn for 12 to 15 seconds.
+- Trees on new terrain fill in over several frames.
+- Civilians you can't see stop moving until they're back in view, which helps in big cities.
+- Leaving a town and walking straight back no longer rebuilds the whole town in one frame.
+- Torches, candles and other dungeon sprites animate from one shared batch. Daggerfall castle went from about 42 to 45 FPS on my test walk.
+- Garbage collection hitches dropped from about 10 to about 2 per 3-minute dungeon walk.
+- The automap's background scan is cheaper.
+- Songs loop in place. Each restart used to cause a short freeze and a gap of silence about once a minute.
+- Common sounds load during the loading screen, so they don't stall the first time they play.
+- Snow and rain cost less and look the same.
+- Spell icons are prebaked, so the spellbook opens faster.
+- The camera moves more smoothly while you walk.
+
 ### v.0.1.0-alpha
 
 - Initial release.
@@ -22,7 +40,7 @@ You need your own copy of Daggerfall to play. DOS Daggerfall is free on [Steam](
 
 Please report bugs in this port here, not to the Daggerfall Unity team.
 
-## Setup Instructions (For End Users)
+## Setup for players
 
 You need a Vita running HENkaku or Enso with [VitaShell](https://github.com/TheOfficialFloW/VitaShell/releases) installed, and about 1.7 GB free on `ux0:` for the install. The game and its data take about 1.1 GB once you delete the VPK.
 
@@ -77,25 +95,26 @@ The defaults match the look of Daggerfall Unity on PC.
 
 ## Performance
 
-I measured these on one PCH-1000 with the alpha's data and code, following a fixed test route. Frame rates change a lot depending on where you are in the game.
+I measured these on one PCH-1000, with a bot walking fixed routes at running speed. Frame rates change a lot depending on where you are in the game.
 
 | Test | Result |
 |---|---|
-| 46 stops around the game | 53.9 FPS average |
-| 7 cities | 49.3 FPS average, 31.7 FPS low |
-| Loading a city | 22 to 34 seconds |
-| Entering a city's palace | 34 to 50 seconds |
+| Walking a test set of 39 towns (0.2.0, just before the last fixes) | 51.9 FPS average, no crashes |
+| Walking a test set of 49 dungeons (0.2.0, just before the last fixes) | 57 FPS average, no crashes |
+| Loading a city (alpha) | 22 to 34 seconds |
+| Entering a city's palace (alpha) | 34 to 50 seconds |
 
 The default speed setting raises the CPU to 444 MHz and the GPU clock, and limits screen brightness. You can change this with CPU/GPU speed in the pause menu.
 
-## Known Issues
+## Known issues
 
 - English only.
-- Mods aren't supported yet, but support is coming soon. The Vita can't run PC mods as they are. Each one has to be converted into a format the Vita can read, and I need to ask each mod's author for permission first.
+- Daggerfall castle still has short hitches at some doorways.
+- No mods yet. The Vita can't run PC mods as they are, so each one has to be converted, and I ask each author for permission first. Support is coming.
 - The web browser and PlayStation Store can't run alongside the game, because it uses the Vita's extra memory mode.
 - Replacement videos, Post Processing and TextMeshPro fonts from PC Daggerfall Unity are not available. The original cutscenes still play.
 
-## Build Instructions (For Developers)
+## Building it yourself
 
 The Vita's Unity support is not publicly available, so you need your own licensed copy of Unity 2018.2.19f1 with PS Vita build support.
 
