@@ -21,6 +21,9 @@ Built-in mods and four more languages.
 - Fixed a band of water colour on far hillsides with World of Daggerfall - Terrain on.
 - The Video settings page no longer puts Frame Rate on top of the Close button.
 
+<details>
+<summary>Older versions</summary>
+
 ### v.0.2.0-alpha
 
 Mostly smoother play: towns build a little at a time while you walk, hidden civilians stop moving, songs loop without a freeze, fewer garbage collection hitches, and a smoother camera.
@@ -28,6 +31,8 @@ Mostly smoother play: towns build a little at a time while you walk, hidden civi
 ### v.0.1.0-alpha
 
 - Initial release.
+
+</details>
 
 ## Disclaimer
 
@@ -66,6 +71,9 @@ A new game starts with the HUD hidden, so tap Select to bring it up. In a text b
 
 The Vita can't load PC `.dfmod` files, so each mod was rebuilt for it. Turn them on from the Mods button on the setup screen, before the game loads. Mod text stays in English in every language.
 
+<details>
+<summary>All 21 mods and their authors</summary>
+
 | Mod | Version | By | Links |
 |---|---|---|---|
 | Dynamic Skies | 2.3.4 | BadLuckBurt and carademono | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/376), [GitHub](https://github.com/drcarademono/dynamic-skies) |
@@ -92,7 +100,12 @@ Two are new for the Vita: Old Masters of Tamriel, a set of public-domain paintin
 
 World of Daggerfall - Terrain and Distant Terrain cost the most frame rate.
 
+</details>
+
 ## Lighting
+
+<details>
+<summary>Lighting options</summary>
 
 You can adjust the lighting from the dropdown list in the pause menu. Each entry moves to its next value when you click it, and the changes apply right away.
 
@@ -105,7 +118,12 @@ You can adjust the lighting from the dropdown list in the pause menu. Each entry
 
 The defaults match the look of Daggerfall Unity on PC.
 
+</details>
+
 ## Performance
+
+<details>
+<summary>Frame rates and load times</summary>
 
 I measured these on one PCH-1000 with 0.3.0, with a bot visiting the same 46 stops at running speed: a dungeon, the wilderness, and Daggerfall, Wayrest and Sentinel (streets at noon and at night, taverns, shops and palaces).
 
@@ -119,6 +137,8 @@ I measured these on one PCH-1000 with 0.3.0, with a bot visiting the same 46 sto
 
 Neither run crashed. The default speed setting raises the CPU to 444 MHz and the GPU clock, and limits screen brightness. You can change this with CPU/GPU speed in the pause menu.
 
+</details>
+
 ## Known issues
 
 - Daggerfall castle still has short hitches at some doorways.
@@ -126,6 +146,9 @@ Neither run crashed. The default speed setting raises the CPU to 444 MHz and the
 - Replacement videos, Post Processing and TextMeshPro fonts from PC Daggerfall Unity are not available. The original cutscenes still play.
 
 ## Building it yourself
+
+<details>
+<summary>How to build it</summary>
 
 The Vita's Unity support is not publicly available, so you need your own licensed copy of Unity 2018.2.19f1 with PS Vita build support.
 
@@ -154,6 +177,8 @@ vita/build.sh && python3 vita/tools/pack_vpk.py
 Vita-only changes to upstream's files sit behind `#if UNITY_PSP2` with upstream's original lines kept beside them, so upstream merges stay readable. `vita/tools/guard_diff.py` helps keep them that way. The built-in mods compile in with `VITA_MODS` (`Assets/csc.rsp`).
 
 `vita/bootmusic` is an optional taiHEN plugin that plays the title theme during the engine load. `dfu-vita-converters` holds PC scripts that convert mod data for the port.
+
+</details>
 
 ## Credits
 
