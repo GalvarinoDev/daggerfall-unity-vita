@@ -142,6 +142,10 @@ namespace DaggerfallWorkshop
             // Remove exiting billboards
             dfBillboardBatch.Clear();
             MeshReplacement.ClearNatureGameObjects(terrain);
+#if UNITY_PSP2 && VITA_MODS
+            // Vita: trees with a Low Poly Trees model go into their own batch, replaced by models near the player (VitaNearTrees)
+            DaggerfallBillboardBatch vitaTreeBatch = VitaNearTrees.BeginLayout(dfTerrain, dfBillboardBatch);
+#endif
 
             // Seed random with terrain key
 #if UNITY_PSP2
@@ -217,7 +221,13 @@ namespace DaggerfallWorkshop
 
                     // Add to batch unless a mesh replacement is found
                     int record = Random.Range(1, 32);
+#if UNITY_PSP2 && VITA_MODS
+                    if (vitaTreeBatch != null && VitaNearTrees.Add(dfTerrain, terrain, record, x, y))
+                        vitaTreeBatch.AddItem(record, pos);
+                    else if (terrainDist > 1 || !MeshReplacement.ImportNatureGameObject(dfBillboardBatch.TextureArchive, record, terrain, x, y))
+#else
                     if (terrainDist > 1 || !MeshReplacement.ImportNatureGameObject(dfBillboardBatch.TextureArchive, record, terrain, x, y))
+#endif
                         dfBillboardBatch.AddItem(record, pos);
                     else if (!NatureMeshUsed)
                         NatureMeshUsed = true;  // Signal that nature mesh has been used to initiate extra terrain updates
@@ -244,6 +254,18 @@ namespace DaggerfallWorkshop
 #endif
             // Apply new batch
             dfBillboardBatch.Apply();
+#if UNITY_PSP2 && VITA_MODS
+            if (vitaTreeBatch != null)
+            {
+                if (budgetMs > 0)
+                {
+                    vitaRandom.Swap();
+                    yield return null;
+                    vitaRandom.Swap();
+                }
+                vitaTreeBatch.Apply();
+            }
+#endif
         }
     }
 

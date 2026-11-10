@@ -329,6 +329,9 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             {
                 // No saves found, prompt to load a classic save
                 promptLabel.Text = TextManager.Instance.GetLocalizedText("noSavesFound");
+#if UNITY_PSP2
+                VitaFitPrompt();
+#endif
                 return;
             }
             else
@@ -367,7 +370,21 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             else if (mode == Modes.LoadGame)
                 promptText = TextManager.Instance.GetLocalizedText("loadPrompt");
             promptLabel.Text = string.Format(TextManager.Instance.GetLocalizedText("saveLoadPromptFormat"), promptText, currentPlayerName);
+#if UNITY_PSP2
+            VitaFitPrompt();
+#endif
         }
+
+#if UNITY_PSP2
+        // Translated prompts and long character names can run past the panel's right edge: shrink the line to fit
+        void VitaFitPrompt()
+        {
+            promptLabel.TextScale = 1f;
+            float width = mainPanelSize.x - promptLabel.Position.x * 2;
+            if (promptLabel.TextWidth > width)
+                promptLabel.TextScale = width / promptLabel.TextWidth;
+        }
+#endif
 
         protected virtual void UpdateSelectedSaveInfo()
         {

@@ -150,6 +150,10 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             exitButton.BackgroundColor = new Color(0.2f, 0.2f, 0.2f, 0.6f);
             exitButton.Outline.Enabled = true;
             exitButton.Label.Text = GetText("exit");
+#if UNITY_PSP2
+            // Widen the button to its label: translated words for Exit don't fit 20 pixels
+            exitButton.Size = new Vector2(Mathf.Max(20, exitButton.Label.TextWidth + 6), 9);
+#endif
             exitButton.OnMouseClick += ExitButton_OnMouseClick;
             exitButton.Hotkey = DaggerfallShortcut.GetBinding(DaggerfallShortcut.Buttons.GameSetupExit);
             NativePanel.Components.Add(exitButton);
@@ -420,11 +424,24 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             checkbox.ToolTipText = GetText(string.Format("{0}Info", key));
             checkbox.IsChecked = isChecked;
             checkbox.Position = new Vector2(x, optionPos);
+#if UNITY_PSP2
+            VitaFit(checkbox.Label, x + checkbox.Label.Position.x);
+#endif
             optionsPanel.Components.Add(checkbox);
             optionPos += optionSpacing;
 
             return checkbox;
         }
+
+#if UNITY_PSP2
+        // Translated labels can be wider than their column: shrink a label that would run into the next column or the panel edge
+        void VitaFit(TextLabel label, float left)
+        {
+            float width = (left < 165 ? 165f : optionsPanel.InteriorWidth) - left - 4;
+            if (label.TextWidth > width)
+                label.TextScale *= width / label.TextWidth;
+        }
+#endif
 
         HorizontalSlider AddSlider(float x, string key, string toolTipKey, int selected, params string[] choices)
         {
@@ -437,6 +454,9 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             label.TextColor = selectedTextColor;
             label.TextScale = 1.0f;
             label.ShadowPosition = Vector2.zero;
+#if UNITY_PSP2
+            VitaFit(label, x);
+#endif
 
             HorizontalSlider slider = DaggerfallUI.AddSlider(
                 new Vector2(x, optionPos + 8f),
@@ -463,6 +483,9 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             label.TextColor = selectedTextColor;
             label.TextScale = 1.0f;
             label.ShadowPosition = Vector2.zero;
+#if UNITY_PSP2
+            VitaFit(label, x);
+#endif
 
             HorizontalSlider slider = DaggerfallUI.AddSlider(
                 new Vector2(x, optionPos + 8f),
@@ -625,7 +648,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             if (!string.IsNullOrEmpty(DaggerfallUnity.Settings.DistributionSuffix))
                 restartButton.Enabled = false;
 
-#if UNITY_PSP2
+#if UNITY_PSP2 && !VITA_MODS
             if (false)      // no-mods alpha (vita/nomods.txt): no Mods button
 #else
             if (DaggerfallUnity.Settings.LypyL_ModSystem)
@@ -1000,7 +1023,11 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         {
             if (optionsPanel.Enabled)
             {
-#if UNITY_PSP2
+#if UNITY_PSP2 && VITA_MODS
+                // The Vita can't load .dfmod files: DFU's own Mods button opens the list of PC mods built into the port (VitaModsWindow).
+                // A second Vita "Mods" button sat above it on the same screen
+                DaggerfallUI.UIManager.PushWindow(new VitaModsWindow(DaggerfallUI.UIManager));
+#elif UNITY_PSP2
 #else
                 ModLoaderInterfaceWindow modLoaderWindow = new ModLoaderInterfaceWindow(DaggerfallUI.UIManager);
                 DaggerfallUI.UIManager.PushWindow(modLoaderWindow);

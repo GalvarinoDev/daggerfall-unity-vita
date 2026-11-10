@@ -25,7 +25,7 @@ public static class VitaMenuNav
     static readonly List<ListBox> lists = new List<ListBox>();   // their rects are also in buttons, from listStart on
     static readonly List<HorizontalSlider> sliders = new List<HorizontalSlider>();   // their rects are in buttons too; left/right steps them
     static int listStart;
-    static IUserInterfaceWindow measured;   // menu stutter probe: one VITAUI line per window
+    static IUserInterfaceWindow measured;   // menu timing log: one VITAUI line per window
     static float measureStart, firstMs, worstMs, totalMs;
     static int measureFrames;
     static bool measureLogged;

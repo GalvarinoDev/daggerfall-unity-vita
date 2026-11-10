@@ -250,10 +250,12 @@ namespace Unity.Jobs
     /// <summary>
     /// Runs scheduled jobs on one background worker thread (FIFO), so terrain generation leaves the main core (CPU0).
     /// One worker + FIFO means a job never starts before the jobs queued ahead of it, so dependencies hold without extra checks.
+    /// One worker, and IJobParallelFor loops run sequentially; two workers would help only if the worker becomes the limit.
     /// </summary>
     public static class VitaJobsShim
     {
-        public static bool Threaded = false;
+        /// <summary>Test switch: false runs every job inside Schedule() on the calling thread.</summary>
+        public static bool Threaded = false;   // off: on hardware the worker made loads slower
 
         /// <summary>
         /// While true, scheduled jobs are queued for Pump() on the main thread instead of running (or going to the worker). Set only around
@@ -400,6 +402,20 @@ namespace Unity.Jobs
                 work.done = true;
                 if (budgetTicks > 0 && pumpWatch.ElapsedTicks >= budgetTicks)
                     return;
+            }
+        }
+
+        /// <summary>
+        /// Drops every queued deferred job (marked done with an error, so a Complete() on it throws): for a world clear, when the queue
+        /// can only hold the old world's tile (init builds run synchronously). Its coroutine stops on its own (StreamingWorld.vitaWorldGen).
+        /// </summary>
+        public static void DropDeferred()
+        {
+            while (deferredQueue.Count > 0)
+            {
+                Work work = deferredQueue.Dequeue();
+                work.error = new OperationCanceledException("VITAJOBS dropped at a world clear");
+                work.done = true;
             }
         }
 

@@ -593,7 +593,7 @@ namespace DaggerfallWorkshop.Game
 
 #if UNITY_PSP2
         float vitaNextTick;
-        public static bool VitaUpstreamTick;
+        public static bool VitaUpstreamTick;   // test switch: upstream's WaitForSeconds steps
         public float VitaAnimTickTime { get { return animTickTime; } }
         public int VitaFrameCount(WeaponStates state) { return weaponAnims != null ? weaponAnims[(int)state].NumFrames : 0; }
 #endif
@@ -684,7 +684,7 @@ namespace DaggerfallWorkshop.Game
             List<Texture2D> textures = new List<Texture2D>();
             List<RecordIndex> indices = new List<RecordIndex>();
 #if UNITY_PSP2
-            int startIndex = 0;   // textures stays empty with the baked pack, so count frames instead of textures.Count
+            int startIndex = 0;   // textures stays empty with the baked pack, so count frames instead of textures.Count (otherwise every record read record 0's frames)
 #endif
             for (int record = 0; record < cifFile.RecordCount; record++)
             {

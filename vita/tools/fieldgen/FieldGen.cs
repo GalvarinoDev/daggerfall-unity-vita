@@ -1,6 +1,6 @@
 // Emits Assets/Scripts/Vita/VitaFieldsGen.cs: plain C# readers for the types VitaFields stores (same layout as VitaFields.Write: instance
 // fields public + private sorted by ordinal name, enums as Int64, null flag before reference types, arrays length-prefixed, rank>1 arrays
-// one length per dimension). VitaFields' reflection reader took 1.9 s per DFBlock on the Vita (s49a) and boxed every field.
+// one length per dimension). VitaFields' reflection reader took 1.9 s per DFBlock on the Vita and boxed every field.
 // Types with non-public or readonly fields keep the reflection path. Run: vita/tools/fieldgen/fieldgen.sh
 using System;
 using System.Collections.Generic;

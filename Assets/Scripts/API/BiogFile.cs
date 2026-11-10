@@ -52,7 +52,7 @@ namespace DaggerfallConnect.Arena2
             // Load text file
             string fileName = $"BIOG{characterDocument.classIndex:D2}T{characterDocument.biographyIndex}.TXT";
 #if UNITY_PSP2 && !UNITY_EDITOR
-            // Baked by VitaBiogBaker (VitaBiogs, item 12): questions, answers and backstory id without the text parse
+            // Baked by VitaBiogBaker (VitaBiogs): questions, answers and backstory id without the text parse
             if (VitaLoad(fileName))
                 return;
 #endif

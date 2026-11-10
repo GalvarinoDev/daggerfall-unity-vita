@@ -1,7 +1,7 @@
 #!/bin/bash
 # Assets/Resources/NameGen.txt (DFU's name generator banks, JSON) -> Assets/StreamingAssets/VitaNative/namegen.bin for NameHelper (PSP2).
 # Parsed by DFU's own FullSerializer DLL (mono in podman), so its leniency (upstream's file has a missing and a trailing comma) is kept:
-# parsing the 28 KB JSON took 285-543 ms on the Vita at the first city load (s41 spell4/spell5).
+# parsing the 28 KB JSON took 285-543 ms on the Vita at the first city load.
 # Format: "VNMG", int32 version 1, int32 bank count, per bank: int32 BankTypes value, int32 setCount, int32 set count, per set:
 # int32 setIndex, int32 part count, per part: int32 UTF-8 length, bytes. Null arrays/strings are written as length -1.
 # Usage: vita/tools/namegen_bake.sh

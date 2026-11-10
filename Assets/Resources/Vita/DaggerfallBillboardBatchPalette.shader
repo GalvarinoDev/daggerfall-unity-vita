@@ -41,9 +41,11 @@ Shader "Daggerfall/Vita/BillboardBatchPalette" {
 		sampler2D _EmissionMap;
 		half4 _EmissionColor;
 		float3 _UpVector;
+		// VitaNearTrees: billboards inside this world xz rect (xmin, zmin, xmax, zmax) collapse to a point, the 3D trees stand there
 		float4 _VitaNearTreeRect;
 
 		// One UV: the emission mask shares the atlas layout, and the Vita atlases have no normal map (o.Normal from a flat default bump
+		// map cost a texture read plus tangent-space lighting per pixel for the same result; trees were ~19 ms of the exterior frame)
 		// Vita: ambient + fill lights per vertex (VitaFill.cginc): Unity's SH cost 16 cycles per pixel here (shaderaudit)
 		#include "VitaFill.cginc"
 		struct Input {

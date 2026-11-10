@@ -20,7 +20,10 @@ using DaggerfallConnect.Arena2;
 public class VitaFlatBatch : MonoBehaviour
 {
     public const string ShaderName = "Daggerfall/Vita/FlatBatchPalette";
-    public static bool KeepUpstream;
+    public static bool KeepUpstream;            // test switch: Show switches back (always possible: the billboards stay)
+    // Town leftovers merged per town (BuildTown). Per block it was off: Daggerfall walk 32.7 vs 32.2 FPS merged, but ~8 MB less free main.
+    // CityAnimatedOff is a test switch that leaves the animated ones out.
+    public static bool CityAnimatedOff;
     static readonly int facingId = Shader.PropertyToID("_VitaFacing");
 
     static readonly int[] rejected = new int[6];   // per reason in Eligible, logged by Build
@@ -50,9 +53,24 @@ public class VitaFlatBatch : MonoBehaviour
     }
 
     /// <summary>Merges root's plain flats per block and material into one camera-facing mesh each.</summary>
-    public static void Build(GameObject root)
+    /// cityBlock: a town block's leftover billboards: no log (one call per block; a log line costs 7-14 ms on hardware) and no nature flats
+    /// (DaggerfallLocation swaps their archive per season after the block is built)
+    public static void Build(GameObject root, bool cityBlock = false)
     {
-        if (!DaggerfallUnity.Settings.VitaFlatBatch || !Shader.Find(ShaderName))
+        Build(root, cityBlock, false);
+    }
+
+    /// <summary>A built town's leftover billboards (animated lights, decorations, animals) merged per material across the whole town, not per
+    /// block: per block made ~150 small readable meshes in Daggerfall (-8 MB free main for +0.5 FPS), per town a handful.
+    /// The batch spans the town, so VitaCulling (distance to bounds) never hides it inside the town.</summary>
+    public static void BuildTown(GameObject location)
+    {
+        Build(location, true, true);
+    }
+
+    static void Build(GameObject root, bool cityBlock, bool town)
+    {
+        if (!DaggerfallUnity.Settings.VitaFlatBatch || !Shader.Find(ShaderName) || (cityBlock && CityAnimatedOff))
             return;
         float started = Time.realtimeSinceStartup;
         var groups = new Dictionary<KeyValuePair<Transform, Material>, List<DaggerfallBillboard>>();
@@ -64,38 +82,56 @@ public class VitaFlatBatch : MonoBehaviour
             flats++;
             MeshRenderer renderer;
             Transform block;
-            if (!Eligible(billboard, root.transform, out renderer, out block))
+            if ((cityBlock && billboard.Summary.FlatType == FlatTypes.Nature) || !Eligible(billboard, root.transform, out renderer, out block))
                 continue;
-            var key = new KeyValuePair<Transform, Material>(block, renderer.sharedMaterial);
+            var key = new KeyValuePair<Transform, Material>(town ? root.transform : block, renderer.sharedMaterial);
             List<DaggerfallBillboard> list;
             if (!groups.TryGetValue(key, out list))
                 groups.Add(key, list = new List<DaggerfallBillboard>());
             list.Add(billboard);
         }
 
-        VitaFlatBatch owner = root.AddComponent<VitaFlatBatch>();
+        VitaFlatBatch owner = null;
         var copies = new Dictionary<Material, Material>();
         int merged = 0;
         foreach (var group in groups)
         {
             if (group.Value.Count < 2)
                 continue;
+            if (!owner)
+                owner = root.GetComponent<VitaFlatBatch>();
+            if (!owner)
+                owner = root.AddComponent<VitaFlatBatch>();
             Material material;
             if (!copies.TryGetValue(group.Key.Value, out material))
             {
                 Material source = group.Key.Value;
+                // Town blocks share one copy per atlas material with the plain city batches (cityMaterials, freed with its atlas):
+                // a copy per block made ~150 materials in Daggerfall (-10 MB free main, -2.5 FPS on the walk)
+                if (cityBlock && cityMaterials.TryGetValue(source, out material) && material)
+                {
+                    copies.Add(source, material);
+                    owner.batches.Add(owner.CreateBatch(group.Key.Key, material, group.Value));
+                    merged += group.Value.Count;
+                    continue;
+                }
                 material = new Material(Shader.Find(ShaderName));
                 material.CopyPropertiesFromMaterial(source);
                 material.shaderKeywords = source.shaderKeywords;
                 material.renderQueue = source.renderQueue;
                 copies.Add(source, material);
-                owner.materials.Add(material);
+                if (cityBlock)
+                    cityMaterials[source] = material;
+                else
+                    owner.materials.Add(material);
             }
             owner.batches.Add(owner.CreateBatch(group.Key.Key, material, group.Value));
             merged += group.Value.Count;
         }
+        if (cityBlock)
+            return;
         Debug.LogFormat("VitaFlatBatch: {0} of {1} flats in {2} batches ({3} materials), {4:F0} ms; left: type {5}, components/action {6}, " +
-            "renderer/material {7}, scale {8}, no block {9}", merged, flats, owner.batches.Count, owner.materials.Count,
+            "renderer/material {7}, scale {8}, no block {9}", merged, flats, owner ? owner.batches.Count : 0, owner ? owner.materials.Count : 0,
             (Time.realtimeSinceStartup - started) * 1000f, rejected[0], rejected[1], rejected[2], rejected[3], rejected[4]);
         foreach (var detail in rejectDetail)
             Debug.LogFormat("VitaFlatBatch: left {0} x{1}", detail.Key, detail.Value);
@@ -212,7 +248,7 @@ public class VitaFlatBatch : MonoBehaviour
             }
             item.renderer.enabled = false;
             // Its Update and animation coroutine only count frames for a hidden renderer: 348 of them cost ~2.5 ms a frame in Daggerfall
-            // castle (s71 dfab1), and 260 were animated (torches, candles), so the batch keeps their frame timers instead
+            // castle, and 260 were animated (torches, candles), so the batch keeps their frame timers instead
             billboard.StopAllCoroutines();
             billboard.enabled = false;
         }
@@ -303,12 +339,23 @@ public class VitaFlatBatch : MonoBehaviour
 
     public const int WinterCropArchive = 511, WinterCropRecord = 22;
 
+    /// <summary>DET Harvestable Crops (a Beautiful Cities/Villages dependency) shows crops (archive 301) as snowy stalks (511/22) in winter
     /// outside desert climates. Its harvesting isn't ported, only the look. Callers make a billboard with the winter record.</summary>
+    // Winter crops stay billboards (archive 511 is a nature archive, not a city-flat atlas); batch them if farm loads get slow
     public static bool IsWinterCrop(int archive)
     {
+#if !VITA_MODS
         return false;
+#else
+        if (archive != 301 || !DaggerfallUnity.Settings.VitaHarvestableCrops || DaggerfallUnity.Instance.WorldTime.Now.SeasonValue != DaggerfallDateTime.Seasons.Winter ||
+            DaggerfallWorkshop.Game.GameManager.Instance.PlayerGPS == null)
+            return false;
+        int c = DaggerfallWorkshop.Game.GameManager.Instance.PlayerGPS.CurrentClimateIndex;
+        return c != (int)MapsFile.Climates.Desert && c != (int)MapsFile.Climates.Desert2 && c != (int)MapsFile.Climates.Subtropical;
+#endif
     }
 
+    /// <summary>RMB Resource Pack crop field (RMBCropBillboardBatch on the PC), which Beautiful Cities/Villages place as models.</summary>
     public static bool IsCropField(uint modelId)
     {
         return modelId >= 53211 && modelId <= 53214;
@@ -497,6 +544,10 @@ public class VitaFlatBatch : MonoBehaviour
         float now = Time.time;
         foreach (Batch batch in batches)
         {
+            // Off screen: no upload (each uv change re-uploads the mesh; a town has dozens of animated batches). A long pause resets
+            // the timer below, so the flats pick up at their next frame when seen again
+            if (batch.animated.Count == 0 || !batch.renderer.isVisible)
+                continue;
             bool changed = false;
             foreach (Item item in batch.animated)
             {
@@ -528,11 +579,14 @@ public class VitaFlatBatch : MonoBehaviour
         }
     }
 
+    /// <summary>Test switch: batches on, or the original billboards.</summary>
     public void Show(bool on)
     {
         shown = on;
         foreach (Batch batch in batches)
         {
+            if (batch.items.Count == 0)
+                continue;   // a town's plain flats: no billboards behind them to show instead
             batch.renderer.enabled = on;
             foreach (Item item in batch.items)
             {

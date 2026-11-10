@@ -19,12 +19,12 @@
 #define LOG DIR "UserData/bootmusic.log"
 
 // 85 ms per output call: the hardware queues about two, so the thread may run ~85 ms late before a gap. With 21 ms grains it
-// crackled all through the engine load even with the data in memory (session 14): Unity's start-up threads keep the CPU.
+// crackled all through the engine load even with the data in memory: Unity's start-up threads keep the CPU.
 #define GRAIN 4096                 // frames per output call (85.3 ms)
 #define FADE_GRAINS 12             // ~1 s fade-out
 
 // Two output buffers, alternating: sceAudioOutOutput returns while the hardware still reads the buffer it was given (it only waits
-// for the previous one), so refilling a single buffer tore the sound that was playing (the "scratchy" boot music, session 14).
+// for the previous one), so refilling a single buffer tore the sound that was playing (the "scratchy" boot music).
 static short buffers[2][GRAIN * 2];
 
 static void log_line(const char *line, int len)
@@ -80,14 +80,14 @@ static int music_volume(void)
 }
 
 // Read-ahead ring: Unity's loading keeps the memory card busy, so small reads per buffer can stall behind it
-// (session 14). A reader thread fills 256 KB chunks; playback only copies from memory. Allocated for the music, freed after.
+//. A reader thread fills 256 KB chunks; playback only copies from memory. Allocated for the music, freed after.
 #define CHUNK (256 * 1024)
 #define CHUNKS 8                   // 2 MB = ~11 s of audio
 static char *ring;
 static volatile int filled[CHUNKS];  // bytes in the chunk; 0 = free for the reader, -1 = end of file
 static volatile int quit;
-// The audio thread does no file access: a stat or log write queued behind Unity's big reads froze it for up to 2.3 s (session 14,
-// run 72: late gaps of 804 ms and 2264 ms with the data already in memory). The reader thread checks the stop flag and writes the
+// The audio thread does no file access: a stat or log write queued behind Unity's big reads froze it for up to 2.3 s (
+// late gaps of 804 ms and 2264 ms with the data already in memory). The reader thread checks the stop flag and writes the
 // log; the audio thread only reads these.
 static volatile int stop_requested, late, worst, underruns;
 

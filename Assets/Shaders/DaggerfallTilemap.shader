@@ -48,7 +48,7 @@ Shader "Daggerfall/Tilemap" {
 		sampler2D _BumpMap;
 		#if defined(SHADER_API_PSP2)
 		// Vita: as floats. Unity sets these through Material.SetInt (stored as floats); read as int uniforms the whole ground came out
-		// as one flat colour
+		// as one flat colour (Sentinel's desert floor came out plain grey)
 		float _TilesetDim;
 		float _TilemapDim;
 		float _MaxIndex;
@@ -73,7 +73,7 @@ Shader "Daggerfall/Tilemap" {
 			// Get offset to tile in atlas
 		#if defined(SHADER_API_PSP2)
 			// The tilemap is point-filtered without mips, so sampling at the varying itself picks the same texel as the floor maths, as a
-			// non-dependent read
+			// non-dependent read (computed coordinates make the GPU wait for the maths first; terrain was ~15 ms of the exterior frame)
 			float index = floor(tex2D(_TilemapTex, IN.uv_MainTex).a * _MaxIndex + 0.5);
 		#else
 			uint index = tex2D(_TilemapTex, floor(unwrappedUV) / _TilemapDim).a * _MaxIndex + 0.5;
@@ -95,7 +95,7 @@ Shader "Daggerfall/Tilemap" {
 			// Sample based on gradient and set output
 			float2 uvr = unwrappedUV / _GutterSize;
 		#if defined(SHADER_API_PSP2)
-			// Vita: tex2Dgrad sampled the smallest mips; choose the level from the same
+			// Vita: tex2Dgrad sampled the smallest mips (flat one-colour ground); choose the level from the same
 			// gradients (in atlas texels), rounded to one whole level (blended palette indices are wrong colours), then look the colour up
 			float2 dx = ddx(uvr) * _AtlasSize, dy = ddy(uvr) * _AtlasSize;
 			float paletteIndex = tex2Dlod(_TileAtlasTex, float4(uv, 0, max(0.0, floor(0.5 * log2(max(dot(dx, dx), dot(dy, dy))) + 0.5)))).a;

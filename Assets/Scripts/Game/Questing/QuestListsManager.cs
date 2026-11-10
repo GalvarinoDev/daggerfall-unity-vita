@@ -429,7 +429,7 @@ namespace DaggerfallWorkshop.Game.Questing
             // Attempt to load quest source file
             Quest quest;
 #if UNITY_PSP2 && !UNITY_EDITOR
-            // Baked by VitaQuestBaker (VitaQuests, item 12): no file read or text split
+            // Baked by VitaQuestBaker (VitaQuests): no file read or text split
             VitaQuests.Split vitaSplit = VitaQuests.Read(questData.path, questName);
             if (vitaSplit != null)
             {

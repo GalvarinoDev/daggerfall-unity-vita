@@ -274,7 +274,7 @@ namespace DaggerfallWorkshop
             // Pre-rendered song (vita/tools/render_music.sh, ATRAC9 streamed): no C# synth on the audio thread. Rendered per player Gain.
             clip = Resources.Load<AudioClip>("VitaMusic/" + song + "_g" + (int)Gain);
             // One song's audio in memory at a time. Not Resources.UnloadAsset: on a clip that never loaded it crashed in
-            // FMOD::Sample::release
+            // FMOD::Sample::release (core dump, main thread)
             if (vitaClip && vitaClip != clip && vitaClip.loadState == AudioDataLoadState.Loaded)
                 vitaClip.UnloadAudioData();
             vitaClip = clip;
@@ -578,8 +578,8 @@ namespace DaggerfallWorkshop
         #region Audio Filter
 
 #if UNITY_PSP2
-        // Vita: synthesize in the audio callback at half rate (synthDecimation), as on PC. A render thread with a ring buffer (runs 50-54)
-        // can't work here: a managed System.Threading.Thread hung in Thread.Sleep after ~1.4 s (runs 50-53), and once it did render, the
+        // Vita: synthesize in the audio callback at half rate (synthDecimation), as on PC. A render thread with a ring buffer
+        // can't work here: a managed System.Threading.Thread hung in Thread.Sleep after ~1.4 s, and once it did render, the
         // game froze at the next GC. Leftover output frames carry over to the next callback when the sizes don't divide.
         float[] renderOut = new float[0];
         int renderOutPos, renderOutCount;

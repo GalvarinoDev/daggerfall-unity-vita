@@ -770,7 +770,12 @@ namespace DaggerfallWorkshop.Game
                     }
                     else
                     {
+#if UNITY_PSP2 && VITA_DRAGONRIDER
+                        // Vita: Circle hold comes here; Dragon Rider's rider is never grounded (the mod opens it itself on the PC Transport key)
+                        if (GameManager.Instance.PlayerController.isGrounded || DragonRider.DragonRider.IsDragonMounted)
+#else
                         if (GameManager.Instance.PlayerController.isGrounded)
+#endif
                             uiManager.PushWindow(UIWindowFactory.GetInstance(UIWindowType.Transport, uiManager));
                     }
                     break;

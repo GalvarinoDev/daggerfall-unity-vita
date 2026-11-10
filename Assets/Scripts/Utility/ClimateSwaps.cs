@@ -29,8 +29,29 @@ namespace DaggerfallWorkshop.Utility
         /// <param name="climate">Climate base to apply.</param>
         /// <param name="season">Climate season to apply</param>
         /// <returns>Archive index of new texture.</returns>
+#if UNITY_PSP2 && VITA_MODS
+        // Vita: "Snowless - Swamp, Jungle, and Woodlands" (Mods window): climates on the swamp base (swamp, jungle) and the temperate base
+        // (the woodlands) keep their summer textures and weather in winter, as DFU already does for the desert. No art of its own.
+        public static bool VitaSnowless(ClimateBases climate)
+        {
+            return DaggerfallUnity.Settings.VitaSnowlessSwamp && (climate == ClimateBases.Swamp || climate == ClimateBases.Temperate);
+        }
+
+        public static bool VitaSnowless(int worldClimate)
+        {
+            return DaggerfallUnity.Settings.VitaSnowlessSwamp && VitaSnowless(FromAPIClimateBase(MapsFile.GetWorldClimateSettings(worldClimate).ClimateType));
+        }
+
+#endif
         public static int ApplyClimate(int archive, int record, ClimateBases climate, ClimateSeason season)
         {
+#if UNITY_PSP2 && VITA_MODS
+            if (season == ClimateSeason.Winter && VitaSnowless(climate))
+                season = ClimateSeason.Summer;
+            // DET model textures (VitaDetModels)
+            if (archive == VitaDetModels.Archive)
+                return VitaDetModels.ApplyClimate(climate, season);
+#endif
             // Don't swap textures for door 3. Same behavior as classic.
             if (((archive % 100) == 74) && record == 3)
                 return archive;
@@ -423,6 +444,11 @@ namespace DaggerfallWorkshop.Utility
 
             var archive = (int) textureSet;
 
+#if UNITY_PSP2 && VITA_MODS
+            // Vita: Snowless keeps the woodland trees green (the mountain set is the only winter set on another base)
+            if (climateSeason == ClimateSeason.Winter && DaggerfallUnity.Settings.VitaSnowlessSwamp && natureSet != ClimateNatureSets.Mountains)
+                climateSeason = ClimateSeason.Summer;
+#endif
             // Winter modifier
             if (climateSeason == ClimateSeason.Winter)
             {
@@ -470,6 +496,10 @@ namespace DaggerfallWorkshop.Utility
                     break;
             }
 
+#if UNITY_PSP2 && VITA_MODS
+            if (climateSeason == ClimateSeason.Winter && VitaSnowless(climateBase))
+                climateSeason = ClimateSeason.Summer;
+#endif
             // Modify for season
             switch (climateSeason)
             {

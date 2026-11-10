@@ -45,19 +45,32 @@ public static class VitaTextureBaker
         VitaWorldTextures.BakeSink = (key, record) => records[key] = record;
         int archives = 0, textures = 0, left = 0, tilesets = 0;
         long pixels = 0;
+        // Daggerfall's TEXTURE.000-511, then the port's world-texture archives in VitaNative (DET 9000-9002, New Paintings 9003, DIEP 9004,
+        // RRP hills 9005: TextureFile.Load reads them from there, and the game logged "miss texture levels" for them). Mod flat archives are
         // atlas.pak's; archives from 32768 up would reach PaletteFlag in the key.
         var archiveList = new List<int>();
         string only = Environment.GetEnvironmentVariable("VITA_BAKE_ONLY");
         if (string.IsNullOrEmpty(only))
             only = null;
+#if VITA_MODS
+        VitaDetModels.OverrideFolder = only;
+#endif
         for (int archive = 0; archive < 512; archive++)
             if (only == null || File.Exists(Path.Combine(only, TextureFile.IndexToFileName(archive))))
                 archiveList.Add(archive);
+#if VITA_MODS
+        for (int archive = VitaDetModels.Archive; archive <= 9005 && only == null; archive++)
+            archiveList.Add(archive);
+#endif
         foreach (int archive in archiveList)
         {
             string path = only != null ? Path.Combine(only, TextureFile.IndexToFileName(archive)) :
                 archive < 512 ? Path.Combine(arena2, TextureFile.IndexToFileName(archive)) :
+#if !VITA_MODS
                 null;   // no-mods alpha: only archives below 512 are listed
+#else
+                Path.Combine(VitaDetModels.Folder, TextureFile.IndexToFileName(archive));
+#endif
             if (!File.Exists(path))
             {
                 if (archive >= 512)
@@ -115,6 +128,9 @@ public static class VitaTextureBaker
             }
         }
         VitaWorldTextures.BakeSink = null;
+#if VITA_MODS
+        VitaDetModels.OverrideFolder = null;
+#endif
 
         // Header + index, then each distinct record at a 512-byte offset
         var keys = new List<uint>(records.Keys);

@@ -1,4 +1,4 @@
-// Vita: DateTime.Now reads as 1601-01-01 in our IL2CPP player (save dates showed "Monday, January 1, 1601").
+// Vita: DateTime.Now reads as 1601-01-01 in the IL2CPP player (save dates showed "Monday, January 1, 1601").
 // The system clock from libSceRtc (linked into the player) gives the real local time.
 #if UNITY_PSP2
 using System;

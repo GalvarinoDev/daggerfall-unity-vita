@@ -1180,7 +1180,7 @@ namespace DaggerfallWorkshop.Game
             {
                 // enable automap level geometry for revealing (so raycasts can hit colliders of automap level geometry)
 #if UNITY_PSP2
-                vitaScanWatch.Reset();  // TEMP s64
+                vitaScanWatch.Reset();  // timing probe
                 vitaScanWatch.Start();
                 VitaScanGeometry(true);
                 VitaScanTicks[0] += vitaScanWatch.ElapsedTicks;
@@ -1226,7 +1226,7 @@ namespace DaggerfallWorkshop.Game
 
                 // disable gameobjectGeometry so player movement won't be affected by geometry colliders of automap level geometry
 #if UNITY_PSP2
-                VitaScanTicks[1] += vitaScanWatch.ElapsedTicks;     // TEMP s64
+                VitaScanTicks[1] += vitaScanWatch.ElapsedTicks;     // timing probe
                 vitaScanWatch.Reset();
                 vitaScanWatch.Start();
                 VitaScanGeometry(false);
@@ -1754,10 +1754,10 @@ namespace DaggerfallWorkshop.Game
         // Mode 2 switches on only the colliders the scan's rays can reach: they start at the player's head and go at most
         // raycastDistanceViewDirection forward, then raycastDistanceDown down from points along that ray (+10 cm offsets).
         // VitaScanMode 0 = upstream's SetActive, 1 = all colliders, 2 = nearby colliders.
-        // Mode 3 switches on only the colliders those rays can actually touch: switching a collider is what costs (the hidden copy's 30-40 ms
+        // Mode 3 switches on only the colliders those rays can touch: switching a collider is what costs (the hidden copy's 30-40 ms
         // spike 5 times a second), and a ray can only hit a collider whose bounds it enters. Bounds are raised by the down rays' length.
         public static int VitaScanMode = 3;
-        public static long[] VitaScanTicks = new long[4];   // TEMP s64: begin, rays, end, colliders switched on
+        public static long[] VitaScanTicks = new long[4];   // timing probe: begin, rays, end, colliders switched on
         System.Diagnostics.Stopwatch vitaScanWatch = new System.Diagnostics.Stopwatch();
 
         // Segment against an axis-aligned box (slab test)

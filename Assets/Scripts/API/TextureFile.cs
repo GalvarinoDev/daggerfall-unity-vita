@@ -282,6 +282,13 @@ namespace DaggerfallConnect.Arena2
                 return false;
             }
 
+#if UNITY_PSP2 && VITA_MODS
+            // Vita-native archives (VitaDetModels): palette indices ready to use, not a Daggerfall file
+            vitaFile = null;
+            string vitaPath = VitaDetModels.TexturePath(fn);
+            if (vitaPath != null)
+                return VitaLoad(vitaPath, Path.GetDirectoryName(filePath));
+#endif
 
             // Handle solid types
             if (fn == "TEXTURE.000")
@@ -292,7 +299,7 @@ namespace DaggerfallConnect.Arena2
                 solidType = SolidTypes.None;
 
 #if UNITY_PSP2 && !UNITY_EDITOR
-            // Baked by VitaTextureFileBaker: the record headers here, each record's frames when first read (VitaTextureFiles, item 20)
+            // Baked by VitaTextureFileBaker: the record headers here, each record's frames when first read (VitaTextureFiles)
             int vitaIndex;
             short[] vitaHeader = int.TryParse(fn.Substring(8), out vitaIndex) ? VitaTextureFiles.Header(vitaIndex) : null;
             if (vitaHeader != null)
@@ -514,75 +521,183 @@ namespace DaggerfallConnect.Arena2
         /// </summary>
         /// <param name="reader">Source reader.</param>
 #if UNITY_PSP2
-        // Parsed once per file and shared: TextureReader makes a new TextureFile for every texture it reads
+        // Record headers parsed once per file and shared (TextureReader makes a new TextureFile for every texture it reads); each record's
+        // pixels are read when asked for and belong to this TextureFile (caching every archive's pixels held 5.7 MB of GC heap
+        // for the session). Record.Position = the record's first frame in the file.
         static readonly Dictionary<string, Record[]> vitaRecords = new Dictionary<string, Record[]>();
         static readonly Dictionary<string, DFPalette> vitaPalettes = new Dictionary<string, DFPalette>();   // own palettes (VTEX 2)
+        static FileStream vitaStream;   // last archive read; app0: handles survive suspend
+        static string vitaStreamPath;
+        string vitaFile;
 
+        // "VTEX" int32 1, int32 count, per record: int32 width, int32 height, palette indices (vita/tools/detpack.py)
         // "VTEX" int32 2, int32 count, int32 own palette (then 768 bytes RGB), per record: int16 offsetX, offsetY, scaleX, scaleY, int32 width,
         // height, frame count, frames (mod flats, vita/tools/flatpack.py)
         private bool VitaLoad(string path, string arena2Path)
         {
             solidType = SolidTypes.None;
-            if (!vitaRecords.TryGetValue(path, out records))
+            Record[] shared;
+            if (!vitaRecords.TryGetValue(path, out shared))
             {
-                byte[] bytes;
+                // modtex.pak (vita/tools/vtexpak.py): this archive's header without the pixels; records then read from the pack (Position -1)
+                int archive = VitaArchive(path);
+                byte[] packed = null;
+                if (VitaModPack(Path.GetDirectoryName(path)).Count > 0)
+                    packed = VitaPackRecord((uint)(archive << 16 | 0xFFFF), -1);
                 try
                 {
-                    bytes = File.ReadAllBytes(path);
+                    using (Stream f = packed != null ? (Stream)new MemoryStream(packed) : new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096))
+                    using (BinaryReader reader = new BinaryReader(f))
+                    {
+                        if (new string(reader.ReadChars(4)) != "VTEX")
+                            return false;
+                        int version = reader.ReadInt32();
+                        if (version != 1 && version != 2)
+                            return false;
+                        shared = new Record[reader.ReadInt32()];
+                        if (version == 2 && reader.ReadInt32() == 1)
+                        {
+                            DFPalette own = new DFPalette();
+                            own.Set(reader.ReadBytes(768));
+                            vitaPalettes[path] = own;
+                        }
+                        for (int r = 0; r < shared.Length; r++)
+                        {
+                            if (version == 2)
+                            {
+                                shared[r].OffsetX = reader.ReadInt16();
+                                shared[r].OffsetY = reader.ReadInt16();
+                                shared[r].ScaleX = reader.ReadInt16();
+                                shared[r].ScaleY = reader.ReadInt16();
+                            }
+                            int width = reader.ReadInt32(), height = reader.ReadInt32();
+                            int frames = version == 2 ? reader.ReadInt32() : 1;
+                            shared[r].Width = (Int16)width;
+                            shared[r].Height = (Int16)height;
+                            shared[r].FrameCount = (UInt16)frames;
+                            if (packed != null)
+                                shared[r].Position = -1;
+                            else
+                            {
+                                shared[r].Position = f.Position;
+                                f.Position += (long)width * height * frames;
+                            }
+                        }
+                        if (f.Position != f.Length)
+                            return false;
+                    }
                 }
                 catch (IOException)
                 {
-                    vitaRecords[path] = null;   // a mod archive the Vita doesn't have: fail like a missing TEXTURE file, once
-                    return false;
+                    shared = null;   // a mod archive the Vita doesn't have: fail like a missing TEXTURE file, once
                 }
-                using (BinaryReader reader = new BinaryReader(new MemoryStream(bytes)))
-                {
-                    if (new string(reader.ReadChars(4)) != "VTEX")
-                        return false;
-                    int version = reader.ReadInt32();
-                    if (version != 1 && version != 2)
-                        return false;
-                    records = new Record[reader.ReadInt32()];
-                    DFPalette own = null;
-                    if (version == 2 && reader.ReadInt32() == 1)
-                    {
-                        own = new DFPalette();
-                        own.Set(reader.ReadBytes(768));
-                        vitaPalettes[path] = own;
-                    }
-                    for (int r = 0; r < records.Length; r++)
-                    {
-                        if (version == 2)
-                        {
-                            records[r].OffsetX = reader.ReadInt16();
-                            records[r].OffsetY = reader.ReadInt16();
-                            records[r].ScaleX = reader.ReadInt16();
-                            records[r].ScaleY = reader.ReadInt16();
-                        }
-                        int width = reader.ReadInt32(), height = reader.ReadInt32();
-                        int frames = version == 2 ? reader.ReadInt32() : 1;
-                        records[r].Width = (Int16)width;
-                        records[r].Height = (Int16)height;
-                        records[r].FrameCount = (UInt16)frames;
-                        records[r].Frames = new DFBitmap[frames];
-                        for (int f = 0; f < frames; f++)
-                            records[r].Frames[f] = new DFBitmap() { Width = width, Height = height, Data = reader.ReadBytes(width * height) };
-                    }
-                }
-                vitaRecords[path] = records;
+                vitaRecords[path] = shared;
             }
-            if (records == null)
+            if (shared == null)
                 return false;
             DFPalette palette;
             if (vitaPalettes.TryGetValue(path, out palette))
                 myPalette = palette;
             else
                 LoadPalette(Path.Combine(arena2Path, PaletteName));
-            foreach (Record record in records)
-                foreach (DFBitmap bitmap in record.Frames)
-                    bitmap.Palette = Palette;
+            records = (Record[])shared.Clone();
+            for (int r = 0; r < records.Length; r++)
+                records[r].Frames = new DFBitmap[records[r].FrameCount];
+            vitaFile = path;
             header.RecordCount = (Int16)records.Length;
             recordHeaders = new RecordHeader[records.Length];
+            return true;
+        }
+
+        // All frames of one record in one read
+        private bool VitaReadRecord(int record)
+        {
+            int width = records[record].Width, height = records[record].Height, size = width * height;
+            byte[] bytes = new byte[size * records[record].FrameCount];
+            if (records[record].Position < 0)
+            {
+                if (bytes.Length > 0 && (bytes = VitaPackRecord((uint)(VitaArchive(vitaFile) << 16 | record), bytes.Length)) == null)
+                    return false;
+            }
+            else if (!VitaReadFile(record, bytes))
+                return false;
+            DFBitmap[] frames = records[record].Frames;
+            for (int f = 0; f < frames.Length; f++)
+            {
+                byte[] data;
+                if (frames.Length == 1)
+                    data = bytes;
+                else
+                {
+                    data = new byte[size];
+                    Buffer.BlockCopy(bytes, f * size, data, 0, size);
+                }
+                frames[f] = new DFBitmap() { Width = width, Height = height, Data = data, Palette = Palette };
+            }
+            return true;
+        }
+
+        const int VitaModPackMagic = 0x4D585456;   // "VTXM"
+        static VitaPack vitaModPack;
+
+        static VitaPack VitaModPack(string folder)
+        {
+            if (vitaModPack == null)
+                vitaModPack = new VitaPack(Path.Combine(folder, "modtex.pak"), VitaModPackMagic);
+            return vitaModPack;
+        }
+
+        /// <summary>modtex.pak holds this archive (VitaDetModels.OnVita: the VTEX files themselves don't ship)</summary>
+        public static bool VitaPackHasArchive(string folder, int archive)
+        {
+            return VitaModPack(folder).Contains((uint)(archive << 16 | 0xFFFF));
+        }
+
+        static int VitaArchive(string path)
+        {
+            int archive;
+            return int.TryParse(Path.GetFileName(path).Substring(8), out archive) ? archive : -1;
+        }
+
+        // A modtex.pak record as bytes: a new array (length -1, headers) or the length expected; null if missing, damaged or another length
+        static byte[] VitaPackRecord(uint key, int length)
+        {
+            System.IntPtr memory = System.IntPtr.Zero, data;
+            int got;
+            try
+            {
+                if (!vitaModPack.Read(key, out memory, out data, out got) || (length >= 0 && got != length))
+                    return null;
+                byte[] bytes = new byte[got];
+                System.Runtime.InteropServices.Marshal.Copy(data, bytes, 0, got);
+                return bytes;
+            }
+            finally
+            {
+                if (memory != System.IntPtr.Zero)
+                    System.Runtime.InteropServices.Marshal.FreeHGlobal(memory);
+            }
+        }
+
+        private bool VitaReadFile(int record, byte[] bytes)
+        {
+            if (vitaStream == null || vitaStreamPath != vitaFile)
+            {
+                if (vitaStream != null)
+                    vitaStream.Dispose();
+                vitaStream = null;
+                vitaStream = new FileStream(vitaFile, FileMode.Open, FileAccess.Read, FileShare.Read, 1);
+                vitaStreamPath = vitaFile;
+            }
+            vitaStream.Position = records[record].Position;
+            int got = 0;
+            while (got < bytes.Length)
+            {
+                int n = vitaStream.Read(bytes, got, bytes.Length - got);
+                if (n <= 0)
+                    return false;
+                got += n;
+            }
             return true;
         }
 #endif
@@ -667,6 +782,10 @@ namespace DaggerfallConnect.Arena2
 #if UNITY_PSP2 && !UNITY_EDITOR
             if (vitaArchive >= 0)
                 return VitaTextureFiles.ReadFrames(vitaArchive, record, records[record].Frames, Palette) && records[record].Frames[frame] != null;
+#endif
+#if UNITY_PSP2 && VITA_MODS
+            if (vitaFile != null)
+                return VitaReadRecord(record) && records[record].Frames[frame] != null;
 #endif
 
             // Handle solid types

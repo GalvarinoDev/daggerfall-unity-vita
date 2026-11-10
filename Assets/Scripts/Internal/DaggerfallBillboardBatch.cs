@@ -1080,7 +1080,7 @@ namespace DaggerfallWorkshop
                 // Octagons around the sprites' opaque pixels instead of quads where possible (VitaBillboardTrim sets the whole mesh)
                 int[] vitaTrimRecords = VitaTrimRecords();
                 bool vitaTrimmed = vitaTrimRecords != null && VitaBillboardTrim.Set(billboardMesh, currentArchive, vitaTrimRecords, meshVertices, meshTangents, meshUVs);
-                // A terrain tile's ~21k-vertex nature batch took ~80 ms here in one frame (the four list copies + sets, s71 push1): in play, one
+                // A terrain tile's ~21k-vertex nature batch took ~80 ms here in one frame (the four list copies + sets): in play, one
                 // channel per frame with the triangles last, so the batch draws nothing until it is whole
                 bool vitaSpread = !vitaTrimmed && isActiveAndEnabled && !VitaPushSpreadOff;
                 if (vitaSpread)

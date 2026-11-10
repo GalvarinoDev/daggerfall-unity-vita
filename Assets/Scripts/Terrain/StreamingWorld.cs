@@ -294,7 +294,7 @@ namespace DaggerfallWorkshop
             yield return null;
             VitaClearWorld();
             for (int i = 0; i < 3; i++)
-                yield return null;  // GXM frees wait until the GPU has finished its frames (UNITY_VITA_GUIDE §5)
+                yield return null;  // GXM frees wait until the GPU has finished its frames
             DaggerfallUnity.Instance.MaterialReader.VitaClearCacheExceptTilesets();
             DaggerfallUnity.Instance.MeshReader.ClearCache();
             DaggerfallUnity.Instance.ContentReader.VitaDiscardBlocks();
@@ -513,7 +513,11 @@ namespace DaggerfallWorkshop
             }
 
             // Reposition player
+#if UNITY_PSP2
+            if (autoRepositionMethod != RepositionMethods.None && vitaLocationsBuilding == 0)    // start markers need the whole location
+#else
             if (autoRepositionMethod != RepositionMethods.None)
+#endif
             {
                 switch (autoRepositionMethod)
                 {
@@ -898,18 +902,31 @@ namespace DaggerfallWorkshop
             DaggerfallUnity.LogMessage(string.Format("Time to init player terrain: {0}ms", stopwatch.ElapsedMilliseconds), true);
 #endif
 
+#if UNITY_PSP2
+            // The player's own location was built in this one frame: a city froze the loading window for 16-21 s. Each block
+            // now gets its own frame, counted in VitaIsBuilding, and the auto-reposition waits for it. VitaInitSpreadOff = test harness A/B.
+            if (VitaInitSpreadOff)
+                StartCoroutine(UpdateLocation(playerTerrainIndex, false));
+            else
+                StartCoroutine(VitaCountLocation(UpdateLocation(playerTerrainIndex, false, true)));
+#else
             StartCoroutine(UpdateLocation(playerTerrainIndex, false));
+#endif
             terrainArray[playerTerrainIndex].updateLocation = false;
 #if UNITY_PSP2
             // The location is in looseObjectsList once the coroutine's first step returns. Upstream sets this in UpdateLocations a frame or
             // two later; on Vita the neighbour terrains are staggered first (~40 s in a city), and a save load restores its enemies before
-            // that, parenting them to the location destroyed by the respawn
+            // that, parenting them to the location destroyed by the respawn (NullReferenceException: "Loading..." forever)
             currentPlayerLocationObject = GetPlayerLocationObject();
 #endif
         }
 
 #if UNITY_PSP2
         bool vitaSliceTerrainJobs;
+        // Bumped by ClearStreamingWorld. A fast travel doesn't stop the terrain update coroutines that are running: a tile still being
+        // built in play then finished after the new world had reused its terrain object, promoted onto it and threw a NullReference
+        // (a WoD tile pumped 13 s across a travel). Each step checks this after every yield and stops if the world changed.
+        int vitaWorldGen;
 #endif
 
         private IEnumerator UpdateTerrains()
@@ -919,6 +936,7 @@ namespace DaggerfallWorkshop
 #if UNITY_PSP2
             // Vita: Update() clears init right after starting this coroutine, so remember it for the end of the update
             bool wasInit = init;
+            int vitaGen = vitaWorldGen;
 #endif
 
 #if SHOW_LAYOUT_TIMES
@@ -942,6 +960,8 @@ namespace DaggerfallWorkshop
                         // Vita: on init too, build the neighbours one at a time (player tile is already built by InitPlayerTerrain),
                         // so one frame never holds all 9 tiles' temporaries (exterior init memory peak). Load screen waits on VitaIsBuilding.
                         yield return StartCoroutine(UpdateTerrainDataCoroutine(terrainArray[i]));
+                        if (vitaGen != vitaWorldGen)
+                            yield break;    // the world was cleared: the new world's update owns the flags now
                         VitaMemory.Step("terrain " + i + " data");
 #else
                         if (init)
@@ -955,7 +975,11 @@ namespace DaggerfallWorkshop
                     {
 #if UNITY_PSP2
                         if (vitaSliceTerrainJobs && dfUnity.TerrainNature.GetType() == typeof(DefaultTerrainNature))
+                        {
                             yield return StartCoroutine(VitaUpdateTerrainNatureSliced(terrainArray[i]));
+                            if (vitaGen != vitaWorldGen)
+                                yield break;
+                        }
                         else
                             UpdateTerrainNature(terrainArray[i]);
 #else
@@ -965,6 +989,8 @@ namespace DaggerfallWorkshop
 #if UNITY_PSP2
                         VitaMemory.Step("terrain " + i + " nature");
                         yield return null;
+                        if (vitaGen != vitaWorldGen)
+                            yield break;
 #else
                         if (!init)
                             yield return new WaitForEndOfFrame();
@@ -1039,7 +1065,8 @@ namespace DaggerfallWorkshop
         // the same GetBlock, so block replacements still apply. VitaBlockPredecodeOff = test harness A/B.
         public static bool VitaBlockPredecodeOff;
         public static bool VitaColliderDeferOff;
-        public static bool VitaPreCullOff;      // test harness A/B of VitaCulling.PreCullBlock
+        public static bool VitaPreCullOff;
+        public static bool VitaInitSpreadOff;   // test harness A/B: the player's location in one frame at init, as upstream      // test harness A/B of VitaCulling.PreCullBlock
         bool vitaKeepingBlocks;
 
         IEnumerator VitaPredecodeLocationBlocks(TerrainDesc terrainDesc)
@@ -1079,7 +1106,11 @@ namespace DaggerfallWorkshop
         }
 #endif
 
+#if UNITY_PSP2
+        private IEnumerator UpdateLocation(int index, bool allowYield, bool vitaFramePerBlock = false)
+#else
         private IEnumerator UpdateLocation(int index, bool allowYield)
+#endif
         {
             if (terrainArray[index].active && terrainArray[index].hasLocation && terrainArray[index].updateLocation)
             {
@@ -1121,6 +1152,9 @@ namespace DaggerfallWorkshop
                     // Create billboard batch game objects for this location
                     // Streaming world always batches for performance, regardless of options
                     int natureArchive = ClimateSwaps.GetNatureArchive(LocalPlayerGPS.ClimateSettings.NatureSet, dfUnity.WorldTime.Now.SeasonValue);
+#if UNITY_PSP2 && VITA_MODS
+                    natureArchive = VitaBiomes.NatureArchive(natureArchive, terrainArray[index].mapPixelX, terrainArray[index].mapPixelY);
+#endif
                     //TextureAtlasBuilder miscBillboardAtlas = dfUnity.MaterialReader.MiscBillboardAtlas;
                     DaggerfallBillboardBatch natureBillboardBatch = GameObjectHelper.CreateBillboardBatchGameObject(natureArchive, locationObject.transform);
                     DaggerfallBillboardBatch lightsBillboardBatch = GameObjectHelper.CreateBillboardBatchGameObject(TextureReader.LightsTextureArchive, locationObject.transform);
@@ -1226,8 +1260,13 @@ namespace DaggerfallWorkshop
 #endif
 
                             // Optionally yield after placing block
+#if UNITY_PSP2
+                            if (allowYield || vitaFramePerBlock)
+                                yield return new WaitForEndOfFrame();
+#else
                             if (allowYield)
                                 yield return new WaitForEndOfFrame();
+#endif
 #if UNITY_PSP2
                             if (vitaSpread)
                             {
@@ -1261,6 +1300,9 @@ namespace DaggerfallWorkshop
                         else
                             VitaAtlas.BuildCity(locationObject);
                     }
+                    // The town's leftover billboards (animated lights, decorations, animals) merged per material across the whole town
+                    if (locationObject)
+                        VitaFlatBatch.BuildTown(locationObject);
 #endif
 
 #if UNITY_PSP2
@@ -1423,6 +1465,10 @@ namespace DaggerfallWorkshop
         // Remove managed child objects
         private void ClearStreamingWorld()
         {
+#if UNITY_PSP2
+            vitaWorldGen++;
+            VitaJobsShim.DropDeferred();
+#endif
             // Collect everything
             CollectTerrains(true);
             CollectLooseObjects(true);
@@ -1488,6 +1534,22 @@ namespace DaggerfallWorkshop
         // Iteratively destroys game object as unity seems bad at doing this when just destroying parent
         private IEnumerator DestroyGameObjectIterative(GameObject gameObject)
         {
+#if UNITY_PSP2
+            // Vita: the nested call below never ran (an iterator does nothing without StartCoroutine), so this only waited a frame per child
+            // and then destroyed the whole location at once: one 400-540 ms frame a few seconds after leaving modded Daggerfall.
+            // Destroy the children one per frame instead, then the emptied root
+            var children = new List<GameObject>();
+            foreach (Transform t in gameObject.transform)
+                children.Add(t.gameObject);
+            foreach (GameObject child in children)
+            {
+                if (child)
+                    GameObject.Destroy(child);
+                yield return new WaitForEndOfFrame();
+            }
+            if (gameObject)
+                GameObject.Destroy(gameObject);
+#else
             // Destroy all children iteratively
             foreach (Transform t in gameObject.transform)
             {
@@ -1497,6 +1559,7 @@ namespace DaggerfallWorkshop
 
             // Now destroy this object
             GameObject.Destroy(gameObject.transform.gameObject);
+#endif
         }
 
         #endregion
@@ -1684,8 +1747,11 @@ namespace DaggerfallWorkshop
 #if UNITY_PSP2
             // Vita, in play: the stand-in jobs ran inside Schedule, so each new tile was one ~200 ms frame.
             // Queue them instead and run them a few ms per frame on the main thread. Loads keep the synchronous path.
+            int vitaGen = vitaWorldGen;
             if (vitaSliceTerrainJobs)
                 yield return StartCoroutine(VitaPredecodeLocationBlocks(terrainDesc));
+            if (vitaGen != vitaWorldGen)
+                yield break;
             VitaJobsShim.Deferred = vitaSliceTerrainJobs;
             JobHandle updateTerrainDataJobHandle;
             try { updateTerrainDataJobHandle = dfTerrain.BeginMapPixelDataUpdate(dfUnity.TerrainTexturing); }
@@ -1693,14 +1759,20 @@ namespace DaggerfallWorkshop
             while (!updateTerrainDataJobHandle.IsCompleted)
             {
                 yield return null;
+                if (vitaGen != vitaWorldGen)
+                    yield break;    // its queued jobs were dropped with the old world
                 VitaJobsShim.Pump(VitaJobsShim.PumpBudgetMs);
             }
+            if (vitaGen != vitaWorldGen)
+                yield break;
             if (vitaSliceTerrainJobs)
             {
-                // In play, copy the results out in one frame and hand them to Unity's terrain in the next
+                // In play, copy the results out in one frame and hand them to Unity's terrain in the next (one ~120 ms frame before)
                 updateTerrainDataJobHandle.Complete();
                 dfTerrain.CompleteMapPixelDataUpdate(dfUnity.TerrainTexturing);
                 yield return null;
+                if (vitaGen != vitaWorldGen)
+                    yield break;
                 dfTerrain.UpdateClimateMaterial(init);
                 dfTerrain.PromoteTerrainData();
                 terrainDesc.terrainObject.SetActive(true);
@@ -1729,6 +1801,9 @@ namespace DaggerfallWorkshop
                 // Get current climate and nature archive and terrain distance
                 DFLocation.ClimateSettings worldClimateSettings = MapsFile.GetWorldClimateSettings(dfTerrain.MapData.worldClimate);
                 int natureArchive = ClimateSwaps.GetNatureArchive(worldClimateSettings.NatureSet, dfUnity.WorldTime.Now.SeasonValue);
+#if UNITY_PSP2 && VITA_MODS
+                natureArchive = VitaBiomes.NatureArchive(natureArchive, dfTerrain.MapPixelX, dfTerrain.MapPixelY);
+#endif
                 dfBillboardBatch.SetMaterial(natureArchive);
                 int terrainDist = GetTerrainDist(LocalPlayerGPS.CurrentMapPixel, dfTerrain.MapPixelX, dfTerrain.MapPixelY);
                 dfUnity.TerrainNature.LayoutNature(dfTerrain, dfBillboardBatch, TerrainScale, terrainDist);
@@ -1746,18 +1821,24 @@ namespace DaggerfallWorkshop
         // UpdateTerrainNature for play: DefaultTerrainNature's layout in steps of about VitaJobsShim.PumpBudgetMs per frame
         private IEnumerator VitaUpdateTerrainNatureSliced(TerrainDesc terrainDesc)
         {
+            int vitaGen = vitaWorldGen;
             DaggerfallTerrain dfTerrain = terrainDesc.terrainObject.GetComponent<DaggerfallTerrain>();
             DaggerfallBillboardBatch dfBillboardBatch = terrainDesc.billboardBatchObject.GetComponent<DaggerfallBillboardBatch>();
             if (dfTerrain && dfBillboardBatch)
             {
                 DFLocation.ClimateSettings worldClimateSettings = MapsFile.GetWorldClimateSettings(dfTerrain.MapData.worldClimate);
                 int natureArchive = ClimateSwaps.GetNatureArchive(worldClimateSettings.NatureSet, dfUnity.WorldTime.Now.SeasonValue);
+#if UNITY_PSP2 && VITA_MODS
+                natureArchive = VitaBiomes.NatureArchive(natureArchive, dfTerrain.MapPixelX, dfTerrain.MapPixelY);
+#endif
                 dfBillboardBatch.SetMaterial(natureArchive);
                 int terrainDist = GetTerrainDist(LocalPlayerGPS.CurrentMapPixel, dfTerrain.MapPixelX, dfTerrain.MapPixelY);
                 IEnumerator layout = ((DefaultTerrainNature)dfUnity.TerrainNature).VitaLayoutNature(dfTerrain, dfBillboardBatch, TerrainScale, terrainDist, VitaJobsShim.PumpBudgetMs);
                 while (layout.MoveNext())
                 {
                     yield return null;
+                    if (vitaGen != vitaWorldGen)
+                        yield break;    // terrain object reused by the new world
                 }
             }
             terrainDesc.billboardBatchObject.SetActive(true);

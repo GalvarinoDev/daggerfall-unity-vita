@@ -305,7 +305,11 @@ namespace DaggerfallWorkshop.Game.UserInterface
 
             atlasTexture.filterMode = FilterMode;
 
+#if UNITY_PSP2
+            byte[] asciiBytes = VitaGlyphCodes(text);
+#else
             byte[] asciiBytes = Encoding.ASCII.GetBytes(text);
+#endif
             if (asciiBytes == null || asciiBytes.Length == 0)
                 return;
 
@@ -374,7 +378,11 @@ namespace DaggerfallWorkshop.Game.UserInterface
             if (!IsSDFCapable)
             {
                 // Classic glyphs
+#if UNITY_PSP2
+                byte[] asciiBytes = VitaGlyphCodes(text);
+#else
                 byte[] asciiBytes = Encoding.ASCII.GetBytes(text);
+#endif
                 for (int i = 0; i < asciiBytes.Length; i++)
                 {
                     // Get code and use ? for any character code not in dictionary
@@ -459,6 +467,44 @@ namespace DaggerfallWorkshop.Game.UserInterface
 
             return sdfFontInfo.Value.glyphs[code];
         }
+
+#if UNITY_PSP2
+        /// <summary>
+        /// Classic glyph codes of a string. The classic fonts keep accented letters at DOS code page slots; vita/tools/lang_fonts.py
+        /// adds the few they lack. Anything else becomes '?', as Encoding.ASCII does.
+        /// </summary>
+        public static byte[] VitaGlyphCodes(string text)
+        {
+            byte[] codes = new byte[text.Length];
+            for (int i = 0; i < codes.Length; i++)
+                codes[i] = VitaGlyphCode(text[i]);
+            return codes;
+        }
+
+        static byte VitaGlyphCode(char c)
+        {
+            if (c < 127)
+                return (byte)c;
+            switch (c)
+            {
+                case 'Ç': return 128; case 'ü': return 129; case 'é': return 130; case 'â': return 131; case 'ä': return 132;
+                case 'à': return 133; case 'å': return 134; case 'ç': return 135; case 'ê': return 136; case 'ë': return 137;
+                case 'è': return 138; case 'ï': return 139; case 'î': return 140; case 'ì': return 141; case 'Ä': return 142;
+                case 'Å': return 143; case 'É': return 144; case 'æ': return 145; case 'Æ': return 146; case 'ô': return 147;
+                case 'ö': return 148; case 'ò': return 149; case 'û': return 150; case 'ù': return 151; case 'ÿ': return 152;
+                case 'Ö': return 153; case 'Ü': return 154; case 'á': return 160; case 'í': return 161; case 'ó': return 162;
+                case 'ú': return 163; case 'ñ': return 164; case 'Ñ': return 165; case 'ª': return 166; case '¿': return 168;
+                case '¡': return 173; case 'œ': return 176; case 'Œ': return 177; case 'Ó': return 178; case 'Ú': return 179;
+                case 'Á': return 181; case 'Â': return 182; case 'À': return 183; case 'Ê': return 210; case 'È': return 212;
+                case 'Í': return 214; case 'Î': return 215; case 'ß': return 225; case '°': return 248; case 'º': return (byte)'o';
+                case '\u00a0': return (byte)' ';
+                case '\u2013': case '\u2014': return (byte)'-';
+                case '\u2018': case '\u2019': case '\u00b4': return (byte)'\'';
+                case '\u201c': case '\u201d': case '\u201e': return (byte)'"';
+                default: return (byte)'?';
+            }
+        }
+#endif
 
         public float GetGlyphWidth(int code, Vector2 scale, float spacing = 0)
         {
@@ -622,7 +668,7 @@ namespace DaggerfallWorkshop.Game.UserInterface
 
             // Create font atlas
 #if UNITY_PSP2 && !UNITY_EDITOR
-            // Baked by VitaFontBaker (VitaFonts, item 21); ReloadFont used to orphan the previous atlas
+            // Baked by VitaFontBaker (VitaFonts); ReloadFont would otherwise orphan the previous atlas
             if (atlasTexture != null)
                 UnityEngine.Object.Destroy(atlasTexture);
             if (!VitaFonts.Load((int)font, out atlasTexture, out atlasRects))

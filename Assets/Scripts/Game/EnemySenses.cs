@@ -53,7 +53,7 @@ namespace DaggerfallWorkshop.Game
         public static bool VitaShortSightRay = true;
         int playerSightFrame = -1;
         static readonly List<DaggerfallEntityBehaviour> vitaTargets = new List<DaggerfallEntityBehaviour>();
-        static bool vitaInGetTargets;   // TEMP s65 probe
+        static bool vitaInGetTargets;   // timing probe
 #endif
         bool targetInEarshot;
         Vector3 directionToTarget;
@@ -226,14 +226,8 @@ namespace DaggerfallWorkshop.Game
         {
             //Initialize delegates to standard defaults
             BlockedByIllusionEffectHandler = BlockedByIllusionEffect;
-#if UNITY_PSP2
-            // Vita probes: same checks, timed
             CanSeeTargetHandler = CanSeeTarget;
             CanHearTargetHandler = CanHearTarget;
-#else
-            CanSeeTargetHandler = CanSeeTarget;
-            CanHearTargetHandler = CanHearTarget;
-#endif
             CanDetectOtherwiseHandler = delegate (DaggerfallEntityBehaviour target) { return false; };
 
             mobile = GetComponent<DaggerfallEnemy>().MobileUnit;
@@ -270,13 +264,13 @@ namespace DaggerfallWorkshop.Game
                 SensesFixedUpdate();
                 return;
             }
-            long vitaT0 = System.Diagnostics.Stopwatch.GetTimestamp();   // TEMP s65 probe
+            long vitaT0 = System.Diagnostics.Stopwatch.GetTimestamp();   // timing probe
             SensesFixedUpdate();
             VitaSenseTicks[0] += System.Diagnostics.Stopwatch.GetTimestamp() - vitaT0;
             VitaSenseCalls[0]++;
         }
 
-        // TEMP s65 probe: 0 whole step, 1 classic spawn range, 2 far-path sight, 3 GetTargets, 4 near sight, 5 hearing, 6 stealth + detect otherwise,
+        // timing probe: 0 whole step, 1 classic spawn range, 2 far-path sight, 3 GetTargets, 4 near sight, 5 hearing, 6 stealth + detect otherwise,
         // inside GetTargets: 7 sight checks, 8 enemy list (calls = entries), 9 unused, 10 sight rays cast (calls only)
         public static bool VitaSenseProbe;   // set by the test bot only, so play pays no timer reads
         public static long[] VitaSenseTicks = new long[11];
@@ -712,7 +706,7 @@ namespace DaggerfallWorkshop.Game
         }
 
 #if UNITY_PSP2
-        bool VitaProbeStealth()     // TEMP s65 probe
+        bool VitaProbeStealth()     // timing probe
         {
             VitaProbeStart();
             bool result = !blockedByIllusionEffect && StealthCheck();
@@ -865,7 +859,7 @@ namespace DaggerfallWorkshop.Game
             float distanceToTargetHolder = distanceToTarget;
 
 #if UNITY_PSP2
-            long vitaT = VitaSenseProbe ? System.Diagnostics.Stopwatch.GetTimestamp() : 0;   // TEMP s65 probe
+            long vitaT = VitaSenseProbe ? System.Diagnostics.Stopwatch.GetTimestamp() : 0;   // timing probe
             vitaTargets.Clear();
             ActiveGameObjectDatabase.FillActiveEnemyBehaviours(vitaTargets);
             vitaTargets.Add(player);
@@ -942,7 +936,7 @@ namespace DaggerfallWorkshop.Game
 
 #if UNITY_PSP2
                     if (VitaSenseProbe)
-                        vitaT = System.Diagnostics.Stopwatch.GetTimestamp();   // TEMP s65 probe
+                        vitaT = System.Diagnostics.Stopwatch.GetTimestamp();   // timing probe
                     bool see = CanSeeTargetHandler(targetBehaviour);
                     if (VitaSenseProbe)
                     {
@@ -1063,7 +1057,7 @@ namespace DaggerfallWorkshop.Game
 
 #if UNITY_PSP2
                     if (vitaInGetTargets)
-                        VitaSenseCalls[10]++;   // TEMP s65 probe
+                        VitaSenseCalls[10]++;   // timing probe
                     float rayLength = VitaShortSightRay ? Mathf.Min(SightRadius, eyeToTarget.magnitude + 1f) : SightRadius;
                     if (Physics.Raycast(ray, out hit, rayLength))
 #else

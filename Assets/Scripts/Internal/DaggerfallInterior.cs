@@ -157,6 +157,10 @@ namespace DaggerfallWorkshop
             AddPeople(buildingData);
             AddActionDoors();
             AddSpawnPoints();
+#if UNITY_PSP2
+            // Vita: plain flats merged per material, one draw each, as in dungeons (VitaFlatBatch.cs)
+            VitaFlatBatch.Build(gameObject);
+#endif
 
             return true;
         }
@@ -417,7 +421,14 @@ namespace DaggerfallWorkshop
 
                 // Get model data
                 ModelData modelData;
+#if UNITY_PSP2
+                // Vita: a mod model whose mod is off (Old Masters' paintings while Cities/Villages are on) has no data: skip it, as
+                // RMBLayout does outside, instead of a prop reading modelData.Vertices (null)
+                if (!dfUnity.MeshReader.GetModelData(obj.ModelIdNum, out modelData))
+                    continue;
+#else
                 dfUnity.MeshReader.GetModelData(obj.ModelIdNum, out modelData);
+#endif
 
                 // Get model position by type (3 seems to indicate props/clutter)
                 // Also stop these from being combined as some may carry a loot container

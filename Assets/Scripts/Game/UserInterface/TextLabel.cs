@@ -516,7 +516,11 @@ namespace DaggerfallWorkshop.Game.UserInterface
 
             if (!font.IsSDFCapable)
             {
+#if UNITY_PSP2
+                byte[] asciiBytes = DaggerfallFont.VitaGlyphCodes(text);
+#else
                 byte[] asciiBytes = Encoding.Convert(Encoding.UTF8, Encoding.GetEncoding("ISO-8859-1"), Encoding.Default.GetBytes(text));
+#endif
                 for (int i = startCharacterIndex; i < asciiBytes.Length; i++)
                 {
                     int code = asciiBytes[i];

@@ -93,7 +93,7 @@ namespace DaggerfallConnect.Arena2
             }
 
 #if UNITY_PSP2 && !UNITY_EDITOR
-            // Baked by VitaBookBaker (VitaBooks, item 12): ReadHeader's fields, then its seeded price draw
+            // Baked by VitaBookBaker (VitaBooks): ReadHeader's fields, then its seeded price draw
             VitaBooks.Book vitaBook = VitaBooks.Read(name);
             if (vitaBook != null)
             {

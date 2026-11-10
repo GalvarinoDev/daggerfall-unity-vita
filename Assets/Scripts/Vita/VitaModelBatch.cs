@@ -18,7 +18,7 @@ using DaggerfallWorkshop.Utility;
 public class VitaModelBatch : MonoBehaviour
 {
     const int maxVertices = 65000;              // 16-bit indices
-    public static bool KeepUpstream;
+    public static bool KeepUpstream;            // test switch: Show switches back (always possible: the renderers stay)
 
     readonly List<Batch> batches = new List<Batch>();
     readonly List<Item> items = new List<Item>();

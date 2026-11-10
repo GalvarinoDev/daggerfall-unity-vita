@@ -351,7 +351,7 @@ public static class VitaPalette
 
     // Terrain tileset: one buffer holds level 0 and every mip level (POT, tight layout), filled block by block
     // and mipped in place, so building a new climate's tileset needs 5.6 MB instead of a 16 MB Color32[] plus a 22 MB ARGB32 texture
-    // (travelling to Sentinel crashed on both: runs 131-133).
+    // (travelling to Sentinel crashed on both).
     static Dictionary<int, byte> exact;
 
     /// <summary>Buffer for a square POT index texture with its full mip chain.</summary>
@@ -552,7 +552,7 @@ public static class VitaPalette
         align = 0;
         foreach (int candidate in new[] { 1, 4, 8, 16, 32 })
         {
-            // NPOT sizes want one spare byte after the tight layout (runs 100-101: always exactly +1, same level count)
+            // NPOT sizes want one spare byte after the tight layout (always exactly +1, same level count)
             int size = LayoutSize(width, height, levels, candidate);
             if (size == expected || size + 1 == expected)
             {

@@ -101,6 +101,7 @@ Shader "Daggerfall/Vita/DefaultPalette Orig" {
             #endif
 
             // Albedo (colour) map
+            // index k is stored as k/255: round back to k in float (the Vita samples Alpha8 at low precision and hit
             // neighbouring palette ramps), then sample the centre of palette texel k
             half4 albedo = tex2D(_PaletteTex, float2((floor((float)VitaPaletteIndex(_MainTex, IN.uv_MainTex) * 255.0 + 0.5) + 0.5) / 256.0, 0.5)) * _Color;
 
@@ -127,7 +128,7 @@ Shader "Daggerfall/Vita/DefaultPalette Orig" {
 
             // Vertex lights per pixel (base pass only: forward-add passes light one pixel light each)
             // Unity's surface analysis defines no pass macro: without SHADER_TARGET_SURFACE_ANALYSIS it saw the light inputs unused, dropped them,
-            // and the lights got position 0
+            // and the lights got position 0 (no torch light at all)
             // Not with normal/height maps (only loose mod files give palette textures those): their variants have no interpolators left
             #if (defined(SHADER_TARGET_SURFACE_ANALYSIS) || (defined(UNITY_PASS_FORWARDBASE) && defined(VITA_NEAR_LIGHTS))) && !defined(_NORMALMAP) && !defined(_PARALLAXMAP)
                 o.Emission += o.Albedo * VitaNearLights(IN.vitaLight0, IN.vitaLight1);

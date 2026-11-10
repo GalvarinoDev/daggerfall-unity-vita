@@ -46,9 +46,22 @@ public static class VitaWorldTextures
         get { return Path.Combine(Path.Combine(Application.streamingAssetsPath, "VitaNative"), "textures.pak"); }
     }
 
+#if VITA_MODS
+    // World of Daggerfall - Biomes (vita/tools/bake_biomes.sh): ground archives 3, 4, 104 and 304
+    static VitaPack biomes;
+#endif
 
     static bool Read(uint key, out System.IntPtr memory, out System.IntPtr data, out int length)
     {
+#if VITA_MODS
+        if (DaggerfallUnity.Settings.VitaWorldOfDaggerfallBiomes)
+        {
+            if (biomes == null)
+                biomes = new VitaPack(Path.Combine(Path.GetDirectoryName(PackPath), "biomes.pak"), PackMagic);
+            if (biomes.Contains(key))
+                return biomes.Read(key, out memory, out data, out length);
+        }
+#endif
         return pack.Read(key, out memory, out data, out length);
     }
 

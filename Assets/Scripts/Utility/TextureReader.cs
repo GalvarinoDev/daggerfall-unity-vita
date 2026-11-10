@@ -195,6 +195,9 @@ namespace DaggerfallWorkshop.Utility
             GetTextureResults results = new GetTextureResults();
 
 #if UNITY_PSP2
+#if VITA_MODS
+            settings.archive = VitaRedguards.Archive(settings.archive);     // built-in Redguards of Hammerfell
+#endif
             // Atlas sources need no mips: the atlas makes its own (and mipmapped NPOT frames may be padded to POT in VRAM)
             bool mipMaps = MipMaps && !settings.atlasSource;
 
@@ -816,7 +819,12 @@ namespace DaggerfallWorkshop.Utility
             bool stayReadable = settings.stayReadable;
             settings.stayReadable = true;
 #if UNITY_PSP2
+#if !VITA_MODS
             settings.atlasSource = true;
+#else
+            settings.archive = VitaRedguards.Archive(settings.archive);     // built-in Redguards of Hammerfell
+            settings.atlasSource = true;
+#endif
             // A cached palette atlas needs no TEXTURE file (VitaAtlasCache)
             if (settings.atlasMaxSize != 4096 && VitaAtlasCache.TryLoad(settings, VitaAtlasMips, stayReadable, ref results))
             {
@@ -1074,7 +1082,7 @@ namespace DaggerfallWorkshop.Utility
             int x = 0, y = 0;
 #if UNITY_PSP2
             // Vita: an 8-bit palette-index atlas (exact colours, see VitaPalette): 5.6 MB with mips instead of a 16 MB Color32[] plus a 22 MB
-            // ARGB32 texture, which crashed travelling to a new climate (Sentinel, runs 131-133). Daggerfall/Tilemap looks the colour up.
+            // ARGB32 texture, which crashed travelling to a new climate (Sentinel). Daggerfall/Tilemap looks the colour up.
             byte[] tilesetData = VitaPalette.NewMippedData(atlasDim);
 #else
             Color32[] atlasColors = new Color32[atlasDim * atlasDim];

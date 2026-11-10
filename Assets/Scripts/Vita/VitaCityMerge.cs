@@ -1,6 +1,6 @@
 // Project:         Daggerfall Unity - PS Vita port
 // License:         MIT License (http://www.opensource.org/licenses/mit-license.php)
-// Cities are draw-call bound: ~1400 draws at ~45 us each, block meshes ~30 of 75 ms in Daggerfall city (runs 111/112, 150). Each
+// Cities are draw-call bound: ~1400 draws at ~45 us each, block meshes ~30 of 75 ms in Daggerfall city. Each
 // block's CombinedModels has one submesh per texture, so a city draws blocks x textures, and the cost of a draw is mostly the state
 // that changes between draws. Unity static batching kept the draw count. So the CombinedModels of each chunk of
 // VitaCityMerge x VitaCityMerge blocks are merged here into meshes with one submesh per texture key (under 65k vertices each).

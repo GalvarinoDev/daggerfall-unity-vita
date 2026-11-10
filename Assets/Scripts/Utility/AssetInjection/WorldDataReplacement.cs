@@ -237,6 +237,13 @@ namespace DaggerfallWorkshop.Utility.AssetInjection
                 string fileName = GetDFLocationReplacementFilename(regionIndex, locationIndex, variant);
                 TextAsset locationReplacementJsonAsset;
 
+#if UNITY_PSP2 && VITA_MODS
+                // Built-in Beautiful Cities / Villages (VitaWorldPack.cs, as binary)
+                if (VitaWorldPack.TryGetLocation(fileName, out dfLocation))
+                {
+                }
+                else
+#endif
                 // Seek from loose files
                 if (File.Exists(Path.Combine(worldDataPath, fileName)))
                 {
@@ -367,6 +374,14 @@ namespace DaggerfallWorkshop.Utility.AssetInjection
                 string fileName = GetDFBlockReplacementFilename(blockName, variant);
                 TextAsset blockReplacementJsonAsset;
 
+#if UNITY_PSP2 && VITA_MODS
+                // Built-in Windmills of Daggerfall / Beautiful Cities / Villages (VitaWorldPack.cs, RMB blocks as binary)
+                if (VitaWorldPack.TryGetBlock(fileName, out dfBlock))
+                {
+                    vitaPackBlocks.Add(blockKey);
+                }
+                else
+#endif
                 // Seek from loose files
                 if (File.Exists(Path.Combine(worldDataPath, fileName)))
                 {
@@ -396,7 +411,9 @@ namespace DaggerfallWorkshop.Utility.AssetInjection
 #if !UNITY_EDITOR   // Cache block data for added/replaced blocks (unless running in editor)
                 blocks.Add(blockKey, dfBlock);
 #endif
+#if !UNITY_PSP2   // Vita: ~770 per tour with the mod packs, each log line 7-14 ms on hardware, some inside a frozen loading frame
                 Debug.LogFormat("Found DFBlock override: {0} (index: {1})", blockName, block);
+#endif
                 return true;
             }
             dfBlock = noReplacementBlock;
@@ -459,6 +476,16 @@ namespace DaggerfallWorkshop.Utility.AssetInjection
                 {
                     string fileName = GetBuildingReplacementFilename(blockName, blockIndex, recordIndex, variant);
 
+#if UNITY_PSP2 && VITA_MODS
+                    // Built-in Beautiful Cities (VitaWorldPack.cs, as binary)
+                    if (VitaWorldPack.TryGetBuilding(fileName, out buildingData))
+                    {
+#if !UNITY_EDITOR
+                        buildings.Add(blockRecordKey, buildingData);
+#endif
+                        return true;
+                    }
+#endif
                     // Seek from loose files
                     if (File.Exists(Path.Combine(worldDataPath, fileName)))
                     {

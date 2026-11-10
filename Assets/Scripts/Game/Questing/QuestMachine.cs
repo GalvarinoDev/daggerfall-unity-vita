@@ -646,7 +646,7 @@ namespace DaggerfallWorkshop.Game.Questing
         private Quest ParseQuest(string questName)
         {
 #if UNITY_PSP2 && !UNITY_EDITOR
-            // Baked by VitaQuestBaker (VitaQuests, item 12): no file read or text split
+            // Baked by VitaQuestBaker (VitaQuests): no file read or text split
             VitaQuests.Split vitaSplit = VitaQuests.Read(QuestSourceFolder, questName);
             if (vitaSplit != null)
                 return VitaParseQuest(questName, vitaSplit);

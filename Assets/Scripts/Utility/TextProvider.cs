@@ -179,7 +179,7 @@ namespace DaggerfallWorkshop.Utility
                 return table;
 
 #if !UNITY_EDITOR
-            // Baked by VitaTextTableBaker (VitaTextTables, item 12): the same merged table without parsing CSV text
+            // Baked by VitaTextTableBaker (VitaTextTables): the same merged table without parsing CSV text
             table = VitaTextTables.Read(collection);
 #endif
             if (table == null)

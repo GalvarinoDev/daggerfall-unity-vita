@@ -191,7 +191,7 @@ namespace DaggerfallWorkshop.Game
             }
 
 #if UNITY_PSP2 && !UNITY_EDITOR
-            // Baked by VitaLocBookBaker (VitaLocBooks, item 12): the parsed fields, no file read or tag parse
+            // Baked by VitaLocBookBaker (VitaLocBooks): the parsed fields, no file read or tag parse
             if (lines == null)
             {
                 bool? vitaApplied = VitaLocBooks.Apply(this, filename);

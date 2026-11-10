@@ -54,3 +54,7 @@ keepSetting,                Keep this setting? Changes will revert in 8 seconds.
 incompatibleMods,           One or more mods are incompatible with current version of the game. Please check mods window for details. Do you wish to continue anyway?
 showOptionsAgain,           Hold the Shift key when starting Daggerfall Unity to show the launcher again
 showOptionsAgainVita,       Pick Launcher at next boot in the pause menu top-left list to show the launcher again
+vitaDynamicSkies,           Dynamic Skies
+vitaDynamicSkiesInfo,       Animated sky with clouds and stars and moons (Dynamic Skies mod) using about 10 MB of video memory
+vitaBasicRoads,             Basic Roads
+vitaBasicRoadsInfo,         Roads and tracks on the terrain between towns (BasicRoads mod)

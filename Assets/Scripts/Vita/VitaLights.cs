@@ -67,10 +67,11 @@ public class VitaLights : MonoBehaviour
             light.enabled = on;
     }
 
-    public static string State = "";
-    public static bool Off;
-    public static bool TownOff;
+    public static string State = "";   // slots, fades and keywords of the last frame, for test logs
+    public static bool Off;   // test switch: no point lights in the palette shaders
+    public static bool TownOff;   // test switch: town lamps in the slots again
 
+    // xz only, so a lamp's pool lights a wall to any height and the lamps don't flicker. If roofs glow, add a height falloff.
     const int townSize = 512;     // 1 MB RGBA32; ~1.6 m a texel over the biggest city, against 18 m lamp ranges
     static readonly int townTexId = Shader.PropertyToID("_VitaTownLightTex"), townRectId = Shader.PropertyToID("_VitaTownLightRect"),
         townScaleId = Shader.PropertyToID("_VitaTownLightScale");

@@ -41,6 +41,7 @@ Shader "Daggerfall/Vita/BillboardBatchPalette Orig" {
 		float3 _UpVector;
 
 		// One UV: the emission mask shares the atlas layout, and the Vita atlases have no normal map (o.Normal from a flat default bump
+		// map cost a texture read plus tangent-space lighting per pixel for the same result; trees were ~19 ms of the exterior frame)
 		struct Input {
 			float2 uv_MainTex;
 		};

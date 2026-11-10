@@ -136,7 +136,7 @@ namespace DaggerfallWorkshop.Game.Utility
             {
 #if UNITY_PSP2
                 // Building the world takes seconds on Vita: show a loading window for a few drawn frames first instead of a frozen screen.
-                // A DFU window, not OnGUI: our own OnGUI drew under the HUD
+                // A DFU window, not OnGUI: a plain OnGUI drew under the HUD
                 if (loadingFrames < 3 && (StartMethod == StartMethods.NewCharacter || StartMethod == StartMethods.LoadDaggerfallUnitySave ||
                     StartMethod == StartMethods.LoadClassicSave))
                 {

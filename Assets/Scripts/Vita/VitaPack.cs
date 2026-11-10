@@ -2,7 +2,7 @@
 // License:         MIT License (http://www.opensource.org/licenses/mit-license.php)
 // One baked pack in StreamingAssets/VitaNative: header magic, version, count, then per record key / offset /
 // length (version 1) or key / offset / stored length / raw length (version 2, LZ4 blocks from vita/tools/lz4pack.py), records at 512-byte
-// offsets. The index is read once; each record is one sceIoPread into 64-byte-aligned native memory (VITA_GUIDE §5 reads), decoded in
+// offsets. The index is read once; each record is one sceIoPread into 64-byte-aligned native memory, decoded in
 // native memory, so a read makes no managed garbage. Used by VitaAtlasCache (atlas.pak) and VitaModelPack (models.pak).
 
 #if UNITY_PSP2
@@ -22,14 +22,14 @@ public sealed class VitaPack
 #endif
 
     readonly string path;
-    // A struct, not an int[] per record; with no references in the
+    // A struct, not an int[] per record (one small array object each, 10-15k per pack for the GC to mark); with no references in the
     // entries the dictionary's arrays are pointer-free, so the GC doesn't scan them either
     struct Entry
     {
         public int offset, stored, raw;
     }
     readonly Dictionary<uint, Entry> index = new Dictionary<uint, Entry>();   // key -> offset, stored length, raw length
-    readonly int fd = -1;
+    readonly int fd = -1;                                                      // app0: (not invalidated by suspend), one for the session
     readonly bool lz4;
 
     /// <summary>Reads the index of the pack at path; an empty pack (Count 0) if it's missing or not a pack with this magic.</summary>

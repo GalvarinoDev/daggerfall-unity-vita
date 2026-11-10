@@ -243,16 +243,30 @@ namespace DaggerfallWorkshop.Game.UserInterface
 #if UNITY_PSP2
             // Vita: Rest has no pad button, so it lives here: close the pause window, then the usual rest window (its own checks)
             ListBox.ListItem rest;
-            dropdownList.AddItem("Rest", out rest);
+            dropdownList.AddItem(TextManager.Instance.GetLocalizedText("vitaRest"), out rest);
             UpdateMaxWidth(rest.textLabel.TextWidth);
             clickHandlers.Add(() =>
             {
                 uiManager.PopWindow();
                 DaggerfallUI.PostMessage(DaggerfallUIMessages.dfuiOpenRestWindow);
             });
+#if VITA_TRAVELOPTIONS
+            // Travel Options (built in): its follow-road key has no free pad button
+            if (TravelOptions.TravelOptionsMod.Instance != null && TravelOptions.TravelOptionsMod.Instance.RoadsIntegration)
+            {
+                ListBox.ListItem followRoad;
+                dropdownList.AddItem("Follow Road", out followRoad);
+                UpdateMaxWidth(followRoad.textLabel.TextWidth);
+                clickHandlers.Add(() =>
+                {
+                    uiManager.PopWindow();
+                    TravelOptions.TravelOptionsMod.VitaFollowRequested = true;
+                });
+            }
+#endif
             // Same for the character sheet and magic items (no pad buttons left)
             ListBox.ListItem characterSheet;
-            dropdownList.AddItem("Character Sheet", out characterSheet);
+            dropdownList.AddItem(TextManager.Instance.GetLocalizedText("vitaCharacterSheet"), out characterSheet);
             UpdateMaxWidth(characterSheet.textLabel.TextWidth);
             clickHandlers.Add(() =>
             {
@@ -260,7 +274,7 @@ namespace DaggerfallWorkshop.Game.UserInterface
                 DaggerfallUI.PostMessage(DaggerfallUIMessages.dfuiOpenCharacterSheetWindow);
             });
             ListBox.ListItem magicItem;
-            dropdownList.AddItem("Use Magic Item", out magicItem);
+            dropdownList.AddItem(TextManager.Instance.GetLocalizedText("vitaUseMagicItem"), out magicItem);
             UpdateMaxWidth(magicItem.textLabel.TextWidth);
             clickHandlers.Add(() =>
             {
@@ -279,6 +293,20 @@ namespace DaggerfallWorkshop.Game.UserInterface
                 launcher.textLabel.Text = LauncherText();
             });
 
+#if VITA_MODS
+            // Vita: Low Poly Trees mod models near the player (VitaNearTrees); off = DFU's billboard trees. On takes effect as areas load
+            ListBox.ListItem lowPolyTrees;
+            dropdownList.AddItem(LowPolyTreesText(), out lowPolyTrees);
+            UpdateMaxWidth(lowPolyTrees.textLabel.TextWidth);
+            clickHandlers.Add(() =>
+            {
+                DaggerfallUnity.Settings.VitaLowPolyTrees = !DaggerfallUnity.Settings.VitaLowPolyTrees;
+                DaggerfallUnity.Settings.SaveSettings();
+                if (!DaggerfallUnity.Settings.VitaLowPolyTrees)
+                    VitaNearTrees.ClearAll();
+                lowPolyTrees.textLabel.Text = LowPolyTreesText();
+            });
+#endif
 
             // Vita: dungeon brightness (DungeonAmbientLightScale, otherwise only in the launcher's advanced settings); applies live
             ListBox.ListItem dungeonLight;
@@ -352,30 +380,37 @@ namespace DaggerfallWorkshop.Game.UserInterface
 #if UNITY_PSP2
         static string LauncherText()
         {
-            return DaggerfallUnity.Settings.ShowOptionsAtStart ? "Launcher at next boot: On" : "Launcher at next boot: Off";
+            return TextManager.Instance.GetLocalizedText(DaggerfallUnity.Settings.ShowOptionsAtStart ? "vitaLauncherOn" : "vitaLauncherOff");
         }
 
+#if VITA_MODS
+        static string LowPolyTreesText()
+        {
+            return TextManager.Instance.GetLocalizedText(DaggerfallUnity.Settings.VitaLowPolyTrees ? "vitaLowPolyTreesOn" : "vitaLowPolyTreesOff");
+        }
+#endif
 
         static string DungeonLightText()
         {
-            return string.Format("Dungeon light: {0:F0}%", DaggerfallUnity.Settings.DungeonAmbientLightScale * 100);
+            return string.Format(TextManager.Instance.GetLocalizedText("vitaDungeonLight"), DaggerfallUnity.Settings.DungeonAmbientLightScale * 100);
         }
 
         static string FireLightText()
         {
-            return string.Format("Fire light: {0}%", DaggerfallUnity.Settings.VitaFireLight);
+            return string.Format(TextManager.Instance.GetLocalizedText("vitaFireLight"), DaggerfallUnity.Settings.VitaFireLight);
         }
 
-        static readonly string[] fireColourNames = { "White", "Slightly warm", "Warm", "Warmest" };
+        static string[] fireColourNames { get { return TextManager.Instance.GetLocalizedTextList("vitaFireColours"); } }
 
         static string FireColourText()
         {
-            return "Fire colour: " + fireColourNames[Mathf.Clamp(DaggerfallUnity.Settings.VitaFireColour, 0, fireColourNames.Length - 1)];
+            string[] names = fireColourNames;
+            return string.Format(TextManager.Instance.GetLocalizedText("vitaFireColour"), names[Mathf.Clamp(DaggerfallUnity.Settings.VitaFireColour, 0, names.Length - 1)]);
         }
 
         static string TorchReachText()
         {
-            return string.Format("Torch reach: {0} m", DaggerfallUnity.Settings.VitaTorchReach);
+            return string.Format(TextManager.Instance.GetLocalizedText("vitaTorchReach"), DaggerfallUnity.Settings.VitaTorchReach);
         }
 #endif
 

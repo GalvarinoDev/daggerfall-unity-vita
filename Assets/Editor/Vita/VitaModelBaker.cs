@@ -44,6 +44,13 @@ public static class VitaModelBaker
             if (!seen.Add(id))
                 continue;
             ModelData modelData;
+#if VITA_MODS
+            if (VitaDetModels.TryGetModelData(id, out modelData))
+            {
+                replaced++;
+                continue;
+            }
+#endif
             if (!dfUnity.MeshReader.GetModelData(id, out modelData))
             {
                 failed++;   // no vertices: GetModelData fails for it on the Vita too

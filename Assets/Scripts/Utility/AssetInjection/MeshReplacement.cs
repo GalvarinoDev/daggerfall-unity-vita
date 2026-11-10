@@ -102,6 +102,11 @@ namespace DaggerfallWorkshop.Utility.AssetInjection
         /// <returns>Returns the imported model or null if not found.</returns>
         public static GameObject ImportCustomGameobject(uint modelID, Transform parent, Matrix4x4 matrix, bool isAutomapRun = false)
         {
+#if UNITY_PSP2 && VITA_MODS
+            // Block baker (editor): records where a windmill model goes; VitaBlockBake.TryBuild imports it there at runtime
+            if (VitaBakeImport != null && VitaWindmills.HasModel(modelID))
+                return VitaBakeImport(modelID, parent, matrix);
+#endif
             GameObject modelGO;
             if (!TryImportGameObject(modelID, true, out modelGO))
                 return null;
@@ -131,7 +136,12 @@ namespace DaggerfallWorkshop.Utility.AssetInjection
         /// </summary>
         public static bool VitaHasCustomGameobject(uint modelID)
         {
+#if !VITA_MODS
 
+#else
+            if (VitaWindmills.HasModel(modelID))
+                return true;
+#endif
             GameObject go;
             return TryImportGameObject(modelID, false, out go);
         }
@@ -285,6 +295,11 @@ namespace DaggerfallWorkshop.Utility.AssetInjection
         ///</summary>
         private static bool TryImportGameObject(uint modelID, bool clone, out GameObject go)
         {
+#if UNITY_PSP2 && VITA_MODS
+            // Built-in Windmills of Daggerfall (no .dfmod loading on Vita): its models, climate variant first as GetName orders them
+            if (VitaWindmills.HasModel(modelID) && VitaWindmills.TryImport(modelID, GetName(MakeModelKey(modelID)), out go))
+                return true;
+#endif
             if (DaggerfallUnity.Settings.AssetInjection)
             {
                 if (ModManager.Instance != null)

@@ -8,5 +8,5 @@ win() { echo "Z:$(realpath "$1" | tr / '\\')"; }
 mkdir -p Assets/StreamingAssets/VitaNative
 export VITA_ARENA2="$(win "$A")" VITA_BAKE_OUT="$(win Assets/StreamingAssets/VitaNative)\\images.pak"
 vita/unity2017.sh VitaImageBaker.Bake bakeimages || true
-grep -h "VITABAKE done\|VITABAKE failed\|VITABAKE image\|error CS" ~/Games/unity2017/drive_c/2018_bakeimages.log
+grep -h "VITABAKE done\|VITABAKE failed\|VITABAKE image\|VITABAKE language\|error CS" ~/Games/unity2017/drive_c/2018_bakeimages.log
 ~/.venvs/unitypy/bin/python -I vita/tools/lz4pack.py Assets/StreamingAssets/VitaNative/images.pak

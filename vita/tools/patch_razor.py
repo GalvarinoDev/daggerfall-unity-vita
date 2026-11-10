@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Lets Unity 2018.2's PS Vita *development* player run on a retail Vita (for the Unity Profiler).
 # The dev player imports 15 sceRazor* functions (Razor GPU capture/HUD, ScePerf CPU markers) as weak imports. Those modules exist
-# only on dev kits, so on retail the calls crash at PC 0 during GXM init (UNITY_VITA_GUIDE §4). The player is a relocatable
+# only on dev kits, so on retail the calls crash at PC 0 during GXM init. The player is a relocatable
 # module (ELF type 0xFE04): every call loads the stub address with movw/movt, and the loader writes that address from an SCE
 # relocation (symbol segment 0 + addend). This rewrites the addend of every relocation that targets a sceRazor* stub to a leaf
 # function of the player that returns -1 (what an unresolved stub would return), so Unity sees "Razor not available".
@@ -12,7 +12,7 @@ TARGET = "UNITY_ft_validator_run"           # movs.w r0, #-1; bx lr (Thumb)
 TARGET_BYTES = bytes.fromhex("5ff0ff307047")
 # The CPU markers and GXMRazorHud's per-frame calls (BeginFrame/PresentFrame/Control: GpuLive*, GpuTrace*, HudReloadSettings,
 # GpuPerfGetMode) run every frame, and the dev player logs "SCE error detected: 0xffffffff" in its on-screen console for every
-# negative result except 0x8008C002 (run2018v/w): they return 0 instead (IsCapturing 0 = not capturing). The one-time init calls
+# negative result except 0x8008C002: they return 0 instead (IsCapturing 0 = not capturing). The one-time init calls
 # (GpuCaptureEnableSalvage, CaptureSetTriggerNextFrame) keep -1.
 ZERO = "gray_raster_set_mode"               # movs r0, #0; bx lr (Thumb)
 ZERO_BYTES = bytes.fromhex("00207047")

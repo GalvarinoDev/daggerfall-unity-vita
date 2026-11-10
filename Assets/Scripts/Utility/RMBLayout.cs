@@ -264,6 +264,11 @@ namespace DaggerfallWorkshop.Utility
                     // Import custom 3d gameobject instead of flat
                     if (MeshReplacement.ImportCustomFlatGameobject(natureArchive, scenery.TextureRecord, billboardPosition, flatsParent) != null)
                         continue;
+#if UNITY_PSP2 && VITA_MODS
+                    // Low Poly Trees' models for location trees near the player, as PC DFU places them; billboards beyond (VitaNearTrees)
+                    if (VitaNearTrees.AddLocationTree(natureArchive, scenery.TextureRecord, billboardPosition, flatsParent, billboardBatch))
+                        continue;
+#endif
 
                     // Add billboard to batch or standalone
                     if (billboardBatch != null)

@@ -164,7 +164,7 @@ namespace DaggerfallConnect.Arena2
             string name = string.Format("ENEMY{0:000}.CFG", monster);
 
 #if UNITY_PSP2 && !UNITY_EDITOR
-            // Baked by VitaCareerBaker (VitaCareers, item 12): the finished career
+            // Baked by VitaCareerBaker (VitaCareers): the finished career
             DFCareer vitaCareer = VitaCareers.Read(name);
             if (vitaCareer != null)
             {

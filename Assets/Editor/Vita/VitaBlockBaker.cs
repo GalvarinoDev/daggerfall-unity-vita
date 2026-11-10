@@ -28,7 +28,11 @@ public static class VitaBlockBaker
         if (string.IsNullOrEmpty(output))
             output = VitaBlockBake.PackPath;
 
+        // No replacement models except the built-in windmills (VitaWindmills); world data from the packs per combination below
         DaggerfallUnity.Settings.AssetInjection = false;
+#if VITA_MODS
+        DaggerfallUnity.Settings.VitaWindmills = true;
+#endif
         DaggerfallUnity dfUnity = DaggerfallUnity.Instance;
         dfUnity.Option_CombineRMB = true;
         dfUnity.ChangeArena2Path(arena2);
@@ -150,11 +154,31 @@ public static class VitaBlockBaker
         var collected = new HashSet<string>();
         vanilla = 0;
         SettingsManager s = DaggerfallUnity.Settings;
+#if VITA_MODS
+        bool[] saved = { s.VitaBeautifulVillages, s.VitaBeautifulCities, s.VitaWindmills, s.VitaFixedDesertArchitecture, s.VitaFindingMyReligion, s.VitaFixedDungeonExteriors, s.VitaWorldOfDaggerfall };
+#endif
+        // combo 32 = Fixed Dungeon Exteriors alone: it shares no block with the other packs, so mixes add nothing new.
+        // If a later pack overlaps it, it needs a sixth bit (64 combos).
+        // combo 33 = World of Daggerfall alone, the same way: its 11 vanilla block overrides share no block with the other packs
+#if !VITA_MODS
         const int combos = 1;       // no-mods alpha: Daggerfall's own blocks only
+#else
+        const int combos = 34;
+#endif
         for (int combo = 0; combo < combos; combo++)
         {
             // BLOCKS.BSA as BlocksFile.GetBlock gives it with these mods on (a new reader each time: it caches built blocks)
             s.AssetInjection = combo != 0;
+#if VITA_MODS
+            s.VitaBeautifulVillages = (combo & 1) != 0;
+            s.VitaBeautifulCities = (combo & 2) != 0;
+            s.VitaWindmills = (combo & 4) != 0;
+            s.VitaFixedDesertArchitecture = (combo & 8) != 0;
+            s.VitaFindingMyReligion = (combo & 16) != 0;
+            s.VitaFixedDungeonExteriors = combo == 32;
+            s.VitaWorldOfDaggerfall = combo == 33;
+            VitaWorldPack.Reopen();
+#endif
             var blocksFile = new BlocksFile(Path.Combine(arena2, BlocksFile.Filename), FileUsage.UseMemory, true);
             for (int i = 0; i < blocksFile.Count; i++)
                 if (blocksFile.GetBlockType(i) == DFBlock.BlockTypes.Rmb)
@@ -173,11 +197,34 @@ public static class VitaBlockBaker
                 }
         }
         s.AssetInjection = false;
+#if VITA_MODS
+        s.VitaBeautifulVillages = saved[0];
+        s.VitaBeautifulCities = saved[1];
+        s.VitaFixedDesertArchitecture = saved[3];
+        s.VitaFindingMyReligion = saved[4];
+        s.VitaFixedDungeonExteriors = saved[5];
+        s.VitaWorldOfDaggerfall = saved[6];
+        s.VitaWindmills = true;
+#endif
         layered = blocks.Count - vanilla;
+#if VITA_MODS
+        VitaWorldPack.Reopen();
+        // Blocks only the packs have (new names: no building replacements can address them, their index is assigned at runtime)
+        foreach (string pack in new[] { "cities", "villages", "religion", "fda", "windmills", "fde", "wod" })
+            foreach (DFBlock block in VitaWorldPack.AllBlocks(pack))
+            {
+                DFBlock b = block;
+                if (b.Type == DFBlock.BlockTypes.Rmb)
+                    blocks.Add(b);
+                else if (b.Type == DFBlock.BlockTypes.Rdb && rdbCollected.Add(VitaBlockBake.Key(b.Name, VitaBlockBake.RdbHash(ref b, true))))
+                    rdbBlocks.Add(b);
+            }
+#endif
 
         return blocks;
     }
 
+    // Windmill models: a placeholder with the matrix ImportCustomGameobject gets (the model and its climate variant are picked at runtime)
     static void SetPlaceholderImport()
     {
         DaggerfallWorkshop.Utility.AssetInjection.MeshReplacement.VitaBakeImport = (id, parent, matrix) =>
@@ -197,6 +244,9 @@ public static class VitaBlockBaker
     {
         string arena2 = Environment.GetEnvironmentVariable("VITA_ARENA2");
         DaggerfallUnity.Settings.AssetInjection = false;
+#if VITA_MODS
+        DaggerfallUnity.Settings.VitaWindmills = true;
+#endif
         DaggerfallUnity dfUnity = DaggerfallUnity.Instance;
         dfUnity.Option_CombineRMB = true;
         dfUnity.Option_CombineRDB = true;
@@ -371,7 +421,7 @@ public static class VitaBlockBaker
                     textureKeys = child.GetComponent<DaggerfallMesh>().GetDefaultTextures();
                 }
                 else if (child.name.StartsWith("DaggerfallMesh [ID="))
-                    standalones.Add(child);
+                    standalones.Add(child);   // [Replacement]: a windmill model, imported again at runtime (VitaBlockBake.TryBuild)
                 else
                 {
                     Debug.Log("VITABAKE skip " + block.Name + ": unexpected " + child.name);

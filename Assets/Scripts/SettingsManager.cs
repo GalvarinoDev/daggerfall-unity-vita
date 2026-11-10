@@ -174,6 +174,7 @@ namespace DaggerfallWorkshop
         public bool VitaCulling { get; set; }
         public bool VitaTerrainGrid2x2 { get; set; }
         public bool VitaStaticBatching { get; set; }
+        public bool VitaLowPolyTrees { get; set; }
         public int VitaCityMerge { get; set; }
         public int VitaTownDistance { get; set; }
         public int VitaFogDistance { get; set; }
@@ -186,6 +187,29 @@ namespace DaggerfallWorkshop
         public bool VitaAtlas { get; set; }
         public bool VitaFlatBatch { get; set; }
         public bool VitaModelBatch { get; set; }
+        public bool VitaDynamicSkies { get; set; }
+        public bool VitaBasicRoads { get; set; }
+        public bool VitaLoadScreenArt { get; set; }
+        public bool VitaWindmills { get; set; }
+        public bool VitaDragonRider { get; set; }
+        public bool VitaTravelOptions { get; set; }
+        public bool VitaWorldOfDaggerfall { get; set; }
+        public bool VitaWodTerrain { get; set; }
+        public bool VitaSnowlessSwamp { get; set; }
+        public bool VitaWorldOfDaggerfallBiomes { get; set; }
+        public bool VitaDistantTerrain { get; set; }
+        public bool VitaDistantTerrainReference { get; set; }
+        public bool VitaBeautifulCities { get; set; }
+        public bool VitaBeautifulVillages { get; set; }
+        public bool VitaFindingMyReligion { get; set; }
+        public bool VitaFixedDesertArchitecture { get; set; }
+        public bool VitaFixedDungeonExteriors { get; set; }
+        public bool VitaRedguards { get; set; }
+        public bool VitaExpandedTextures { get; set; }
+        public bool VitaRmbResourcePack { get; set; }
+        public bool VitaDiep { get; set; }
+        public bool VitaNewPaintings { get; set; }
+        public bool VitaHarvestableCrops { get; set; }
         public int VitaFireLight { get; set; }
         public int VitaFireColour { get; set; }     // VitaLights warmth 0-3 (White / Slightly warm / Warm / Warmest)
         public int VitaTorchReach { get; set; }     // the player torch's range in metres (6 = stock)
@@ -460,32 +484,35 @@ namespace DaggerfallWorkshop
             ShadowResolutionMode = GetInt(sectionVideo, "ShadowResolutionMode", 0, 3);
             QualityLevel = GetInt(sectionVideo, "QualityLevel", 0, 5);
 #if UNITY_PSP2
-            // Vita texture size: 0 = full, 1 = half, 2 = quarter. Drops the top
+            // Vita texture size: 0 = full (default: the original art), 1 = half, 2 = quarter. Drops the top
             // mip levels of every mipmapped texture (QualitySettings.masterTextureLimit), so world/sprite textures take 1/4 (1/16) of the memory.
             int vitaTextureLimit;
             VitaTextureLimit = int.TryParse(GetData(sectionVideo, "VitaTextureLimit"), out vitaTextureLimit) ? Mathf.Clamp(vitaTextureLimit, 0, 2) : 0;
-            // Vita: switch off far dungeon objects; on unless "False"
+            // Vita: switch off far dungeon objects (VitaCulling.cs); on unless "False"
             VitaCulling = GetData(sectionVideo, "VitaCulling") != "False";
-            // Vita: 2x2 terrain tiles around the player instead of 3x3 at TerrainDistance 1; on unless "False"
+            // Vita: 2x2 terrain tiles around the player instead of 3x3 at TerrainDistance 1 (StreamingWorld); on unless "False"
             VitaTerrainGrid2x2 = GetData(sectionVideo, "VitaTerrainGrid2x2") != "False";
             // Vita: Unity static batching of the city blocks (StreamingWorld; cities are draw-call bound, ~45 us per draw); off unless "True"
             VitaStaticBatching = GetData(sectionVideo, "VitaStaticBatching") == "True";
+            // Vita: Low Poly Trees mod models near the player (VitaNearTrees.cs); off unless "True" (billboards = the PC default look)
+            VitaLowPolyTrees = GetData(sectionVideo, "VitaLowPolyTrees") == "True";
             // Vita: merge city block meshes per texture in chunks of N x N blocks (VitaCityMerge.cs); 0 = off
             int vitaCityMerge;
             VitaCityMerge = int.TryParse(GetData(sectionVideo, "VitaCityMerge"), out vitaCityMerge) ? Mathf.Clamp(vitaCityMerge, 0, 8) : 0;
-            // Vita: hide town block models and flats beyond N metres; 0 = off
+            // Vita: hide town block models and flats beyond N metres (VitaCulling.cs); 0 = off
             int vitaTownDistance;
             VitaTownDistance = int.TryParse(GetData(sectionVideo, "VitaTownDistance"), out vitaTownDistance) ? Mathf.Max(0, vitaTownDistance) : 300;
-            // Vita: outdoor fog at least this thick by N metres; 0 = weather fog only
+            // Vita: outdoor fog at least this thick by N metres (WeatherManager.SetFog); 0 = weather fog only
             int vitaFogDistance;
             VitaFogDistance = int.TryParse(GetData(sectionVideo, "VitaFogDistance"), out vitaFogDistance) ? Mathf.Max(0, vitaFogDistance) : 360;
-            // Vita: GC when free kernel sync objects run low; off unless "True"
+            // Vita: GC when free kernel sync objects run low (VitaMemory.SyncGuard, trial: ~380 ms hitch per GC); off unless "True"
             VitaSyncGuard = GetData(sectionVideo, "VitaSyncGuard") == "True";
-            // Vita: keep FMOD's threads attached to IL2CPP after the first C# audio callback; on unless "False"
+            // Vita: keep FMOD's threads attached to IL2CPP after the first C# audio callback (VitaMemory.PinAudioThread); on unless "False"
             VitaPinAudioThread = GetData(sectionVideo, "VitaPinAudioThread") != "False";
             // Vita: 720x408 outside, where the frame is fragment bound (VitaResolution.cs); off unless "True" (native 960x544 is the goal)
             VitaExteriorLowRes = GetData(sectionVideo, "VitaExteriorLowRes") == "True";
             // Vita: Unity per-pixel lights (forward-add passes) on top of the Fastest quality level. Default 0: the palette wall shader
+            // already lights its 4 nearest lights per pixel in one pass. Each one costs a lot outside dungeons (0/1/2/4: Tavern
             // 60/41/27/16 fps, exterior 21/13/13/13, dungeon 25/21/20/20). PC's Fantastic has 4.
             int vitaPixelLights;
             VitaPixelLights = int.TryParse(GetData(sectionVideo, "VitaPixelLights"), out vitaPixelLights) ? Mathf.Clamp(vitaPixelLights, 0, 4) : 0;
@@ -501,14 +528,56 @@ namespace DaggerfallWorkshop
             VitaFlatBatch = GetData(sectionVideo, "VitaFlatBatch") != "False";
             // Vita: a dungeon block's standalone models (doors, levers, banners) merged per material (VitaModelBatch.cs); on unless "False"
             VitaModelBatch = GetData(sectionVideo, "VitaModelBatch") != "False";
+            // Vita: Dynamic Skies mod, Pixel look (VitaDynamicSkies.cs); off unless "True"
+            VitaDynamicSkies = GetData(sectionVideo, "VitaDynamicSkies") == "True";
+            // Vita: BasicRoads mod, roads and tracks on the terrain (VitaBasicRoads.cs); off unless "True"
+            VitaBasicRoads = GetData(sectionVideo, "VitaBasicRoads") == "True";
+            // Vita: Vanilla Friendly Loading Screens pictures on the loading window (VitaLoadingWindow.cs); on unless "False"
+            VitaLoadScreenArt = GetData(sectionVideo, "VitaLoadScreenArt") != "False";
+            // Vita: Windmills of Daggerfall mod (VitaWindmills.cs); on unless "False"
+            VitaWindmills = GetData(sectionVideo, "VitaWindmills") != "False";
+            // Vita: Dragon Rider mod (VitaDragonRider.cs); on unless "False"
+            VitaDragonRider = GetData(sectionVideo, "VitaDragonRider") != "False";
+            // Vita: Travel Options mod (VitaTravelOptions.cs); on unless "False"
+            VitaTravelOptions = GetData(sectionVideo, "VitaTravelOptions") != "False";
+            // Vita: World of Daggerfall on Location Loader (VitaWorldOfDaggerfall.cs); off unless "True" until it passes a hardware run
+            VitaWorldOfDaggerfall = GetData(sectionVideo, "VitaWorldOfDaggerfall") == "True";
+            // Vita: World of Daggerfall - Terrain (VitaWodTerrain.cs); off unless "True" until it passes a hardware run
+            VitaWodTerrain = GetData(sectionVideo, "VitaWodTerrain") == "True";
+            // Vita: Snowless Swamp and Jungle textures (VitaWorldTextures snowless.pak); on unless "False"
+            VitaSnowlessSwamp = GetData(sectionVideo, "VitaSnowlessSwamp") != "False";
+            VitaWorldOfDaggerfallBiomes = GetData(sectionVideo, "VitaWorldOfDaggerfallBiomes") != "False";
+            // Vita: Distant Terrain mod (VitaDistantTerrain.cs); off unless "True"
+            VitaDistantTerrain = GetData(sectionVideo, "VitaDistantTerrain") == "True";
+            // Vita: with VitaDistantTerrain on, the reference port (DistantTerrain/) instead of the light far mesh (VitaFarTerrain.cs); comparisons only
+            VitaDistantTerrainReference = GetData(sectionVideo, "VitaDistantTerrainReference") == "True";
+            // Vita: Beautiful Cities / Beautiful Villages of Daggerfall world data (VitaWorldPack.cs); off unless "True" until measured
+            VitaBeautifulCities = GetData(sectionVideo, "VitaBeautifulCities") == "True";
+            VitaBeautifulVillages = GetData(sectionVideo, "VitaBeautifulVillages") == "True";
+            VitaFindingMyReligion = GetData(sectionVideo, "VitaFindingMyReligion") == "True";
+            VitaFixedDesertArchitecture = GetData(sectionVideo, "VitaFixedDesertArchitecture") == "True";
+            VitaFixedDungeonExteriors = GetData(sectionVideo, "VitaFixedDungeonExteriors") == "True";
+            VitaRedguards = GetData(sectionVideo, "VitaRedguards") == "True";
+            // Resource mods Cities/Villages/FDA/FMR need (VitaModsWindow keeps them on while those are); on unless the ini says False
+            VitaExpandedTextures = GetData(sectionVideo, "VitaExpandedTextures") != "False";
+            VitaRmbResourcePack = GetData(sectionVideo, "VitaRmbResourcePack") != "False";
+            VitaDiep = GetData(sectionVideo, "VitaDiep") != "False";
+            VitaNewPaintings = GetData(sectionVideo, "VitaNewPaintings") != "False";
+            VitaHarvestableCrops = GetData(sectionVideo, "VitaHarvestableCrops") != "False";
             // Vita: torch/lantern light strength and reach in % for the palette shaders' 4 near lights (VitaLights.cs); same GPU cost at any value
             int vitaFireLight;
-            // New key names (were VitaFireLight 150 / VitaFireColour 2): saved inis get the new PC-matched defaults
+            // New key names (were VitaFireLight 150 / VitaFireColour 2): saved inis get the new PC-matched defaults (same-pose screenshots against PC)
             VitaFireLight = int.TryParse(GetData(sectionVideo, "VitaFireLevel"), out vitaFireLight) ? Mathf.Clamp(vitaFireLight, 50, 300) : 100;
             int vitaFireColour, vitaTorchReach;
             VitaFireColour = int.TryParse(GetData(sectionVideo, "VitaFireTone"), out vitaFireColour) ? Mathf.Clamp(vitaFireColour, 0, 3) : 0;
             VitaTorchReach = int.TryParse(GetData(sectionVideo, "VitaTorchReach"), out vitaTorchReach) ? Mathf.Clamp(vitaTorchReach, 3, 20) : 6;
+#if !VITA_MODS
             // No-mods alpha (vita/nomods.txt): no mod is in the build, whatever an older ini says
+            VitaLowPolyTrees = VitaDynamicSkies = VitaBasicRoads = VitaLoadScreenArt = VitaWindmills = VitaDragonRider = VitaTravelOptions = false;
+            VitaWorldOfDaggerfall = VitaWodTerrain = VitaSnowlessSwamp = VitaWorldOfDaggerfallBiomes = VitaDistantTerrain = VitaDistantTerrainReference = false;
+            VitaBeautifulCities = VitaBeautifulVillages = VitaFindingMyReligion = VitaFixedDesertArchitecture = VitaFixedDungeonExteriors = false;
+            VitaRedguards = VitaExpandedTextures = VitaRmbResourcePack = VitaDiep = VitaNewPaintings = VitaHarvestableCrops = false;
+#endif
 #endif
             DungeonLightShadows = GetBool(sectionVideo, "DungeonLightShadows");
             InteriorLightShadows = GetBool(sectionVideo, "InteriorLightShadows");
@@ -715,6 +784,7 @@ namespace DaggerfallWorkshop
             SetBool(sectionVideo, "VitaCulling", VitaCulling);
             SetBool(sectionVideo, "VitaTerrainGrid2x2", VitaTerrainGrid2x2);
             SetBool(sectionVideo, "VitaStaticBatching", VitaStaticBatching);
+            SetBool(sectionVideo, "VitaLowPolyTrees", VitaLowPolyTrees);
             SetInt(sectionVideo, "VitaCityMerge", VitaCityMerge);
             SetInt(sectionVideo, "VitaTownDistance", VitaTownDistance);
             SetInt(sectionVideo, "VitaFogDistance", VitaFogDistance);
@@ -727,6 +797,29 @@ namespace DaggerfallWorkshop
             SetBool(sectionVideo, "VitaAtlas", VitaAtlas);
             SetBool(sectionVideo, "VitaFlatBatch", VitaFlatBatch);
             SetBool(sectionVideo, "VitaModelBatch", VitaModelBatch);
+            SetBool(sectionVideo, "VitaDynamicSkies", VitaDynamicSkies);
+            SetBool(sectionVideo, "VitaBasicRoads", VitaBasicRoads);
+            SetBool(sectionVideo, "VitaLoadScreenArt", VitaLoadScreenArt);
+            SetBool(sectionVideo, "VitaWindmills", VitaWindmills);
+            SetBool(sectionVideo, "VitaDragonRider", VitaDragonRider);
+            SetBool(sectionVideo, "VitaTravelOptions", VitaTravelOptions);
+            SetBool(sectionVideo, "VitaWorldOfDaggerfall", VitaWorldOfDaggerfall);
+            SetBool(sectionVideo, "VitaWodTerrain", VitaWodTerrain);
+            SetBool(sectionVideo, "VitaSnowlessSwamp", VitaSnowlessSwamp);
+            SetBool(sectionVideo, "VitaWorldOfDaggerfallBiomes", VitaWorldOfDaggerfallBiomes);
+            SetBool(sectionVideo, "VitaDistantTerrain", VitaDistantTerrain);
+            SetBool(sectionVideo, "VitaDistantTerrainReference", VitaDistantTerrainReference);
+            SetBool(sectionVideo, "VitaBeautifulCities", VitaBeautifulCities);
+            SetBool(sectionVideo, "VitaBeautifulVillages", VitaBeautifulVillages);
+            SetBool(sectionVideo, "VitaFindingMyReligion", VitaFindingMyReligion);
+            SetBool(sectionVideo, "VitaFixedDesertArchitecture", VitaFixedDesertArchitecture);
+            SetBool(sectionVideo, "VitaFixedDungeonExteriors", VitaFixedDungeonExteriors);
+            SetBool(sectionVideo, "VitaRedguards", VitaRedguards);
+            SetBool(sectionVideo, "VitaExpandedTextures", VitaExpandedTextures);
+            SetBool(sectionVideo, "VitaRmbResourcePack", VitaRmbResourcePack);
+            SetBool(sectionVideo, "VitaDiep", VitaDiep);
+            SetBool(sectionVideo, "VitaNewPaintings", VitaNewPaintings);
+            SetBool(sectionVideo, "VitaHarvestableCrops", VitaHarvestableCrops);
             SetInt(sectionVideo, "VitaFireLevel", VitaFireLight);
             SetInt(sectionVideo, "VitaFireTone", VitaFireColour);
             SetInt(sectionVideo, "VitaTorchReach", VitaTorchReach);

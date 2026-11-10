@@ -575,8 +575,13 @@ namespace DaggerfallWorkshop.Game
             FindKeyboardActions();
             FindInputAxisActions();
 #if UNITY_PSP2
+#if !VITA_DRAGONRIDER
             if (false)
+#else
+            if (DragonRider.DragonRider.IsDragonMounted)
+#endif
             {
+                // Vita, on Dragon Rider's dragon: Triangle climbs, Cross dives, DragonRider.cs reads L (fire), R (boost)
                 // and a Square hold (hover/flight) itself, so no activating or swinging while riding; a Square tap still readies the weapon,
                 // sent on release so a hold doesn't draw it
                 for (int i = currentActions.Count - 1; i >= 0; i--)
@@ -987,7 +992,7 @@ namespace DaggerfallWorkshop.Game
 
             string json = SaveLoadManager.Serialize(keyBindsData.GetType(), keyBindsData);
 #if UNITY_PSP2
-            VitaFile.Delete(path);
+            VitaFile.Delete(path); // Vita3K ignores SCE_O_TRUNC (see SettingsManager.WriteSettingsFile)
 #endif
             File.WriteAllText(path, json);
             UpdateBindingCache();

@@ -33,7 +33,7 @@ public class VitaAtlas : MonoBehaviour
     const int maxDim = 2048;
     const float stageBudget = 0.004f;           // BuildCityStaged: seconds of atlas work per frame
 
-    public static bool KeepUpstream;
+    public static bool KeepUpstream;            // test switch: keep the upstream submeshes so Show can switch back
 
     Texture2D atlas;
     Material material;

@@ -26,7 +26,7 @@ using Object = UnityEngine.Object;
 
 public static class VitaMemory
 {
-    // Retail Vitas can't run the development player (it calls dev-kit-only Razor GPU capture at startup → PC 0),
+    // The development player crashes at startup on consumer Vitas,
     public static readonly bool Probes = Debug.isDebugBuild ||
         System.IO.File.Exists(System.IO.Path.Combine(DaggerfallUnityApplication.PersistentDataPath, "probes.txt"));
 
@@ -73,7 +73,7 @@ public static class VitaMemory
     // magic 0x58585858 at +0, default_mflags at +20), so mspaces created from now on need no LwMutex. SceLibc's data segment moves with
     // the player binary (2017: 0x82296000, 2018: 0x825d6000), so it is found by module name: mparams = data + 0x1880.
     static int libcMparams;
-    // Heap steps (runs 42-45, 4 then 16 MB) only delayed the crash and cost up to a step of slack per heap: back at Unity's 1 MB,
+    // Heap steps (4 then 16 MB) only delayed the crash and cost up to a step of slack per heap: back at Unity's 1 MB,
     // the write below is kept (heapStep) in case fewer, bigger blocks are wanted again.
     // Set the auto-extend size of Unity's general heaps both in the heap table (+20, used when a heap is created) and in each
     // created sceHeap header (+12, heap.c head->bsize).
@@ -181,11 +181,11 @@ public static class VitaMemory
         }
         heapStepLog = sb.ToString() + HeapBlocks();
         // The 26 MB physically contiguous pool is reserved for the hardware video decoder; DFU decodes its VIDs in software, so hand it
-        // to Unity's heap (UNITY_VITA_GUIDE §5: call once, before any PSVitaVideoPlayer use; there is none). For full-size textures outside.
+        // to Unity's heap (call once, before any PSVitaVideoPlayer use; there is none). For full-size textures outside.
         heapStepLog += string.Format(" | video pool → heap: phycont free {0:F1} MB", Diagnostics.GetFreeMemoryPHYSCONT() / 1048576.0);
         PSVitaVideoPlayer.TransferMemToHeap();
         heapStepLog += string.Format(" → {0:F1} MB", Diagnostics.GetFreeMemoryPHYSCONT() / 1048576.0);
-        // TRIAL 2026-11-05 (revert candidate, was 16): 8 measured same build vs 16: city tour GC heap max 78.6 vs 82.6 MB, min free main
+        // Vita tuning (was 16): 8 measured same build vs 16: city tour GC heap max 78.6 vs 82.6 MB, min free main
         // 69 vs 68 MB, collections -21%, loads -7%; castle walk equal. The ~110 MB heap crash above was the 2017.4 player at divisor 3.
         heapStepLog += " | " + SetGcFreeSpaceDivisor(8);
 #endif
@@ -216,7 +216,7 @@ public static class VitaMemory
 
     // Boehm grows the managed heap by heapsize / GC_free_space_divisor (3) plus what it needs, and the player's psp2_get_mem (memalign)
     // hits a breakpoint when that fails instead of trying a smaller step: in Daggerfall city (~110 MB heap) one ~37 MB request with 36 MB
-    // free main = crash (runs 107/112/113/115, R0=0x1e, PC=LR-1). A bigger divisor = smaller steps. The variable is in the IL2CPP module's
+    // free main = crash. A bigger divisor = smaller steps. The variable is in the IL2CPP module's
     // data segment at an offset that changes every build: vita/tools/pack_vpk.py writes it to StreamingAssets/VitaGC.txt. Written only if
     // the value there is Boehm's default 3.
     // An offset from VitaGC.txt (lines "<symbol> <hex offset>"), -1 if missing
@@ -792,7 +792,7 @@ public static class VitaMemory
     }
 
     // doesn't hold): the process runs out of kernel sync objects within seconds between GCs
-    // synth's OnAudioFilterRead), and then Unity's pthread locks fail open (8002450d), the lead for the freezes in runs 147/148.
+    // synth's OnAudioFilterRead), and then Unity's pthread locks fail open (8002450d), a likely cause of freezes.
     // Every 0.25 s count free ones up to GuardMin; below it, collect the dead thread objects that hold them.
     class SyncGuard : MonoBehaviour
     {
@@ -846,7 +846,7 @@ public static class VitaMemory
     }
 
     // Development builds: every Daggerfall file DFU opens (FileProxy.Load), after the open/read, with its size and the time it took, so a log
-    // shows what loaded right before a spike or crash and what loads cost. (It used to stat the file first: one more ~90 ms ARENA2 lookup
+    // shows what loaded right before a spike or crash and what loads cost. (No stat first: that would be one more ~90 ms ARENA2 lookup
     public static void LogFile(string path, DaggerfallConnect.FileUsage usage, long bytes, double ms)
     {
         if (!Probes)
@@ -915,7 +915,7 @@ public static class VitaMemory
             var users = new Dictionary<Texture, string>();
             foreach (var r in Resources.FindObjectsOfTypeAll<Renderer>())
                 foreach (var m in r.sharedMaterials)
-                    if (m && m.HasProperty("_MainTex") && m.mainTexture && !users.ContainsKey(m.mainTexture))   // s51: mainTexture logs a Unity error without it
+                    if (m && m.HasProperty("_MainTex") && m.mainTexture && !users.ContainsKey(m.mainTexture))   // mainTexture logs a Unity error without it
                         users[m.mainTexture] = "material '" + m.name + "' shader " + m.shader.name + " on " + OwnerPath(r.transform);
             foreach (var t in big)
                 sb.AppendFormat("VITAMEM   owner {0} <- {1}\n", Describe(t), users.ContainsKey(t) ? users[t] : "(no renderer)");

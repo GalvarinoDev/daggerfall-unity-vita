@@ -1004,6 +1004,11 @@ namespace DaggerfallWorkshop.Utility.AssetInjection
             bool isLinear = textureMap != null && IsLinearTextureMap(textureMap.Value);
             if (DaggerfallUnity.Settings.AssetInjection)
             {
+#if UNITY_PSP2 && VITA_MODS
+                // Built-in mod sprites (VitaModTextures.cs)
+                if (VitaModTextures.TryLoad(name, out tex))
+                    return true;
+#endif
                 // Seek from loose files
                 if (TryImportTextureFromDisk(Path.Combine(path, name), false, isLinear, readOnly, out tex))
                     return true;

@@ -53,7 +53,11 @@ public static class VitaAtlasBaker
         {
             // Daggerfall's TEXTURE.000-511, or the port's own from 512 up (mod flats, vita/tools/flatpack.py)
             string file = TextureFile.IndexToFileName(archive);
+#if !VITA_MODS
             if (archive >= 512 || !File.Exists(Path.Combine(arena2, file)))     // no-mods alpha: Daggerfall's own archives only
+#else
+            if (!File.Exists(archive < 512 ? Path.Combine(arena2, file) : VitaDetModels.TexturePath(file)))
+#endif
             {
                 Debug.LogFormat("VITABAKE atlas {0}: no TEXTURE file", archive);
                 continue;
@@ -161,6 +165,9 @@ public static class VitaAtlasBaker
             set.Add(a);
         for (int a = 500; a <= 511; a++)
             set.Add(a);
+#if VITA_MODS
+        set.Add(VitaBiomes.MediterraneanArchive);   // World of Daggerfall - Biomes swaps it in for 501, no block places it
+#endif
         foreach (MobileEnemy enemy in EnemyBasics.Enemies)
         {
             int archive, record;
@@ -180,6 +187,11 @@ public static class VitaAtlasBaker
         for (int i = 0; i < blocksFile.Count; i++)
             if (blocksFile.GetBlockType(i) != DFBlock.BlockTypes.Unknown)
                 blocks.Add(blocksFile.GetBlock(i));
+#if VITA_MODS
+        foreach (string pack in new[] { "cities", "villages", "religion", "fda", "windmills", "fde", "wod" })
+            blocks.AddRange(VitaWorldPack.AllBlocks(pack));
+        AddWodPrefabFlats(set);
+#endif
         foreach (DFBlock block in blocks)
         {
             if (block.Type == DFBlock.BlockTypes.Rmb)
@@ -201,11 +213,49 @@ public static class VitaAtlasBaker
                             if (obj.Type == DFBlock.RdbResourceTypes.Flat)
                                 set.Add(obj.Resources.FlatResource.TextureArchive);
         }
+        // Redguards of Hammerfell's copies of the NPC archives (VitaRedguards; vita/tools/rghpack.py), read in their place while the mod is on
         foreach (int a in new[] { 182, 183, 334, 357 })
             if (set.Contains(a))
                 set.Add(a + 10000);
         return set;
     }
+
+#if VITA_MODS
+    // World of Daggerfall location prefabs (VitaNative/wodprefabs.bin, read as LocationLoader.VitaWodData does): billboards are type-1
+    // objects named "ARCHIVE.RECORD" (archive 432 from WOD_Guardtower_01 was missing from the atlas before)
+    static void AddWodPrefabFlats(HashSet<int> set)
+    {
+        string path = Path.Combine(Path.Combine(Application.streamingAssetsPath, "VitaNative"), "wodprefabs.bin");
+        if (!File.Exists(path))
+            return;
+        using (var reader = new BinaryReader(File.OpenRead(path)))
+        {
+            if (new string(reader.ReadChars(4)) != "WODP" || reader.ReadInt32() != 1)
+            {
+                Debug.Log("VITABAKE wodprefabs.bin: wrong format");
+                return;
+            }
+            for (int p = reader.ReadInt32(); p > 0; p--)
+            {
+                reader.ReadString();    // name
+                reader.ReadInt32();     // height
+                reader.ReadInt32();     // width
+                reader.ReadString();    // winter prefab
+                for (int o = reader.ReadInt32(); o > 0; o--)
+                {
+                    int type = reader.ReadInt32();
+                    string name = reader.ReadString();
+                    reader.ReadInt32();     // objectID
+                    reader.ReadString();    // extraData
+                    reader.ReadBytes(40);   // pos, rot, scale
+                    int archive;
+                    if (type == 1 && int.TryParse(name.Split('.')[0], out archive))
+                        set.Add(archive);
+                }
+            }
+        }
+    }
+#endif
 
     static void Add(HashSet<int> set, DFBlock.RmbBlockFlatObjectRecord[] flats)
     {

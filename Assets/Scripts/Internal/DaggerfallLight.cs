@@ -75,7 +75,7 @@ namespace DaggerfallWorkshop
                 {
                     // Set light
 #if UNITY_PSP2
-                    VitaLights.SetEnabled(myLight, dfUnity.WorldTime.Now.IsCityLightsOn);     // may be parked
+                    VitaLights.SetEnabled(myLight, dfUnity.WorldTime.Now.IsCityLightsOn);     // may be parked (VitaLights)
 #else
                     myLight.enabled = dfUnity.WorldTime.Now.IsCityLightsOn;
 #endif

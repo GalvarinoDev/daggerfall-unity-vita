@@ -9,7 +9,9 @@
 // Contact:         Michael Rauter (a.k.a. Nystul)
 // Project Page:    https://github.com/Interkarma/daggerfall-unity
 // Contributors:    
+// 
 // Notes: original wireframe shader source: http://scrawkblog.com/2013/03/18/wireframe-shader-for-unity/
+//
 
 // PS Vita port: Daggerfall/Automap for palette textures (Assets/Scripts/Vita/VitaPalette.cs); only the albedo lookups differ.
 Shader "Daggerfall/Vita/AutomapPalette"

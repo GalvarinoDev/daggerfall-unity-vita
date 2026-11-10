@@ -1,4 +1,4 @@
-// PS Vita port: debug view of a palette index texture. Unlit.
+// PS Vita port: debug view of a palette index texture: the raw index as grey. Unlit.
 // _Mode 0: index as grey via tex2D, 1: index as grey via tex2Dlod level 0, 2: the LOD VitaPaletteIndex picks (x0.25, red),
 // 3: palette colour via tex2Dlod level 0, 4: palette colour via VitaPaletteIndex (as DefaultPalette)
 Shader "Daggerfall/Vita/DebugIndex" {

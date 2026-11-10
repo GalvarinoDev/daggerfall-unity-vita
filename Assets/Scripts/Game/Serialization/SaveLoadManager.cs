@@ -839,6 +839,7 @@ namespace DaggerfallWorkshop.Game.Serialization
                 Debug.LogFormat("VITALAP {0} {1:F2}", name, t - vitaLapT);
             vitaPrintSeconds = 0;
             vitaLapT = t;
+            // Loading bar: share of a save load done after each step (a city save on hardware: reading 23 s, world 39 s,
             // automap 5 s); the world build moves it from "window" to "respawn"
             float done;
             VitaLoadingWindow window = loadInProgress ? DaggerfallUI.UIManager.TopWindow as VitaLoadingWindow : null;
@@ -1000,7 +1001,7 @@ namespace DaggerfallWorkshop.Game.Serialization
         void WriteSaveFile(string path, string json)
         {
 #if UNITY_PSP2
-            VitaFile.Delete(path);
+            VitaFile.Delete(path); // Vita3K ignores SCE_O_TRUNC (see SettingsManager.WriteSettingsFile)
 #endif
             File.WriteAllText(path, json);
         }

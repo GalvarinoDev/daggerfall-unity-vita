@@ -24,7 +24,7 @@ public static class VitaAtlasCache
     const int Magic = 0x56415443;   // "VATC"
     // 3 = 1 again: deflating the pixels (v2, atc4) saved card space but not time (hits 12.9 -> 13.4 s) and added GCs (18 -> 32).
     // 4: pixel blocks at 512-byte file offsets, read with sceIoPread into 64-byte-aligned native memory and uploaded from there
-    // (VITA_GUIDE §5 reads; v3 hits read ~5 MB/s into managed arrays, atc7: 9.6 of 12.9 s)
+    // (v3 hits read ~5 MB/s into managed arrays, 9.6 of 12.9 s)
     // 5: key without the TEXTURE file's contents. 6: the atlas's palette (768 bytes RGB) after the layout: mod flats may have their own
     // (vita/tools/flatpack.py), and a hit then reads nothing from ARENA2
     const int Version = 6;
@@ -45,6 +45,7 @@ public static class VitaAtlasCache
     }
 
     static VitaPack pack;   // atlas.pak, opened on first use
+    public static bool TestBypass;   // test harness: build on the CPU instead (nothing read, nothing saved)
 
     static int Align512(long position)
     {
@@ -88,7 +89,7 @@ public static class VitaAtlasCache
     }
 
     // Key: the archive and every setting that decides the atlas (and whether TryPackAtlasOnCpu makes a palette atlas at all), not the
-    // TEXTURE file: a hit then never touches ARENA2, whose 1443-entry folder costs ~90 ms per lookup on hardware (UNITY_VITA_GUIDE §4).
+    // TEXTURE file: a hit then never touches ARENA2, whose 1443-entry folder costs ~90 ms per lookup on hardware.
     // ARENA2 is fixed game data; a changed install needs UserData/VitaCache/atlas deleted.
     static string Path(GetTextureSettings settings, bool mips, out uint key)
     {
@@ -101,6 +102,16 @@ public static class VitaAtlasCache
         key = hash;
         return System.IO.Path.Combine(DaggerfallUnityApplication.PersistentDataPath,
             string.Format("VitaCache/atlas/{0}/{1}-{2:x8}.bin", settings.archive / 64, settings.archive, hash));
+    }
+
+    /// <summary>Test harness: whether the pack holds the mipped atlas for these settings.</summary>
+    public static bool InPack(GetTextureSettings settings)
+    {
+        uint key;
+        Path(settings, true, out key);
+        if (pack == null)
+            pack = new VitaPack(PackPath, PackMagic);
+        return pack.Contains(key);
     }
 
     [StructLayout(LayoutKind.Explicit)]
@@ -136,8 +147,25 @@ public static class VitaAtlasCache
     /// <summary>The cached atlas for settings, before any TEXTURE file is read; results get no textureFile. False if none.</summary>
     public static bool TryLoad(GetTextureSettings settings, bool mips, bool stayReadable, ref GetTextureResults results)
     {
+        if (TestBypass)
+            return false;
         uint key;
         string path = Path(settings, mips, out key);
+        // Retro mode without mips (UseMipMapsInRetroMode off) has no records of its own: the packing doesn't depend on mips and level 0
+        // comes first in a mipped record as plain rows (POT atlases), so its first width x height bytes are that atlas exactly
+        bool topLevel = false;
+        if (!mips)
+        {
+            uint mipKey;
+            Path(settings, true, out mipKey);
+            if (pack == null)
+                pack = new VitaPack(PackPath, PackMagic);
+            if (!pack.Contains(key) && pack.Contains(mipKey))
+            {
+                key = mipKey;
+                topLevel = true;
+            }
+        }
         Texture2D atlas = null, mask = null;
         System.IntPtr memory = System.IntPtr.Zero, data;
         int length;
@@ -186,6 +214,8 @@ public static class VitaAtlasCache
                 if (end + 4 > length || Marshal.ReadInt32(data, end) != Magic)
                     return false;   // cut short (a write interrupted by a kill)
 
+                if (topLevel)
+                    rawLength = maskLength = width * height;
                 atlas = VitaPalette.LoadRaw(new System.IntPtr(data.ToInt64() + rawOffset), rawLength, width, height, mips, stayReadable);
                 if (atlas && emissive)
                     mask = VitaPalette.LoadRaw(new System.IntPtr(data.ToInt64() + maskOffset), maskLength, width, height, mips, stayReadable);
@@ -226,7 +256,7 @@ public static class VitaAtlasCache
 
     public static void Save(GetTextureSettings settings, bool mips, GetTextureResults results, byte[] raw, byte[] maskRaw)
     {
-        if (raw == null || (results.isEmissive && maskRaw == null))
+        if (raw == null || (results.isEmissive && maskRaw == null) || TestBypass)
             return;
         uint key;
         string path = Path(settings, mips, out key);

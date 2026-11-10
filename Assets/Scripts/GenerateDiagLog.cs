@@ -95,7 +95,7 @@ namespace DaggerfallWorkshop
                 try
                 {
                     var value = prop.GetValue(DaggerfallUnity.Settings, null);
-#if !UNITY_PSP2   // one block at the end instead: each Debug.Log line cost 7-14 ms on hardware
+#if !UNITY_PSP2   // one block at the end instead: each Debug.Log line cost 7-14 ms on hardware (~230 lines, 1.6-3.3 s of boot)
                     DaggerfallUnity.LogMessage(string.Format("{0} | {1}", prop.Name, value));
 #endif
                     builder.AppendLine(string.Format("{0} | {1} ", prop.Name, value)).AppendLine(Environment.NewLine);
@@ -161,7 +161,7 @@ namespace DaggerfallWorkshop
                     var value = prop.GetValue(currentCult, null);
                     if (value.ToString() == Environment.UserName || value.ToString() == Environment.UserDomainName || prop.Name == "StackTrace")
                         continue;
-#if !UNITY_PSP2   // one block at the end instead: each Debug.Log line cost 7-14 ms on hardware
+#if !UNITY_PSP2   // one block at the end instead: each Debug.Log line cost 7-14 ms on hardware (~230 lines, 1.6-3.3 s of boot)
                     DaggerfallUnity.LogMessage(string.Format("{0} | {1}", prop.Name, value));
 #endif
                     builder.AppendLine(string.Format("{0} | {1} ", prop.Name, value)).AppendLine(Environment.NewLine);
@@ -171,7 +171,7 @@ namespace DaggerfallWorkshop
                 builder.Append(string.Format("### Start Culture Info ###")).AppendLine(Environment.NewLine).AppendLine(Environment.NewLine);
                 foreach (var prop in cultProps)
                 {
-#if !UNITY_PSP2   // one block at the end instead: each Debug.Log line cost 7-14 ms on hardware
+#if !UNITY_PSP2   // one block at the end instead: each Debug.Log line cost 7-14 ms on hardware (~230 lines, 1.6-3.3 s of boot)
                     DaggerfallUnity.LogMessage(string.Format("{0} | {1}", prop.Name, prop.GetValue(currentCult, null)));
 #endif
 
@@ -208,7 +208,7 @@ namespace DaggerfallWorkshop
                     var value = prop.GetValue(sysInfo, null);
                     if (value.ToString() == SystemInfo.deviceName || value.ToString() == SystemInfo.deviceUniqueIdentifier)
                         continue;
-#if !UNITY_PSP2   // one block at the end instead: each Debug.Log line cost 7-14 ms on hardware
+#if !UNITY_PSP2   // one block at the end instead: each Debug.Log line cost 7-14 ms on hardware (~230 lines, 1.6-3.3 s of boot)
                     DaggerfallUnity.LogMessage(string.Format("{0} | {1}", prop.Name, value));
 #endif
                     builder.AppendLine(string.Format("{0} | {1} ", prop.Name, value)).AppendLine(Environment.NewLine);

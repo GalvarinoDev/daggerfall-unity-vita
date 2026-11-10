@@ -62,8 +62,18 @@ namespace DaggerfallWorkshop.Game
                 Vector3 newGlobalPlatformPoint = activePlatform.TransformPoint(activeLocalPlatformPoint);
                 Vector3 adhesionDirection = (newGlobalPlatformPoint - activeGlobalPlatformPoint);
                 // Platform movement of player is performed here
+#if UNITY_PSP2
+                // A platform that jumped metres in one step was moved or recycled (a terrain tile or town object reused for
+                // another map pixel), not carried: following it threw the player ~800 m and under the world at tile edges
+                // (2026-11-08). Real moving platforms go well under 2 m per step.
+                if (adhesionDirection.sqrMagnitude > 4f)
+                    Debug.LogFormat("Ignored platform jump of {0} on {1}", adhesionDirection, activePlatform.name);
+                else if (adhesionDirection != Vector3.zero)
+                    controller.Move(adhesionDirection);
+#else
                 if (adhesionDirection != Vector3.zero)
                     controller.Move(adhesionDirection);
+#endif
                 //lastPlatformVelocity = (newGlobalPlatformPoint - activeGlobalPlatformPoint) / Time.deltaTime;
 
                 // If you want to support moving platform rotation as well:

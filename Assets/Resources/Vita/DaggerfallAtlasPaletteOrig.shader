@@ -78,7 +78,7 @@ Shader "Daggerfall/Vita/AtlasPalette Orig" {
             o.Albedo = albedo.rgb;
 
             // Unity's surface analysis defines no pass macro: without SHADER_TARGET_SURFACE_ANALYSIS it saw the light inputs unused, dropped them,
-            // and the lights got position 0
+            // and the lights got position 0 (no torch light at all)
             #if defined(SHADER_TARGET_SURFACE_ANALYSIS) || (defined(UNITY_PASS_FORWARDBASE) && defined(VITA_NEAR_LIGHTS))
                 o.Emission += o.Albedo * VitaNearLights(IN.vitaLight0, IN.vitaLight1);
             #endif

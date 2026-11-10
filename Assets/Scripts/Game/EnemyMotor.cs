@@ -161,7 +161,7 @@ namespace DaggerfallWorkshop.Game
                 MotorFixedUpdate();
         }
 
-        // TEMP s65 probe: MotorFixedUpdate's calls in the same order, timed. Slots: 0 all, 1 CanFly, 2 paralysis+knockback, 3 gravity,
+        // timing probe: MotorFixedUpdate's calls in the same order, timed. Slots: 0 all, 1 CanFly, 2 paralysis+knockback, 3 gravity,
         // 4 noaction+bashing+timers, 5 TakeAction, 6 fall damage, 7 anim, 8 OpenDoors, 9 HeightAdjust; inside TakeAction (inclusive):
         // 10 GetDestination, 11 AttemptMove, 12 FindDetour
         public static bool VitaMotorProbe;
@@ -212,7 +212,7 @@ namespace DaggerfallWorkshop.Game
             VitaMotorCalls[0]++;
         }
 
-        // TEMP s65 probe: inclusive time of a nested call (own timestamps, leaves vitaMotorMark alone)
+        // timing probe: inclusive time of a nested call (own timestamps, leaves vitaMotorMark alone)
         static void VitaMotorAdd(int slot, long start)
         {
             if (!VitaMotorProbe)
@@ -623,7 +623,7 @@ namespace DaggerfallWorkshop.Game
 #if UNITY_PSP2
         void GetDestination()
         {
-            long vitaT = VitaMotorProbe ? System.Diagnostics.Stopwatch.GetTimestamp() : 0;   // TEMP s65 probe
+            long vitaT = VitaMotorProbe ? System.Diagnostics.Stopwatch.GetTimestamp() : 0;   // timing probe
             GetDestinationUpstream();
             VitaMotorAdd(10, vitaT);
         }
@@ -987,7 +987,7 @@ namespace DaggerfallWorkshop.Game
 #if UNITY_PSP2
         void AttemptMove(Vector3 direction, float moveSpeed, bool backAway = false, bool strafe = false, float strafeDist = 0)
         {
-            long vitaT = VitaMotorProbe ? System.Diagnostics.Stopwatch.GetTimestamp() : 0;   // TEMP s65 probe
+            long vitaT = VitaMotorProbe ? System.Diagnostics.Stopwatch.GetTimestamp() : 0;   // timing probe
             AttemptMoveUpstream(direction, moveSpeed, backAway, strafe, strafeDist);
             VitaMotorAdd(11, vitaT);
         }
@@ -1119,7 +1119,7 @@ namespace DaggerfallWorkshop.Game
 #if UNITY_PSP2
         void FindDetour(Vector3 direction2d)
         {
-            long vitaT = VitaMotorProbe ? System.Diagnostics.Stopwatch.GetTimestamp() : 0;   // TEMP s65 probe
+            long vitaT = VitaMotorProbe ? System.Diagnostics.Stopwatch.GetTimestamp() : 0;   // timing probe
             FindDetourUpstream(direction2d);
             VitaMotorAdd(12, vitaT);
         }

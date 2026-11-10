@@ -5,7 +5,7 @@
 // Contact:         Gavin Clayton (interkarma@dfworkshop.net)
 // Project Page:    https://github.com/Interkarma/daggerfall-unity
 
-// PS Vita port: Daggerfall/Tilemap's Vita branch, trimmed.
+// PS Vita port: Daggerfall/Tilemap's Vita branch, trimmed (the exterior is GPU bound and terrain was ~13 ms of it).
 // Same output: tile index from the point-filtered tilemap, one whole mip level of the palette-index atlas, palette lookup, Lambert.
 // Trimmed: no _BumpMap varying (Unity's surface analysis ignores #if inside Input, so only a separate shader drops it), no
 // forward-add/lightmap/meta/deferred passes, and the layout values are literals so the compiler folds the uniform maths (uniform-only
@@ -86,7 +86,8 @@ Shader "Daggerfall/Vita/TilemapPalette" {
 			// One whole mip level from the gradients in atlas texels (blended palette indices are wrong colours):
 			// 0.5 * log2(|d|^2 * (ATLAS_SIZE / GUTTER_SIZE)^2) = 0.5 * log2(|d|^2) + log2(ATLAS_SIZE / GUTTER_SIZE)
 			float2 dx = ddx(unwrappedUV), dy = ddy(unwrappedUV);
-			float lod = max(0.0, floor(0.5 * log2(max(dot(dx, dx), dot(dy, dy))) + (log2(ATLAS_SIZE / GUTTER_SIZE) + 0.5)));
+			// Level 7 is one texel per atlas cell, the tile's own colour. Past it a texel spans neighbouring tiles, so far ridges seen at a grazing angle drew in the water tile's colour.
+			float lod = clamp(floor(0.5 * log2(max(dot(dx, dx), dot(dy, dy))) + (log2(ATLAS_SIZE / GUTTER_SIZE) + 0.5)), 0.0, log2(ATLAS_SIZE / TILESET_DIM));
 			float paletteIndex = tex2Dlod(_TileAtlasTex, float4(uv, 0, lod)).a;
 			half4 c = tex2D(_PaletteTex, float2((floor(paletteIndex * 255.0 + 0.5) + 0.5) * (1.0 / 256.0), 0.5));
 			o.Albedo = c.rgb;

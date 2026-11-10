@@ -107,6 +107,7 @@ public static class VitaImageBaker
                 DFBitmap bitmap = reader.GetDFBitmap(r, f);
                 if (bitmap.Data == null || bitmap.Data.Length < bitmap.Width * bitmap.Height)
                     return null;
+                Translate(reader, Path.GetFileName(reader.FilePath).ToUpperInvariant(), r, f, bitmap);
                 record.Frames[f] = bitmap;
             }
             DFSize size = reader.GetSize(r);
@@ -130,6 +131,70 @@ public static class VitaImageBaker
             }
         }
         return file;
+    }
+
+    // Language VPKs (VITA_LANG_IMAGES = folder of PNGs named as DFU's Textures/Img and Textures/CifRci): the translated picture goes into
+    // this frame's palette indices, transparent pixels to index 0. Colours off the palette are logged for review.
+    static void Translate(BaseImageFile reader, string name, int r, int f, DFBitmap bitmap)
+    {
+        string folder = Environment.GetEnvironmentVariable("VITA_LANG_IMAGES");
+        if (string.IsNullOrEmpty(folder))
+            return;
+        string png = Path.Combine(folder, reader is ImgFile ? name + ".png" : string.Format("{0}_{1}-{2}.png", name, r, f));
+        if (!File.Exists(png))
+            return;
+        var texture = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+        texture.LoadImage(File.ReadAllBytes(png));
+        if (texture.width != bitmap.Width || texture.height != bitmap.Height)
+        {
+            Debug.LogFormat("VITABAKE language image {0}: {1}x{2}, the game's is {3}x{4}: left as is", name, texture.width, texture.height, bitmap.Width, bitmap.Height);
+            UnityEngine.Object.DestroyImmediate(texture);
+            return;
+        }
+        Color32[] pixels = texture.GetPixels32();
+        UnityEngine.Object.DestroyImmediate(texture);
+        // The palette the game draws this frame with: a palettized IMG's own, otherwise the file's palette (ART_PAL.COL etc.), which the
+        // baker's readers never load (ImageReader does at runtime)
+        DFPalette palette = reader.Palette;
+        var img = reader as ImgFile;
+        if (img == null || !img.IsPalettized)
+        {
+            palette = new DFPalette();
+            palette.Load(Path.Combine(DaggerfallUnity.Instance.Arena2Path, reader.PaletteName));
+        }
+        var nearest = new Dictionary<int, byte>();
+        int off = 0;
+        for (int y = 0; y < bitmap.Height; y++)
+            for (int x = 0; x < bitmap.Width; x++)
+            {
+                Color32 c = pixels[(bitmap.Height - 1 - y) * bitmap.Width + x];     // Texture2D rows run bottom-up
+                if (c.a < 128)
+                {
+                    bitmap.Data[y * bitmap.Width + x] = 0;
+                    continue;
+                }
+                int key = c.r << 16 | c.g << 8 | c.b;
+                byte index;
+                if (!nearest.TryGetValue(key, out index))
+                {
+                    int best = int.MaxValue;
+                    for (int i = 1; i < 256; i++)
+                    {
+                        int dr = palette.GetRed(i) - c.r, dg = palette.GetGreen(i) - c.g, db = palette.GetBlue(i) - c.b;
+                        int d = dr * dr + dg * dg + db * db;
+                        if (d < best)
+                        {
+                            best = d;
+                            index = (byte)i;
+                        }
+                    }
+                    nearest[key] = index;
+                    if (best > 0)
+                        off++;
+                }
+                bitmap.Data[y * bitmap.Width + x] = index;
+            }
+        Debug.LogFormat("VITABAKE language image {0} {1}-{2}: replaced, {3} colours off the palette", name, r, f, off);
     }
 
     // The record through the Vita's own decoder gives back exactly what the reader produced

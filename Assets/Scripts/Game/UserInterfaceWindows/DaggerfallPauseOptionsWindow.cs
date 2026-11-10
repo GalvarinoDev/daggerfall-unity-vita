@@ -83,7 +83,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
 #if UNITY_PSP2
 
             // Vita: Quick Save / Quick Load under the panel (the keys F9/F11 have no pad buttons)
-            Button quickSaveButton = DaggerfallUI.AddTextButton(new Rect(4, optionsPanel.Size.y + 3, 70, 12), "Quick Save", optionsPanel);
+            Button quickSaveButton = DaggerfallUI.AddTextButton(new Rect(4, optionsPanel.Size.y + 3, 70, 12), TextManager.Instance.GetLocalizedText("vitaQuickSave"), optionsPanel);
             quickSaveButton.BackgroundColor = Color.black;
             quickSaveButton.OnMouseClick += (sender, position) =>
             {
@@ -94,7 +94,7 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
                 else
                     DaggerfallWorkshop.Game.Serialization.SaveLoadManager.Instance.QuickSave();
             };
-            Button quickLoadButton = DaggerfallUI.AddTextButton(new Rect(76, optionsPanel.Size.y + 3, 70, 12), "Quick Load", optionsPanel);
+            Button quickLoadButton = DaggerfallUI.AddTextButton(new Rect(76, optionsPanel.Size.y + 3, 70, 12), TextManager.Instance.GetLocalizedText("vitaQuickLoad"), optionsPanel);
             quickLoadButton.BackgroundColor = Color.black;
             quickLoadButton.OnMouseClick += (sender, position) =>
             {
@@ -105,6 +105,10 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
                 CancelWindow();
                 GameManager.Instance.SaveLoadManager.PromptQuickLoadGame(name, () => { DaggerfallWorkshop.Game.Serialization.SaveLoadManager.Instance.QuickLoad(); });
             };
+            // Translated labels can be wider than the buttons: shrink them to fit
+            foreach (Button b in new[] { quickSaveButton, quickLoadButton })
+                if (b.Label.TextWidth > b.Size.x - 4)
+                    b.Label.TextScale *= (b.Size.x - 4) / b.Label.TextWidth;
 #endif
 
             // Exit game

@@ -1,5 +1,5 @@
 // PS Vita port: palette index lookup for the Daggerfall/Vita/*Palette shaders (Assets/Scripts/Vita/VitaPalette.cs).
-// The Vita's GPU blends two mip levels even with point filtering (runs 122 screenshots: blue/pink specks on glancing floors, ceilings
+// The Vita's GPU blends two mip levels even with point filtering (blue/pink specks on glancing floors, ceilings
 // and densely tiled textures). Blended palette indices are unrelated colours, so pick one whole mip level here, as the hardware
 // would with mip blending off: the same LOD maths (texels per pixel), rounded to the nearest level.
 float4 _MainTex_TexelSize;

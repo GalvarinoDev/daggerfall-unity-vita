@@ -1,6 +1,6 @@
 // Project:         Daggerfall Unity - PS Vita port
 // License:         MIT License (http://www.opensource.org/licenses/mit-license.php)
-// Dungeon CPU cost is per-object scripts (billboards, lights, audio sources, doors, enemies), visible or not (runs 55-58). Far ones
+// Dungeon CPU cost is per-object scripts (billboards, lights, audio sources, doors, enemies), visible or not. Far ones
 // are switched off: a block's Flats/Lights/Action Doors when its footprint is over a block away, an enemy when it is over 1 block
 // away (enemies cull by their own position, so a chaser from a far block stays active). Models stay, with their colliders.
 // Idea from Vwing's DFU Android port, its CulledGameObjectManager (github.com/Vwing/daggerfall-unity-android, MIT).
@@ -32,7 +32,7 @@ public class VitaCulling : MonoBehaviour
     float dungeonSince, enemiesListed, lastLog;
     DaggerfallEnemy[] enemies = new DaggerfallEnemy[0];
     readonly HashSet<GameObject> culled = new HashSet<GameObject>();
-    readonly Dictionary<Transform, List<Renderer>> culledModels = new Dictionary<Transform, List<Renderer>>();   // only what we switched off
+    readonly Dictionary<Transform, List<Renderer>> culledModels = new Dictionary<Transform, List<Renderer>>();   // only what was switched off
 
     struct TownRenderer
     {
@@ -45,7 +45,7 @@ public class VitaCulling : MonoBehaviour
     static readonly List<GameObject> deadTowns = new List<GameObject>();
 
     // A town built in play renders with its pre-atlas materials for the whole 10-15 s build before AddTown takes it over (Wayrest's
-    // neighbour: render 11 -> 19 ms a frame for that window, s70 rn-9). Its far blocks are hidden as they are made; bounds relative to the block.
+    // neighbour: render 11 -> 19 ms a frame for that window). Its far blocks are hidden as they are made; bounds relative to the block.
     struct PreCulled
     {
         public Transform block;
@@ -193,7 +193,7 @@ public class VitaCulling : MonoBehaviour
         return count;
     }
 
-    public static int TownRenderersCulled;
+    public static int TownRenderersCulled;     // last count; VitaFarTerrain keeps the fog thick while any town part is cut
 
     void Update()
     {

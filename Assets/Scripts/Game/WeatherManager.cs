@@ -195,7 +195,12 @@ namespace DaggerfallWorkshop.Game
             // Vita: outdoors, fog at least ~90% thick by VitaFogDistance so the town cutoff (VitaCulling) fades out instead of popping.
             // Thicker weather fog is kept; currentOutdoorFogSettings keeps the weather's own values.
             int fogDistance = DaggerfallUnity.Settings.VitaFogDistance;
-            const float thick = 1f;
+            // Distant terrain light: scaled by VitaFarTerrain.Thick (0 while no town part is cut), so the far view shows
+#if !VITA_MODS
+            const float thick = 1f;     // no-mods alpha: no far mesh, the town fog always applies (VitaFarTerrain.Thick's default)
+#else
+            float thick = VitaFarTerrain.Thick;
+#endif
             if (!isInteriorOrDungeonFog && fogDistance > 0 && thick > 0)
             {
                 if (fogSettings.fogMode == FogMode.Linear)
@@ -286,6 +291,10 @@ namespace DaggerfallWorkshop.Game
 
         public static bool IsSnowFreeClimate(int climateIndex)
         {
+#if UNITY_PSP2 && VITA_MODS
+            if (ClimateSwaps.VitaSnowless(climateIndex))
+                return true;
+#endif
             var climate = (MapsFile.Climates)climateIndex;
             switch (climate)
             {
@@ -467,6 +476,11 @@ namespace DaggerfallWorkshop.Game
 
         public void SetWeather(WeatherType next)
         {
+#if UNITY_PSP2 && VITA_MODS
+            // Snowless: rain instead of snow where the ground stays green
+            if (next == WeatherType.Snow && GameManager.HasInstance && ClimateSwaps.VitaSnowless(GameManager.Instance.PlayerGPS.CurrentClimateIndex))
+                next = WeatherType.Rain;
+#endif
             Debug.Log("Next weather change: " + next);
             ClearAllWeather();
             switch (next)

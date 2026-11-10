@@ -220,6 +220,16 @@ namespace DaggerfallWorkshop.Utility.AssetInjection
         {
             AddExtensionIfMissing(ref name);
 
+#if UNITY_PSP2 && VITA_MODS
+            // Built-in mod sprites' XML (VitaModTextures.cs)
+            string vitaXml = VitaModTextures.Xml(name);
+            if (vitaXml != null)
+            {
+                using (var stringReader = new StringReader(vitaXml))
+                    xml = new XMLManager(stringReader);
+                return true;
+            }
+#endif
 
             // Seek from loose files
             string path = Path.Combine(directory, name);

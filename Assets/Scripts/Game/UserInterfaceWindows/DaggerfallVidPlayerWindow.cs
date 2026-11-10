@@ -110,9 +110,58 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
                     video.Open(PlayOnStart);
                     video.Playing = true;
                     RaiseOnVideoStartGlobalEvent();
+#if UNITY_PSP2
+                    StartSubtitles();
+#endif
                 }
             }
         }
+
+#if UNITY_PSP2
+        // Translated builds ship subtitles for the original videos in the Vita_Subtitles string table: key = video file,
+        // value = cues "start end text" (seconds from the start) joined by '#'. English has no table, so nothing is drawn.
+        string[] subCues;
+        TextLabel subLabel;
+        double subStart;
+        int subShown = -1;
+
+        void StartSubtitles()
+        {
+            string value;
+            if (!DaggerfallWorkshop.Utility.TextProvider.GetVitaStringTable("Vita_Subtitles").TryGetValue(PlayOnStart.ToUpperInvariant(), out value))
+                return;
+            subCues = value.Split('#');
+            subStart = AudioSettings.dspTime;
+            subLabel = new TextLabel();
+            subLabel.Font = DaggerfallUI.DefaultFont;
+            subLabel.MaxWidth = 312;
+            subLabel.WrapText = true;
+            subLabel.WrapWords = true;
+            subLabel.HorizontalTextAlignment = TextLabel.HorizontalTextAlignmentSetting.Center;
+            subLabel.HorizontalAlignment = HorizontalAlignment.Center;
+            subLabel.VerticalAlignment = VerticalAlignment.Bottom;
+            subLabel.ShadowPosition = DaggerfallUI.DaggerfallDefaultShadowPos;
+            NativePanel.Components.Add(subLabel);
+        }
+
+        void UpdateSubtitles()
+        {
+            if (subCues == null)
+                return;
+            double t = AudioSettings.dspTime - subStart;
+            int show = -1;
+            for (int i = 0; i < subCues.Length; i++)
+            {
+                string[] p = subCues[i].Split(new char[] { ' ' }, 3);
+                if (t >= double.Parse(p[0], System.Globalization.CultureInfo.InvariantCulture) && t < double.Parse(p[1], System.Globalization.CultureInfo.InvariantCulture))
+                    show = i;
+            }
+            if (show == subShown)
+                return;
+            subShown = show;
+            subLabel.Text = show < 0 ? string.Empty : subCues[show].Split(new char[] { ' ' }, 3)[2];
+        }
+#endif
 
 #if UNITY_PSP2
         public override void OnPush()
@@ -145,6 +194,9 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             }
             else
             {
+#if UNITY_PSP2
+                UpdateSubtitles();
+#endif
                 if (endOnAnyKey && InputManager.Instance.AnyKeyDownIgnoreAxisBinds ||
                     InputManager.Instance.GetBackButtonDown() ||
                     video.VidFile.EndOfFile && video.Playing)

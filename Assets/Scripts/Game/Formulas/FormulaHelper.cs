@@ -2929,6 +2929,15 @@ namespace DaggerfallWorkshop.Game.Formulas
             Func<int, DFLocation.BuildingTypes, int, string, string, string> del;
             if (TryGetOverride("GenerateBuildingName", out del))
                 return del(seed, type, factionID, locationName, regionName);
+#if UNITY_PSP2
+            // Italian build: articles and adjective endings for shop names (the Italian translation's mod, built in)
+            if (VitaItalianNames.Active)
+            {
+                string italian = VitaItalianNames.Generate(seed, type, factionID, locationName, regionName);
+                if (italian != null)
+                    return italian;
+            }
+#endif
 
             const string firstNameTitleVar = "%ef";
             const string cityNameTitleVar = "%cn";

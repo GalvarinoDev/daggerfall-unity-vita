@@ -138,7 +138,7 @@ namespace DaggerfallWorkshop.Game
                     {
 #if UNITY_PSP2
                         // Palette atlas (VitaPalette.Spectral): the ghost shader with palette lookups; a shader swap drops the
-                        // textures the new shader doesn't declare, so take them first (UNITY_VITA_GUIDE §3)
+                        // textures the new shader doesn't declare, so take them first
                         Material vitaGhost = meshRenderer.material;
                         Texture vitaEmission = vitaGhost.HasProperty(VitaPalette.EmissionPaletteTex) ? vitaGhost.GetTexture(VitaPalette.EmissionPaletteTex) : null;
                         if (vitaEmission)

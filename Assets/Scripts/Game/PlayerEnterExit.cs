@@ -475,7 +475,7 @@ namespace DaggerfallWorkshop.Game
             yield return new WaitForEndOfFrame();
 #if UNITY_PSP2
             // Vita: free the area being left (RespawnPlayer destroyed its dungeon/interior, the exterior is still up) before building the
-            // new one, as the transitions do: a save load used to build on top of it (peak memory). Save loads run behind a loading window
+            // new one, as the transitions do: otherwise a save load builds on top of it (peak memory). Save loads run behind a loading window
             world.VitaClearWorld();
             yield return StartCoroutine(VitaUnload("respawn unloaded"));
             Debug.Log("VITARESPAWN unloaded");
@@ -1218,7 +1218,7 @@ namespace DaggerfallWorkshop.Game
                 loadingWindow.CloseWindow();
         }
 
-        // Frees what the transition just destroyed: GXM frees are delayed until the GPU finishes its frames (UNITY_VITA_GUIDE §5), and
+        // Frees what the transition just destroyed: GXM frees are delayed until the GPU finishes its frames, and
         // MaterialReader keeps materials AssetCacheThreshold minutes, so drop its cache (but the terrain tilesets) before UnloadUnusedAssets
         private IEnumerator VitaUnload(string tag)
         {

@@ -10,7 +10,7 @@ assert len(selfs) == 1, 'expected one .self in %s, found %s' % (src, selfs)
 skip_top = {'SymbolFiles', 'configuration.psp2path', 'ScriptLayoutHashes.txt'}
 
 # System images (Unity's defaults show its logo): the startup image the Vita shows before Unity runs, and the LiveArea background/gate,
-# made from the user's splash art (Assets/Vita/VitaSplash.png, git-excluded) as 8-bit palette PNGs. Without it Unity's stay.
+# made from the splash art (Assets/Vita/VitaSplash.png, git-excluded) as 8-bit palette PNGs. Without it Unity's stay.
 system_images = {}
 splash = 'Assets/Vita/VitaSplash.png'
 if os.path.exists(splash):
@@ -28,15 +28,16 @@ if os.path.exists(splash):
                      'sce_sys/livearea/contents/default_gate.png': fit(280, 158)}
 # LiveArea software manual (the gate's "Manual" button): sce_sys/manual/001.png.. with no gaps, 256-colour PNGs of 600 KiB or less.
 # The 1996 manual scans (vita/refs/manual/pages, git-excluded) at 544 wide (the size for scanned paper manuals, 544 x 480-960),
-# with our 960x544 Vita pages (vita/refs/manual/vita_front, name order) after the cover. Cached in vita/.build/manual.
-manual_pages = 'vita/refs/manual/pages'
-manual_skip = set()
+# with the 960x544 Vita pages (vita/refs/manual/vita_front, name order) after the cover. Cached in vita/.build/manual.
+manual_pages = os.environ.get('VITA_MANUAL_PAGES', 'vita/refs/manual/pages')    # a language VPK's own manual, if it has one
+manual_skip = set()  # every printed page, blank ones too, as in the printed manual
 if os.path.isdir(manual_pages):
     from PIL import Image
     scans = sorted(os.path.join(manual_pages, f) for f in os.listdir(manual_pages)
                    if f.endswith('.png') and int(f[4:-4]) not in manual_skip)
-    front = sorted(os.path.join('vita/refs/manual/vita_front', f) for f in os.listdir('vita/refs/manual/vita_front')
-                   if f.endswith('.png')) if os.path.isdir('vita/refs/manual/vita_front') else []
+    front_dir = os.environ.get('VITA_MANUAL_FRONT', 'vita/refs/manual/vita_front')    # a language VPK's own controls page
+    front = sorted(os.path.join(front_dir, f) for f in os.listdir(front_dir)
+                   if f.endswith('.png')) if os.path.isdir(front_dir) else []
     cache = 'vita/.build/manual'
     os.makedirs(cache, exist_ok=True)
     for n, p in enumerate(scans[:1] + front + scans[1:], 1):
@@ -85,6 +86,22 @@ def method(path):
             packed += len(zlib.compress(chunk, 1)) / float(len(chunk))
     return zipfile.ZIP_STORED if packed / 3 > 0.8 else zipfile.ZIP_DEFLATED
 
+# Mod models and VTEX textures ship as packs (<name>_models.pak from vita/tools/detvmdl.py, modtex.pak from vita/tools/vtexpak.py);
+# the raw files stay in the project for the editor bakers. A raw file newer than its pack still ships (pack not rebuilt yet).
+def packed_mod_file(dirpath, f):
+    if not dirpath.replace(os.sep, '/').endswith('StreamingAssets/VitaNative'):
+        return False
+    if f.endswith('_models.bin'):
+        pak = os.path.join(dirpath, f[:-4] + '.pak')
+    elif f.startswith('TEXTURE.') and f[8:].isdigit() and int(f[8:]) >= 512:
+        with open(os.path.join(dirpath, f), 'rb') as h:
+            if h.read(4) != b'VTEX':
+                return False
+        pak = os.path.join(dirpath, 'modtex.pak')
+    else:
+        return False
+    return os.path.exists(pak) and os.path.getmtime(pak) >= os.path.getmtime(os.path.join(dirpath, f))
+
 with zipfile.ZipFile(out, 'w', zipfile.ZIP_DEFLATED, allowZip64=True) as z:
     if vita_gc:
         z.writestr('Media/StreamingAssets/VitaGC.txt', vita_gc)
@@ -96,6 +113,8 @@ with zipfile.ZipFile(out, 'w', zipfile.ZIP_DEFLATED, allowZip64=True) as z:
             arc = f if rel == '.' else os.path.join(rel, f)
             if rel == '.' and (f in skip_top or f.lower().endswith('.bat')):
                 continue
+            if packed_mod_file(dirpath, f):
+                continue
             if f == selfs[0] and rel == '.':
                 data = bytearray(open(os.path.join(src, f), 'rb').read())
                 data[0x80] = 0  # UnityTools "fix unsafe homebrew bug"
@@ -104,7 +123,7 @@ with zipfile.ZipFile(out, 'w', zipfile.ZIP_DEFLATED, allowZip64=True) as z:
             elif arc.replace(os.sep, '/') in system_images:
                 z.writestr(arc, system_images[arc.replace(os.sep, '/')])
             else:
-                # Unity writes il2CppAssemblies.suprx but the player loads Il2CppAssemblies.suprx
+                # Unity writes il2CppAssemblies.suprx but the player loads Il2CppAssemblies.suprx (Vita3K on Linux is case-sensitive)
                 z.write(os.path.join(dirpath, f), arc.replace('il2CppAssemblies', 'Il2CppAssemblies'), compress_type=method(os.path.join(dirpath, f)))
     for arc in system_images:  # pages Unity doesn't write (the manual)
         if arc not in z.namelist():

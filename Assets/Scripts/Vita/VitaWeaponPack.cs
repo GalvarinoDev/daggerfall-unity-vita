@@ -21,7 +21,7 @@ public static class VitaWeaponPack
     public const int Magic = 0x4e505756;   // "VWPN"
     public const int Version = 1;
     public const string ShaderName = "Daggerfall/Vita/UIPalette";
-    public static bool Enabled = true;
+    public static bool Enabled = true;     // test switch: the original weapon path
 
     static readonly int ColorTint = Shader.PropertyToID("_ColorTint");
 
@@ -33,7 +33,7 @@ public static class VitaWeaponPack
     }
 
     static Dictionary<string, Entry> entries;
-    static readonly Dictionary<int, Texture2D> palettes = new Dictionary<int, Texture2D>();
+    static readonly Dictionary<int, Texture2D> palettes = new Dictionary<int, Texture2D>();   // by metal, for the session
     static Material material;
 
     public static string PackPath

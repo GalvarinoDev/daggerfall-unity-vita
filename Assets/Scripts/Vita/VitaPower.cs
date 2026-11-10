@@ -82,6 +82,13 @@ public class VitaPower : MonoBehaviour
 
     // Settings value per mode, and the order the menus show them in
     public static readonly string[] ModeNames = { "Normal", "Fast, no Wi-Fi", "Fast, dimmer", "Fast" };
+
+    // Menu and popup name of a mode in the game's language (vitaGpuModes, same order as ModeNames)
+    public static string ModeName(int mode)
+    {
+        string[] names = DaggerfallWorkshop.Game.TextManager.Instance.GetLocalizedTextList("vitaGpuModes", TextCollections.Internal, false);
+        return names != null && mode < names.Length ? names[mode] : ModeNames[mode];
+    }
     public static readonly int[] MenuOrder = { 0, 3, 2, 1 };
 
     DaggerfallUI registeredWith;
@@ -101,7 +108,7 @@ public class VitaPower : MonoBehaviour
         settings.VitaGpuMode = MenuOrder[(System.Array.IndexOf(MenuOrder, settings.VitaGpuMode) + 1) % MenuOrder.Length];
         settings.SaveSettings();
         Apply();
-        DaggerfallUI.Instance.PopupMessage("CPU/GPU speed: " + ModeNames[settings.VitaGpuMode]);
+        DaggerfallUI.Instance.PopupMessage(string.Format(DaggerfallWorkshop.Game.TextManager.Instance.GetLocalizedText("vitaGpuSpeed"), ModeName(settings.VitaGpuMode)));
     }
 
     // The system may restore its own mode after a suspend; while away the Vita runs at normal power

@@ -250,7 +250,7 @@ namespace DaggerfallWorkshop.Game.Utility
                     if (billboardRenderer)
                         billboardRenderer.enabled = (poolItem.npc.Motor.MoveCount > 0) ? true : false;
 #if UNITY_PSP2
-                    // TRIAL (2026-11-04, revert candidate): ~44 us per civilian per frame at noon (96 in Daggerfall = 4.2 ms, the city's
+                    // Vita tuning: ~44 us per civilian per frame at noon (96 in Daggerfall = 4.2 ms, the city's
                     // biggest script cost). Freeze civilians nobody can see: off screen, past VitaFreezeDistance, and done aligning to the
                     // grid (MoveCount > 0, so the renderer is on and isVisible can wake them). Turning the motor off skips its Update.
                     bool vitaFreeze = !VitaFreezeOff && billboardRenderer && poolItem.npc.Motor.MoveCount > 0 &&

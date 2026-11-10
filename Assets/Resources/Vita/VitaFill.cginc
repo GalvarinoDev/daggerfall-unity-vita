@@ -1,6 +1,7 @@
 // PS Vita port (fog at the end): the light the 7 palette shaders got from Unity besides the main (sun) light. They draw with noambient: Unity's SH cost
-// 16 cycles per pixel (shaderaudit), and Unity then sets neither the SH nor the 4 vertex lights for them.
+// 16 cycles per pixel (shaderaudit), and Unity then sets neither the SH nor the 4 vertex lights for them (dark sprites).
 // So VitaLights.cs sets the same light as globals: the flat ambient (the game scene's mode; no other light goes into the SH, as
+// SunlightRig's Light1/Light2 are inactive) and the 4 near point lights (in exteriors the player's IndirectLight).
 half4 _VitaAmbient, _VitaAmbientLinear;    // RenderSettings.ambientLight, and in linear
 float4 _VitaLightPos0, _VitaLightPos1, _VitaLightPos2, _VitaLightPos3;     // xyz position, w 1 / range (VitaLights); 2-3 only here
 half4 _VitaLightColor0, _VitaLightColor1, _VitaLightColor2, _VitaLightColor3;

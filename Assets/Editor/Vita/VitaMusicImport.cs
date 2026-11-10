@@ -20,7 +20,7 @@ public class VitaMusicImport : AssetPostprocessor
         settings.loadType = AudioClipLoadType.Streaming;
         importer.defaultSampleSettings = settings;
         // MP3, decoded on the CPU (a few % of a core). ATRAC9 failed both ways on the 2018 Vita player: Streaming never started
-        // (isPlaying stayed false, with or without LoadAudioData: runs 2018j/m) and CompressedInMemory held each song decoded
+        // (isPlaying stayed false, with or without LoadAudioData) and CompressedInMemory held each song decoded
         //. PSP2 accepts PCM, ADPCM, HEVAG, MP3 and ATRAC9 only: SetOverrideSampleSettings
         // returns false for Vorbis (and VAG/AAC/XMA/GCADPCM) and keeps the old format.
         settings.compressionFormat = AudioCompressionFormat.MP3;

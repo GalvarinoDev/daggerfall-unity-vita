@@ -372,6 +372,11 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             fullscreen.OnToggleState += Fullscreen_OnToggleState;
             //exclusiveFullscreen.OnToggleState += ExclusiveFullscreen_OnToggleState;
             runInBackground = AddCheckbox(leftPanel, "runInBackground", DaggerfallUnity.Settings.RunInBackground);
+#if UNITY_PSP2
+            // Always on in a Vita app. Hidden so the Vita's own rows below fit on the page; their saved values are left as they are.
+            fullscreen.Enabled = runInBackground.Enabled = false;
+            y -= itemSpacing * 2;
+#endif
             qualityLevel = AddSlider(leftPanel, "qualityLevel", DaggerfallUnity.Settings.QualityLevel, TextManager.Instance.GetLocalizedTextList("qualitySettings", TextCollections.TextSettings));
             qualityLevel.OnScroll += QualityLevel_OnScroll;
             string[] filterModes = TextManager.Instance.GetLocalizedTextList("filterModes", TextCollections.TextSettings);
@@ -379,10 +384,10 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             guiFilterMode = AddSlider(leftPanel, "guiFilterMode", DaggerfallUnity.Settings.GUIFilterMode, filterModes);
             videoFilterMode = AddSlider(leftPanel, "videoFilterMode", DaggerfallUnity.Settings.VideoFilterMode, filterModes);
 #if UNITY_PSP2
-            vitaTextureLimit = AddSlider(leftPanel, "vitaTextureLimit", DaggerfallUnity.Settings.VitaTextureLimit, "Full", "Half", "Quarter");
+            vitaTextureLimit = AddSlider(leftPanel, "vitaTextureLimit", DaggerfallUnity.Settings.VitaTextureLimit, TextManager.Instance.GetLocalizedTextList("vitaTextureSizes"));
             vitaGpuMode = AddSlider(leftPanel, "vitaGpuMode", System.Array.IndexOf(VitaPower.MenuOrder, DaggerfallUnity.Settings.VitaGpuMode),
-                System.Array.ConvertAll(VitaPower.MenuOrder, m => VitaPower.ModeNames[m]));
-            vitaFrameLimit = AddSlider(leftPanel, "vitaFrameLimit", DaggerfallUnity.Settings.VitaFrameLimit, "Unlocked", "30 FPS");
+                System.Array.ConvertAll(VitaPower.MenuOrder, m => VitaPower.ModeName(m)));
+            vitaFrameLimit = AddSlider(leftPanel, "vitaFrameLimit", DaggerfallUnity.Settings.VitaFrameLimit, TextManager.Instance.GetLocalizedTextList("vitaFrameLimits"));
 #endif
 
             y = 0;
@@ -621,6 +626,9 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             pageButton.Label.Font = pageButtonFont;
             pageButton.Label.TextColor = pages.Count > 1 ? pageButtonUnselected : pageButtonSelected;
             pageButton.Label.ShadowColor = Color.clear;
+#if UNITY_PSP2
+            VitaFit(pageButton.Label, topBarButtonsLength - 2);
+#endif
             pageButton.OnMouseClick += PageButton_OnMouseClick;
             bar.Components.Add(pageButton);
             pagesButton.Add(pageButton);
@@ -718,8 +726,20 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             titleLabel.ShadowColor = Color.clear;
             titleLabel.ToolTip = defaultToolTip;
             titleLabel.ToolTipText = GetInfo(key);
+#if UNITY_PSP2
+            VitaFit(titleLabel, panel.Size.x);
+#endif
             panel.Components.Add(titleLabel);
         }
+
+#if UNITY_PSP2
+        // Translated labels can be wider than the slots made for English: shrink any label that doesn't fit its slot
+        static void VitaFit(TextLabel label, float width)
+        {
+            if (width > 0 && label.TextWidth > width)
+                label.TextScale *= width / label.TextWidth;
+        }
+#endif
 
         /// <summary>
         /// Add a checkbox option.
@@ -733,6 +753,9 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             checkbox.CheckBoxColor = itemColor;
             checkbox.ToolTip = defaultToolTip;
             checkbox.ToolTipText = GetInfo(key);
+#if UNITY_PSP2
+            VitaFit(checkbox.Label, panel.Size.x - checkbox.Label.Position.x);
+#endif
             y += itemSpacing;
 
             return checkbox;
@@ -795,6 +818,9 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         private Button AddColorPicker(Panel panel, string key, Color color)
         {
             AddLabel(panel, key);
+#if UNITY_PSP2
+            VitaFit((TextLabel)panel.Components[panel.Components.Count - 1], panel.Size.x / 2 - 2);
+#endif
             Button colorPicker = DaggerfallUI.AddColorPicker(new Vector2(panel.Size.x / 2, y), color, uiManager, this, panel);
 
             y += itemSpacing;

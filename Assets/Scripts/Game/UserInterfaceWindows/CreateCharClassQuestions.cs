@@ -272,6 +272,13 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
                 tokens.Add(TextFile.CreateFormatToken(TextFile.Formatting.NewLine));
             }
             questionLabel.RestrictedRenderAreaCustomParent = textArea;
+#if UNITY_PSP2
+            // Wrap translated questions at the scroll's width (their lines can be longer than the English ones).
+            // Each line stays one label, so picking an answer by label index still works.
+            questionLabel.WrapText = true;
+            questionLabel.WrapWords = true;
+            questionLabel.MaxTextWidth = (int)(questionScroll.Size.x - leftTextOffset - 12f);
+#endif
             questionLabel.SetText(tokens.ToArray());
             questionScroll.Components.Add(questionLabel);
             scrollFrame = 0;

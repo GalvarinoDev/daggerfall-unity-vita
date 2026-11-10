@@ -1,7 +1,7 @@
 // Project:         Daggerfall Unity - PS Vita port
 // License:         MIT License (http://www.opensource.org/licenses/mit-license.php)
 // Loading window for the Vita (game start, dungeon exit): a random picture from StreamingAssets/LoadScreens with "Loading..."
-// below it, or the title text if there are no pictures. A DFU window, not OnGUI: our own OnGUI drew under the HUD.
+// below it, or the title text if there are no pictures. A DFU window, not OnGUI: a plain OnGUI drew under the HUD.
 
 #if UNITY_PSP2
 using System;
@@ -40,8 +40,12 @@ public class VitaLoadingWindow : DaggerfallBaseWindow
     protected override void Setup()
     {
         // The art already says Daggerfall: only "Loading..." and the bar in the black strip below it. The whole picture stays on screen
-        //: fitted to the screen width, centred
+        // Fitted to the screen width, centred
+#if !VITA_MODS
         picture = null;
+#else
+        picture = DaggerfallWorkshop.DaggerfallUnity.Settings.VitaLoadScreenArt ? LoadPicture(category) : null;
+#endif
         if (picture != null)
         {
             ParentPanel.BackgroundTexture = picture;

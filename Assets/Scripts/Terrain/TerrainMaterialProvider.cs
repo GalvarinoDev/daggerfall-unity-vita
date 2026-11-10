@@ -111,6 +111,10 @@ namespace DaggerfallWorkshop
         /// </summary>
         /// <param name="worldClimate">Index of world climate.</param>
         /// <returns>Texture archive index.</returns>
+#if UNITY_PSP2 && VITA_MODS
+        static readonly string[] BiomesHammerfellRegions = { "Alik'r Desert", "Dragontail Mountains", "Dak'fron", "Lainlyn", "Tigonus", "Ephesus", "Santaki" };
+
+#endif
         protected int GetGroundArchive(int worldClimate)
         {
 #if UNITY_PSP2
@@ -155,6 +159,34 @@ namespace DaggerfallWorkshop
             }
 
 #if UNITY_PSP2
+#if VITA_MODS
+            // Snowless - Swamp, Jungle, and Woodlands (ClimateSwaps.VitaSnowless)
+            if (isWinter && ClimateSwaps.VitaSnowless(worldClimate))
+            {
+                groundArchive--;
+                isWinter = false;
+            }
+            // World of Daggerfall - Biomes (WODTerrainMaterialProvider.GetClimateInfo), baked into biomes.pak
+            if (DaggerfallUnity.Settings.VitaWorldOfDaggerfallBiomes)
+            {
+                switch ((MapsFile.Climates)worldClimate)
+                {
+                    case MapsFile.Climates.Subtropical:
+                        groundArchive = 4;
+                        break;
+                    case MapsFile.Climates.Desert2:
+                        groundArchive = 3;
+                        break;
+                    case MapsFile.Climates.Mountain:
+                        if (System.Array.IndexOf(BiomesHammerfellRegions, DaggerfallWorkshop.Game.GameManager.Instance.PlayerGPS.CurrentRegionName) >= 0)
+                            groundArchive = isWinter ? 103 : 104;
+                        break;
+                    case MapsFile.Climates.HauntedWoodlands:
+                        groundArchive = isWinter ? 303 : 304;
+                        break;
+                }
+            }
+#endif
             return groundArchive;
 #else
             return (groundArchive, climate, isWinter);

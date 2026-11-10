@@ -178,12 +178,12 @@ public static class VitaSaveIO
     // Bumped by every save write/delete, so the save list is re-read only after a change (SaveLoadManager.EnumerateSaves)
     public static int Changes;
 
-    /// <summary>Pack straight into the save file; returns its length.</summary>
+    /// <summary>Pack straight into the save file (no whole-file array and copy, ~2.2 MB less garbage per save); returns its length.</summary>
     public static long WriteSave(string path, List<KeyValuePair<string, byte[]>> parts)
     {
         Changes++;
         string tmp = path + ".tmp";
-        VitaFile.Delete(tmp);
+        VitaFile.Delete(tmp);   // Vita3K ignores SCE_O_TRUNC
         long length;
         using (var file = new FileStream(tmp, FileMode.Create, FileAccess.Write, FileShare.None, 1 << 16))
         {
@@ -199,7 +199,7 @@ public static class VitaSaveIO
     {
         Changes++;
         string tmp = path + ".tmp";
-        VitaFile.Delete(tmp);
+        VitaFile.Delete(tmp);   // Vita3K ignores SCE_O_TRUNC
         File.WriteAllBytes(tmp, data);
         VitaFile.Delete(path);
         File.Move(tmp, path);

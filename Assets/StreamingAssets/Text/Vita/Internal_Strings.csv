@@ -1,2 +1,29 @@
 ﻿Key,Value
 true,True
+vitaRest,Rest
+vitaCharacterSheet,Character Sheet
+vitaUseMagicItem,Use Magic Item
+vitaLauncherOn,Launcher at next boot: On
+vitaLauncherOff,Launcher at next boot: Off
+vitaDungeonLight,Dungeon light: {0:F0}%
+vitaFireLight,Fire light: {0}%
+vitaFireColour,Fire colour: {0}
+vitaFireColours,"White
+Slightly warm
+Warm
+Warmest"
+vitaTorchReach,Torch reach: {0} m
+vitaQuickSave,Quick Save
+vitaQuickLoad,Quick Load
+vitaTextureSizes,"Full
+Half
+Quarter"
+vitaFrameLimits,"Unlocked
+30 FPS"
+vitaGpuModes,"Normal
+Fast, no Wi-Fi
+Fast, dimmer
+Fast"
+vitaGpuSpeed,CPU/GPU speed: {0}
+vitaLowPolyTreesOn,Low poly trees: On (next area)
+vitaLowPolyTreesOff,Low poly trees: Off

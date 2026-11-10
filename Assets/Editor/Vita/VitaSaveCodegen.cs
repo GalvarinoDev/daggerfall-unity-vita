@@ -44,7 +44,7 @@ public static class VitaSaveCodegen
         new KeyValuePair<string, Type>("books", typeof(List<DaggerfallConnect.FallExe.BookMappingTemplate>)),
     };
 
-    // Native tables (item 12): the Resources JSON tables ItemHelper parses with FullSerializer at boot
+    // Native tables: the Resources JSON tables ItemHelper parses with FullSerializer at boot
     // -> StreamingAssets/VitaNative/itemtables.bin (VitaSaveIO parts, one per table), each checked: FullSerializer JSON of the table
     // read back from native must equal the JSON of the parsed original. Batch: vita/unity2017.sh VitaSaveCodegen.BakeTables tables
     public static readonly string[] Tables = { "ItemTemplates", "MagicItemTemplates", "books" };

@@ -383,6 +383,10 @@ namespace DaggerfallWorkshop
                 return null;
             }
 
+#if UNITY_PSP2 && VITA_MODS
+            // DET banner slots: the region's texture (VitaDetModels)
+            VitaDetModels.ApplyRegion(ref archive, ref record);
+#endif
             // Try to retrieve from cache
             int key = MakeTextureKey((short)archive, (byte)record, (byte)frame);
             if (materialDict.ContainsKey(key))
@@ -827,6 +831,10 @@ namespace DaggerfallWorkshop
         /// <returns>True if CachedMaterial found or loaded successfully.</returns>
         public bool GetCachedMaterial(int archive, int record, int frame, out CachedMaterial cachedMaterialOut, int alphaIndex = -1)
         {
+#if UNITY_PSP2 && VITA_MODS
+            // DET banner slots: the region's texture (VitaDetModels)
+            VitaDetModels.ApplyRegion(ref archive, ref record);
+#endif
             int key = MakeTextureKey((short)archive, (byte)record, (byte)frame);
             if (materialDict.ContainsKey(key))
             {
@@ -941,7 +949,15 @@ namespace DaggerfallWorkshop
             // Reverse key and apply climate
             int archive, record, frame;
             ReverseTextureKey(key, out archive, out record, out frame);
+#if UNITY_PSP2 && VITA_MODS
+            // DET banner slots take the region's texture with no climate swap, as DETCustomRegionMaterials does (VitaDetModels)
+            if (archive == VitaDetModels.RegionArchive || archive == VitaDetModels.ClimateArchive)    // + RRP climate-table slots, same rule
+                VitaDetModels.ApplyRegion(ref archive, ref record);
+            else
+                archive = ClimateSwaps.ApplyClimate(archive, record, climate, season);
+#else
             archive = ClimateSwaps.ApplyClimate(archive, record, climate, season);
+#endif
 
             // Get new material
             Material material;

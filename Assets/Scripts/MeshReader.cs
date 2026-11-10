@@ -106,6 +106,14 @@ namespace DaggerfallWorkshop
             }
 
 #if UNITY_PSP2
+#if VITA_MODS
+            // DET models (VitaDetModels), so the combiner merges them like Daggerfall's own
+            if (VitaDetModels.TryGetModelData(id, out modelData))
+            {
+                modelDict.Add((int)id, modelData);
+                return true;
+            }
+#endif
 
             // Baked ARCH3D models (VitaModelPack): no card read, plane parse or triangulation per level load
             if (VitaModelPack.TryGetModelData(id, out modelData))

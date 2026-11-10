@@ -76,9 +76,9 @@ namespace DaggerfallWorkshop.Game
         public static bool VitaGroundPlane = true;
         const int maxParticles = 1500;
 
-        // Trial s71 (revert candidate): the emitters are boxes 150 m (snow) and 100 m (rain) across around the player, so most particles
+        // Vita tuning: the emitters are boxes 150 m (snow) and 100 m (rain) across around the player, so most particles
         // fall 40-75 m away as 1-2 pixel specks in the weather fog, and the cost follows the particle count (snow at half rate won back
-        // ~2/3 of its ~4 FPS, collision off nothing: s71 snow1). A smaller box with the rate cut by the area ratio keeps the density near
+        // ~2/3 of its ~4 FPS, collision off nothing). A smaller box with the rate cut by the area ratio keeps the density near
         // the player the same.
         public static bool VitaWeatherBox = true;
         const float vitaSnowBox = 80, vitaRainBox = 60;

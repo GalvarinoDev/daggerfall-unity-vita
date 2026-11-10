@@ -90,6 +90,25 @@ public static class VitaModelPack
         }
     }
 
+#if VITA_MODS
+    /// <summary>A model record of another VMDL pack (mod models, VitaDetModels; vita/tools/detvmdl.py). False when the pack lacks it or it's damaged.</summary>
+    public static bool TryRead(VitaPack modPack, uint id, out ModelData modelData)
+    {
+        modelData = new ModelData();
+        System.IntPtr memory = System.IntPtr.Zero, data;
+        int length;
+        try
+        {
+            return modPack.Read(id, out memory, out data, out length) && Parse(data, length, ref modelData);
+        }
+        finally
+        {
+            if (memory != System.IntPtr.Zero)
+                Marshal.FreeHGlobal(memory);
+        }
+    }
+#endif
+
     // Every count is checked against the record's length before anything is copied: a damaged record fails, it never reads past the end
     static unsafe bool Parse(System.IntPtr data, int length, ref ModelData m)
     {

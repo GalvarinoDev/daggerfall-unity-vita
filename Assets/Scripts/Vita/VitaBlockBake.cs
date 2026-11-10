@@ -25,12 +25,12 @@ using DaggerfallWorkshop.Utility.AssetInjection;
 public static class VitaBlockBake
 {
     public const string Magic = "VBLK";
-    public const int Version = 4;
+    public const int Version = 4;   // 4: standalone entries with ReplacementFlag (windmill models, imported at runtime)
     public const int ReplacementFlag = 1 << 30;
     public const int Align = 512;
 
     static Dictionary<string, int[]> index;     // name/hash -> offset, deflated length, length
-    static FileStream file;
+    static FileStream file;                     // app0: (not invalidated by suspend), one fd for the session
     static byte[] deflated = new byte[0], buffer = new byte[0];   // reused: the IL2CPP heap never shrinks
     static int pos;
 
@@ -341,7 +341,11 @@ public static class VitaBlockBake
         if (objects != null)
             foreach (DFBlock.RmbBlock3dObjectRecord obj in objects)
             {
+#if !VITA_MODS
                 if (MeshReplacement.VitaHasCustomGameobject(obj.ModelIdNum))
+#else
+                if (!VitaWindmills.HasModel(obj.ModelIdNum) && MeshReplacement.VitaHasCustomGameobject(obj.ModelIdNum))
+#endif
                     return "mod model " + obj.ModelIdNum;
                 if (PlayerActivate.HasCustomActivation(obj.ModelIdNum))
                     return "custom activation " + obj.ModelIdNum;
@@ -377,7 +381,7 @@ public static class VitaBlockBake
         return index;
     }
 
-    // One read per record (VITA_GUIDE §5), then inflate
+    // One read per record, then inflate
     static void Read(int offset, int deflatedLength, int length)
     {
         if (deflated.Length < deflatedLength)

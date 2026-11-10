@@ -1,7 +1,7 @@
 #!/bin/bash
 # Assets/StreamingAssets/Factions/FACTION.TXT -> Assets/StreamingAssets/VitaNative/factions.bin for FactionFile (PSP2).
 # Parsed by DFU's own FactionFile.ParseFactions/ParseFactionData (copied out of FactionFile.cs, upstream branch, mono in podman):
-# the ~6,000-line parse took 311 ms per boot on the Vita (s42 fac1). The ruler seeds are NOT baked: the game still draws them from
+# the ~6,000-line parse took 311 ms per boot on the Vita. The ruler seeds are NOT baked: the game still draws them from
 # DFRandom per faction in this order at load, as ParseFactions does, so they stay identical.
 # Format: "VFAC", int32 version 1, int32 FACTION.TXT byte length (the game falls back to the text if it differs), int32 count, per
 # faction in parse order: int32 id, parent, type, UTF-8 name (int32 length, -1 = null, bytes), int32 rep, summon, region, power,
