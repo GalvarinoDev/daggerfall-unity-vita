@@ -380,7 +380,7 @@ public static class VitaMemory
         if (watched.Count > 0)
         {
             // Objects the new scene still uses (the shared ContentReader, DaggerfallUnity.vitaSharedReader) must not be severed: nulling
-            // its fields broke the live reader (HasLocation crash at game start whenever probes were on: prof1, cmpd2)
+            // its fields broke the live reader (HasLocation crashed at game start whenever probes were on)
             var dfuNow = Object.FindObjectOfType<DaggerfallUnity>();
             var inUse = dfuNow ? new object[] { dfuNow.MeshReader, dfuNow.MaterialReader, dfuNow.SoundReader, dfuNow.ContentReader,
                 dfuNow.WorldTime, dfuNow.TextProvider } : new object[0];

@@ -151,12 +151,12 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             exitButton.Outline.Enabled = true;
             exitButton.Label.Text = GetText("exit");
 #if UNITY_PSP2
-            // Widen the button to its label: translated words for Exit don't fit 20 pixels
-            exitButton.Size = new Vector2(Mathf.Max(20, exitButton.Label.TextWidth + 6), 9);
-#endif
+            // No Exit button on the Vita: Application.Quit does nothing there, and the PS button closes the game
+#else
             exitButton.OnMouseClick += ExitButton_OnMouseClick;
             exitButton.Hotkey = DaggerfallShortcut.GetBinding(DaggerfallShortcut.Buttons.GameSetupExit);
             NativePanel.Components.Add(exitButton);
+#endif
 
             // If actually validated and we just want to see settings then move direct to settings page
             if (DaggerfallUnity.Instance.IsPathValidated && (DaggerfallUnity.Settings.ShowOptionsAtStart || Input.anyKey))

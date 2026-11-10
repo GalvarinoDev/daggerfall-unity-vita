@@ -422,7 +422,8 @@ public class VitaFlatBatch : MonoBehaviour
                 if (blocked || AddCityFlat(archive, record, p, sizeRecord, true))
                     continue;
                 GameObject go = GameObjectHelper.CreateDaggerfallBillboardGameObject(archive, record, flatsParent);
-                go.transform.position = p;
+                // p is in block space; the block can already sit at its world position when towns build while the player walks
+                go.transform.position = block.TransformPoint(p);
                 RMBLayout.AlignBillboardToBase(go);
             }
         }
