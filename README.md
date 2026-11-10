@@ -1,6 +1,6 @@
 # Daggerfall Unity Vita
 
-<p align="center"><img src="./Assets/Resources/Vita/StartupBackground2.png"></p>
+<p align="center"><img src="./.github/images/intro.png"></p>
 
 This is a port of [Daggerfall Unity](https://github.com/Interkarma/daggerfall-unity), the open source recreation of The Elder Scrolls II: Daggerfall, for the *PS Vita*.
 
@@ -14,7 +14,7 @@ This is an alpha, so expect bugs. Back up your saves before updating.
 
 Built-in mods and four more languages.
 
-- German, French, Spanish and Italian, one VPK per language. Menus, books, quests, dialogue, the map, images and movie subtitles are translated.
+- French, German, Italian and Spanish, one VPK per language. Menus, books, quests, dialogue, the map, images and movie subtitles are translated.
 - 21 mods built into the port, all off until you turn them on from the Mods button on the setup screen. See [Mods](#mods).
 - The setup screen opens at first launch so new players can find the Mods button.
 - Long translated labels shrink to fit their box.
@@ -46,7 +46,7 @@ Please report bugs in this port here, not to the Daggerfall Unity team.
 
 You need a Vita running HENkaku or Enso with [VitaShell](https://github.com/TheOfficialFloW/VitaShell/releases) installed, and about 2 GB free on `ux0:` for the install. The game and its data take about 1.4 GB once you delete the VPK.
 
-- Download one VPK from the [Releases](https://github.com/GalvarinoDev/daggerfall-unity-vita/releases) page: `DFU-en.vpk` (English), `DFU-de.vpk` (German), `DFU-fr.vpk` (French), `DFU-es.vpk` (Spanish) or `DFU-it.vpk` (Italian). Install it with VitaShell. All five install as the same app, so switching languages keeps your saves and settings.
+- Download one VPK from the [Releases](https://github.com/GalvarinoDev/daggerfall-unity-vita/releases) page: `DFU-en.vpk` (English), `DFU-fr.vpk` (French), `DFU-de.vpk` (German), `DFU-it.vpk` (Italian) or `DFU-es.vpk` (Spanish). Install it with VitaShell. All five install as the same app, so switching languages keeps your saves and settings.
 - Install DOS Daggerfall on your PC. On Steam, the folder you need is `DF/DAGGER/ARENA2` inside the game's install folder.
 - Copy the whole `ARENA2` folder to your Vita, so that you end up with:
 
@@ -69,32 +69,36 @@ A new game starts with the HUD hidden, so tap Select to bring it up. In a text b
 
 ## Mods
 
-The Vita can't load PC `.dfmod` files, so each mod was rebuilt for it. Turn them on from the Mods button on the setup screen, before the game loads. Mod text stays in English in every language.
+The Vita can't load PC `.dfmod` files, so each mod is converted for it. Turn them on from the Mods button on the setup screen, before the game loads. Mod text stays in English in every language.
+
+If a mod breaks on the Vita, it's most likely a mistake I made while converting it. Please report it here, not to the mod's author.
 
 <details>
 <summary>All 21 mods and their authors</summary>
 
 | Mod | Version | By | Links |
 |---|---|---|---|
-| Dynamic Skies | 2.3.4 | BadLuckBurt and carademono | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/376), [GitHub](https://github.com/drcarademono/dynamic-skies) |
 | Basic Roads | 1.3.1 | Hazelnut | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/134), [GitHub](https://github.com/ajrb/dfunity-mods) |
-| Low Poly Trees | 5 | Kamer (SquidKamer) | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/380) |
-| Windmills of Daggerfall | 2.2 | Kamer (SquidKamer) | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/33) |
 | Beautiful Cities of Daggerfall | 0.5.0 | carademono | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/720) |
 | Beautiful Villages of Daggerfall | 1.4.2 | carademono | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/566), [GitHub](https://github.com/drcarademono/beautiful-villages) |
+| Daggerfall Expanded Textures | 1.3.0 | Ninelan-Ruinar | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/307) |
+| DET Harvestable Crops | 1.0.1 | carademono, Ninelan and TheLacus | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/882) |
+| DIEP - Rosy's Resources | 1.1 | AlexanderSig, BenGamey974, PRAEst76 and RosyTheRascal | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/1053) |
+| Distant Terrain of the World of Daggerfall | 3.69 | MaoDeVaca, based on Nystul's [Distant Terrain](https://www.nexusmods.com/daggerfallunity/mods/128) | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/1284) |
+| Dynamic Skies | 2.3.4 | BadLuckBurt and carademono | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/376), [GitHub](https://github.com/drcarademono/dynamic-skies) |
 | Finding My Religion | 1.23 | Cliffworms, with statues by King of Worms | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/344) |
 | Fixed Desert Architecture | 1.3.7 | Cliffworms | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/333) |
 | Fixed Dungeon Exteriors | 1.4.4 | Cliffworms | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/225) |
-| Daggerfall Expanded Textures | 1.3.0 | Ninelan-Ruinar | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/307) |
-| RMB Resource Pack | 0.3.0 | many asset creators, uploaded by Cliffworms and maintained by carademono | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/528), [GitHub](https://github.com/drcarademono/rmb-resource-pack) |
-| DIEP - Rosy's Resources | 1.1 | RosyTheRascal, PRAEst76, BenGamey974 and AlexanderSig | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/1053) |
-| DET Harvestable Crops | 1.0.1 | TheLacus, Ninelan and carademono | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/882) |
+| Low Poly Trees | 5 | Kamer (SquidKamer) | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/380) |
 | Redguards of Hammerfell | 0.6 | WilhelmBlack | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/666) |
-| World of Daggerfall | 0.4.0 | World of Daggerfall Team: Kamer, carademono, Cliffworms and JayH, with Location Loader by UncannyValley and KABoissonneault | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/249), [GitHub](https://github.com/drcarademono/world-of-daggerfall), [Location Loader](https://github.com/KABoissonneault/DFU-LocationLoader) |
-| World of Daggerfall - Terrain | 1.5.0 | monobelisk, Freak2121, carademono and Ninelan | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/249), [GitHub](https://github.com/drcarademono/wod-terrain) |
-| World of Daggerfall - Biomes | 0.4.0 | carademono and Kab the Bird Ranger | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/249), [GitHub](https://github.com/drcarademono/wod-biomes) |
-| Distant Terrain of the World of Daggerfall | 3.69 | MaoDeVaca, based on Nystul's [Distant Terrain](https://www.nexusmods.com/daggerfallunity/mods/128) | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/1284) |
-| Vanilla Friendly Loading Screens |  | WilhelmBlack |  |
+| RMB Resource Pack | 0.3.0 | many asset creators, uploaded by Cliffworms and maintained by carademono | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/528), [GitHub](https://github.com/drcarademono/rmb-resource-pack) |
+| Vanilla Friendly Loading Screens | 1.1 | WilhelmBlack | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/838) |
+| Windmills of Daggerfall | 2.2 | Kamer (SquidKamer) | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/33) |
+| World of Daggerfall | 0.4.0 | World of Daggerfall Team: carademono, Cliffworms, JayH and Kamer, with Location Loader by KABoissonneault and UncannyValley | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/249), [GitHub](https://github.com/drcarademono/world-of-daggerfall), [Location Loader](https://github.com/KABoissonneault/DFU-LocationLoader) |
+| World of Daggerfall - Biomes | 0.4.0 | carademono and KABoissonneault | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/249), [GitHub](https://github.com/drcarademono/wod-biomes) |
+| World of Daggerfall - Terrain | 1.5.0 | carademono, Freak2121, monobelisk and Ninelan | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/249), [GitHub](https://github.com/drcarademono/wod-terrain) |
+
+Each mod's author or project lead was asked for permission. Where an author couldn't be reached but the mod is under the MIT license, it's still included. If you made one of these mods and would prefer it taken out of the port, open an issue and I'll remove it.
 
 Two are new for the Vita: Old Masters of Tamriel, a set of public-domain paintings from Wikimedia Commons, and Snowless, which keeps swamps, jungles and woodlands green in winter with rain instead of snow.
 
@@ -102,12 +106,12 @@ World of Daggerfall - Terrain and Distant Terrain cost the most frame rate.
 
 </details>
 
-## Lighting
+## Light settings
 
 <details>
-<summary>Lighting options</summary>
+<summary>Dungeon light, torches and fire colour</summary>
 
-You can adjust the lighting from the dropdown list in the pause menu. Each entry moves to its next value when you click it, and the changes apply right away.
+These are in the dropdown list in the pause menu. Each entry moves to its next value when you click it, and the changes apply right away.
 
 | Option | Values | Default |
 |---|---|---|
@@ -133,7 +137,8 @@ I measured these on one PCH-1000 with 0.3.0, with a bot visiting the same 46 sto
 | Taverns, shops, dungeon | 57-60 FPS | 59-60 FPS |
 | City streets | 47-60 FPS | 33-52 FPS |
 | Wilderness | 44-60 FPS | 44-47 FPS |
-| Total loading time | 106 s | 151 s |
+| All loading screens added up | 106 s | 151 s |
+| Longest single load | 14 s | 19 s |
 
 Neither run crashed. The default speed setting raises the CPU to 444 MHz and the GPU clock, and limits screen brightness. You can change this with CPU/GPU speed in the pause menu.
 
@@ -182,12 +187,30 @@ Vita-only changes to upstream's files sit behind `#if UNITY_PSP2` with upstream'
 
 ## Credits
 
+- My girlfriend, port was started because she was going to borrow my Vita when she visited her family this Thanksgiving.
 - [Interkarma](https://github.com/Interkarma), Daggerfall Workshop and all the Daggerfall Unity contributors for [Daggerfall Unity](https://github.com/Interkarma/daggerfall-unity).
 - Bethesda Softworks for The Elder Scrolls II: Daggerfall.
-- Translations: Deepfighter and Numenorean (German, Daggerfall Deutsch), Daneel53 and Pango (French), raulpuro with some lines from NarrodRecandriall (Spanish), XSpettro101X with images and movies by Rotary00 (Italian).
-- The mod authors listed under [Mods](#mods), who let their work come to the Vita.
+
+### Translations
+
+- French: [Daneel53](https://www.nexusmods.com/daggerfallunity/users/6838829) ([GitHub](https://github.com/Daneel53)) and Pango, [French Daggerfall](https://www.nexusmods.com/daggerfallunity/mods/456)
+- German: [Deepfighter](https://github.com/deepfighter) and Numenorean, [Daggerfall Deutsch](https://www.nexusmods.com/daggerfallunity/mods/826)
+- Italian: XSpettro101X, with images and movies by Rotary00, [Traduzione Italiana](https://www.nexusmods.com/daggerfallunity/mods/1182)
+- Spanish: [raulpuro](https://forums.dfworkshop.net/memberlist.php?mode=viewprofile&u=1633), with some lines from [NarrodRecandriall](https://github.com/Narrod-Dev)'s [Spanish translation](https://www.nexusmods.com/daggerfallunity/mods/1251)
+
+I'm open to adding more languages if the translators approve. If you made a Daggerfall Unity translation and would like it on the Vita, open an issue here or message me.
+
+### Mod authors
+
+These authors let their mods come to the Vita. Each mod's own page is linked under [Mods](#mods).
+
+[AlexanderSig](https://www.nexusmods.com/profile/alexandersig?gameId=2927), [BadLuckBurt](https://github.com/BadLuckBurt), [BenGamey974](https://en.uesp.net/wiki/User:Bengamey_974), [carademono](https://www.nexusmods.com/daggerfallunity/users/107697598) ([GitHub](https://github.com/drcarademono)), [Cliffworms](https://www.nexusmods.com/daggerfallunity/users/13821) ([GitHub](https://github.com/Cliffworms)), [Freak2121](https://www.nexusmods.com/daggerfallunity/users/1626563) ([GitHub](https://github.com/Freak2121)), [Hazelnut](https://github.com/ajrb), [JayH](https://github.com/JayH2971), [KABoissonneault](https://www.nexusmods.com/daggerfallunity/users/5856175) ([GitHub](https://github.com/KABoissonneault)), [Kamer (SquidKamer)](https://github.com/SquidKamer), [King of Worms](https://www.nexusmods.com/profile/KingOfWormsDFU?gameId=2927), [MaoDeVaca](https://www.nexusmods.com/daggerfallunity/users/98208923), [monobelisk](https://www.nexusmods.com/daggerfallunity/users/14045140) ([GitHub](https://github.com/monobelisk)), [Ninelan-Ruinar](https://www.nexusmods.com/daggerfallunity/users/39888770), [Nystul](https://www.nexusmods.com/daggerfallunity/users/91388288) ([GitHub](https://github.com/Nystul-the-Magician)), [PRAEst76](https://www.nexusmods.com/daggerfallunity/users/56241), [RosyTheRascal](https://www.nexusmods.com/daggerfallunity/users/50021166), [TheLacus](https://github.com/TheLacus), [UncannyValley](https://forums.dfworkshop.net/memberlist.php?mode=viewprofile&u=72) and [WilhelmBlack](https://www.nexusmods.com/profile/WilhelmBlack?gameId=2927).
+
+### Help with the port
+
+- [AJ](https://github.com/AJ170) and the PS Vita Forever server.
 - [Vwing](https://github.com/Vwing) for ideas from their Android port of Daggerfall Unity.
-- [AJ](https://github.com/AJ170) and the PS Vita Forever server for their help with the project.
+- [shoui520](https://github.com/shoui520) for [vita-agent-use](https://github.com/shoui520/vita-agent-use). With it, an AI agent could install each test build on my Vita, launch it, and watch the screen, logs and frame rate while an auto-walk bot ran the character through cities, dungeons and the wilderness at different times of day and in different weather. Runs like that went overnight while I slept and covered hours of play, so they caught crashes, memory problems and slow spots much sooner than I could have by hand, and sped up the port a lot since I got to stress test things even when I couldn't physically do it myself.
 
 ## License
 

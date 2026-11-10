@@ -98,7 +98,7 @@ public class VitaModsWindow : DaggerfallPopupWindow
             new Entry { title = "World of Daggerfall - Terrain", row = "WoD Terrain", author = "monobelisk, Freak2121, carademono & Ninelan", version = "1.5.0",
                 description = "New ground shapes for the whole Iliac Bay: hills and mountains up to 5000 metres, flattened ground around towns, lowered ports and smoothed roads. New ground can take a few seconds longer to appear while you travel.",
                 get = () => s.VitaWodTerrain, set = v => s.VitaWodTerrain = v },
-            new Entry { title = "World of Daggerfall - Biomes", row = "Biomes", author = "carademono & Kab the Bird Ranger", version = "0.4.0",
+            new Entry { title = "World of Daggerfall - Biomes", row = "Biomes", author = "carademono & KABoissonneault", version = "0.4.0",
                 description = "New ground for Hammerfell's mountains, the deep desert, the subtropics and the haunted woods.",
                 needs = new[] { "Expanded Textures" },
                 get = () => s.VitaWorldOfDaggerfallBiomes, set = v => s.VitaWorldOfDaggerfallBiomes = v },
