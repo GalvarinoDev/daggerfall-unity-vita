@@ -807,12 +807,10 @@ namespace DaggerfallWorkshop.Game
                     UnityEditor.EditorApplication.isPlaying = false;
 #elif UNITY_PSP2
                     DaggerfallUnity.Settings.SaveSettings();
-                    // Vita: ending the process from in game crashed in the system's exit cleanup, so go back to the title screen
-                    // (as after death); from the title it still exits
-                    if (GameManager.Instance.IsPlayingGame())
-                        GameManager.Instance.StartGameBehaviour.StartMethod = StartGameBehaviour.StartMethods.TitleMenu;
-                    else
-                        VitaPower.Exit();
+                    // Vita: exiting the process crashed during the system's exit cleanup, so return to the title screen, as after death.
+                    // Only the pause menu sends this now (the title screen's Exit is disabled). IsPlayingGame() is false while the
+                    // game is paused, so it can't be the check here. Players close the game with the PS button.
+                    GameManager.Instance.StartGameBehaviour.StartMethod = StartGameBehaviour.StartMethods.TitleMenu;
 #else
                     DaggerfallUnity.Settings.SaveSettings();
                     Application.Quit();

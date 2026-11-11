@@ -516,9 +516,14 @@ namespace DaggerfallWorkshop
             // 60/41/27/16 fps, exterior 21/13/13/13, dungeon 25/21/20/20). PC's Fantastic has 4.
             int vitaPixelLights;
             VitaPixelLights = int.TryParse(GetData(sectionVideo, "VitaPixelLights"), out vitaPixelLights) ? Mathf.Clamp(vitaPixelLights, 0, 4) : 0;
-            // Vita: power configuration mode A/B/C = 0/1/2, 3 = A with a high GPU clock (VitaPower.cs). Default 2: high GPU clock with Wi-Fi kept (exterior 25 → 35.6 FPS)
+            // Vita: power configuration mode A/B/C = 0/1/2; 3 = A with a high GPU clock (VitaPower.cs). Default 3: the high GPU clock with
+            // Wi-Fi on and full screen brightness (an exterior went from 25 to 35.6 FPS)
             int vitaGpuMode;
-            VitaGpuMode = int.TryParse(GetData(sectionVideo, "VitaGpuMode"), out vitaGpuMode) ? Mathf.Clamp(vitaGpuMode, 0, 3) : 2;
+            VitaGpuMode = int.TryParse(GetData(sectionVideo, "VitaGpuMode"), out vitaGpuMode) ? Mathf.Clamp(vitaGpuMode, 0, 3) : 3;
+            // Mode B (1) is no longer offered: it switched Wi-Fi off, and Wi-Fi stayed off after leaving the game. Mode 3 has the same
+            // clocks with Wi-Fi on, so a saved 1 loads as 3.
+            if (VitaGpuMode == 1)
+                VitaGpuMode = 3;
             // Vita: 1 = lock to 30 FPS (vSyncCount 2: every frame 33 ms, even pacing where the rate swings 40-60); off unless set
             int vitaFrameLimit;
             VitaFrameLimit = int.TryParse(GetData(sectionVideo, "VitaFrameLimit"), out vitaFrameLimit) ? Mathf.Clamp(vitaFrameLimit, 0, 1) : 0;

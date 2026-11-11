@@ -112,7 +112,15 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             characterPortrait.Position = new Vector2(200, 8);
 
             // Setup labels
+#if UNITY_PSP2
+            // A translated sheet image can have a longer NAME: label; its language pack moves the name to the right.
+            int nameX;
+            if (!int.TryParse(TextManager.Instance.GetLocalizedTextWithReversion("vitaCharSheetNameX", TextCollections.Internal, false, "41"), out nameX))
+                nameX = 41;
+            nameLabel = DaggerfallUI.AddDefaultShadowedTextLabel(new Vector2(nameX, 4), NativePanel);
+#else
             nameLabel = DaggerfallUI.AddDefaultShadowedTextLabel(new Vector2(41, 4), NativePanel);
+#endif
             raceLabel = DaggerfallUI.AddDefaultShadowedTextLabel(new Vector2(41, 14), NativePanel);
             classLabel = DaggerfallUI.AddDefaultShadowedTextLabel(new Vector2(46, 24), NativePanel);
             levelLabel = DaggerfallUI.AddDefaultShadowedTextLabel(new Vector2(45, 34), NativePanel);

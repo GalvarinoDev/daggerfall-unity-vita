@@ -6,9 +6,10 @@
 // The exterior is GPU bound: 25 FPS at the normal clock, 35.6 at the high one. Dungeons/cities are CPU bound (no change).
 // Set through the VitaPower plugin (vita/plugins/vitapower); applied at start, on settings save and after a resume.
 // The fast modes also raise the ARM (CPU) clock 333 → 444 MHz: the Palace/castles and cities are CPU bound (plugin: patched stub NIDs).
-// In game: pause menu dropdown "CPU/GPU speed" toggles normal ↔ fast, dimmer (Advanced Settings is only in the setup wizard).
-// Mode B is offered again: it switches Wi-Fi off, and Wi-Fi may stay off after leaving the
-// game (the Vita sends no suspend event, and a LiveArea close kills the app, so Restore() below may never run).
+// In game: pause menu dropdown "CPU/GPU speed" steps through the modes, and "Frame Rate" toggles the 30 FPS lock
+// (Advanced Settings is only in the setup wizard).
+// Mode B is not offered and never applied: it switches Wi-Fi off, and Wi-Fi stayed off after leaving the game (the Vita sends
+// no suspend event, and a LiveArea close kills the app, so Restore() below may never run). Mode 3 has the same clocks with Wi-Fi on.
 // Leaving the game (suspend, quit) puts the Vita back to mode A at 333 MHz, so other apps get normal power and Wi-Fi; coming back
 // reapplies the setting.
 
@@ -51,8 +52,8 @@ public class VitaPower : MonoBehaviour
     {
 #if !UNITY_EDITOR
         int mode = DaggerfallUnity.Settings.VitaGpuMode;
-        // Test override: UserData/keepwifi.txt runs "Fast, no Wi-Fi" as "Fast" (same clocks, Wi-Fi on), so a test Vita stays reachable
-        if (mode == 1 && System.IO.File.Exists(System.IO.Path.Combine(DaggerfallUnityApplication.PersistentDataPath, "keepwifi.txt")))
+        // Mode B switches Wi-Fi off: run it as "Fast" (same clocks, Wi-Fi on)
+        if (mode == 1)
             mode = 3;
         Debug.LogFormat("VitaPower: GPU mode {0} result {1:x}", mode, VitaPower_SetMode(mode == 3 ? 0 : mode));
         // Modes B/C set the high GPU clock themselves; A gets it by hand for "Fast", and back to normal for "Normal"
@@ -89,7 +90,7 @@ public class VitaPower : MonoBehaviour
         string[] names = DaggerfallWorkshop.Game.TextManager.Instance.GetLocalizedTextList("vitaGpuModes", TextCollections.Internal, false);
         return names != null && mode < names.Length ? names[mode] : ModeNames[mode];
     }
-    public static readonly int[] MenuOrder = { 0, 3, 2, 1 };
+    public static readonly int[] MenuOrder = { 0, 3, 2 };
 
     DaggerfallUI registeredWith;
 
@@ -100,6 +101,18 @@ public class VitaPower : MonoBehaviour
             return;
         registeredWith = DaggerfallUI.Instance;
         registeredWith.RegisterPauseOptionToDropdown("CPU/GPU speed", NextMode);
+        registeredWith.RegisterPauseOptionToDropdown(TextManager.Instance.GetText("GameSettings", "vitaFrameLimit"), NextFrameLimit);
+    }
+
+    // Toggles the 30 FPS lock (SettingsManager.VitaFrameLimit), as the Advanced Settings slider does
+    static void NextFrameLimit()
+    {
+        SettingsManager settings = DaggerfallUnity.Settings;
+        settings.VitaFrameLimit = 1 - settings.VitaFrameLimit;
+        settings.SaveSettings();
+        QualitySettings.vSyncCount = settings.VitaFrameLimit == 1 ? 2 : settings.VSync ? 1 : 0;
+        string[] names = TextManager.Instance.GetLocalizedTextList("vitaFrameLimits");
+        DaggerfallUI.Instance.PopupMessage(string.Format("{0}: {1}", TextManager.Instance.GetText("GameSettings", "vitaFrameLimit"), names[settings.VitaFrameLimit]));
     }
 
     static void NextMode()

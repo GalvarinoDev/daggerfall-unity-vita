@@ -62,6 +62,10 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             exitButton.OnMouseClick += ExitButton_OnMouseClick;
             exitButton.Hotkey = DaggerfallShortcut.GetBinding(DaggerfallShortcut.Buttons.MainMenuExit);
             exitButton.OnKeyboardEvent += ExitButton_OnKeyboardEvent;
+#if UNITY_PSP2
+            // Exiting the process crashed during the system's exit cleanup, so players close the game with the PS button instead
+            exitButton.Enabled = false;
+#endif
         }
 
         public override void Update()

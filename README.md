@@ -10,6 +10,17 @@ This is an alpha, so expect bugs. Back up your saves before updating.
 
 ## Changelog
 
+### v.0.3.1-alpha
+
+Fixes for the translated versions, plus a frame rate option.
+
+- New Frame Rate option in the pause menu: lock the game to 30 FPS for even pacing, or leave it unlocked.
+- Fast is now the default CPU/GPU speed. I removed the "Fast, no Wi-Fi" mode because Wi-Fi could stay off after you left the game. If you had it selected, you now get Fast.
+- Exit in the pause menu now always takes you back to the title screen. To close the game, use the PS button.
+- Translated popups no longer show stray question marks, and long lines stay on screen.
+- Accented letters in the small UI font no longer sit below the line.
+- Spanish: re-lettered menu images, a Spanish title on the race map, and fixes to books, class questions and a few typos.
+
 ### v.0.3.0-alpha
 
 Built-in mods and four more languages.
@@ -195,7 +206,7 @@ Vita-only changes to upstream's files sit behind `#if UNITY_PSP2` with upstream'
 
 - French: [Daneel53](https://www.nexusmods.com/daggerfallunity/users/6838829) ([GitHub](https://github.com/Daneel53)) and Pango, [French Daggerfall](https://www.nexusmods.com/daggerfallunity/mods/456)
 - German: [Deepfighter](https://github.com/deepfighter) and Numenorean, [Daggerfall Deutsch](https://www.nexusmods.com/daggerfallunity/mods/826)
-- Italian: XSpettro101X, with images and movies by Rotary00, [Traduzione Italiana](https://www.nexusmods.com/daggerfallunity/mods/1182)
+- Italian: [XSpettro101X](https://www.nexusmods.com/profile/XSpettro101X?gameId=2927), with images and movies by [Rotary00](https://www.nexusmods.com/profile/Rotary00), [Traduzione Italiana](https://www.nexusmods.com/daggerfallunity/mods/1182)
 - Spanish: [raulpuro](https://forums.dfworkshop.net/memberlist.php?mode=viewprofile&u=1633), with some lines from [NarrodRecandriall](https://github.com/Narrod-Dev)'s [Spanish translation](https://www.nexusmods.com/daggerfallunity/mods/1251)
 
 I'm open to adding more languages if the translators approve. If you made a Daggerfall Unity translation and would like it on the Vita, open an issue here or message me.
