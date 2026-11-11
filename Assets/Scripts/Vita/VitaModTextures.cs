@@ -54,8 +54,9 @@ public static class VitaModTextures
             if (VitaRedguards.Enabled)
                 AddIndex(folder + "Redguards/");    // Redguards of Hammerfell's talk portraits (vita/tools/rghpack.py)
 #if VITA_TRAVELOPTIONS
-            if (DaggerfallWorkshop.DaggerfallUnity.Settings.VitaTravelOptions)
-                AddIndex(folder + "TravelOptions/");    // Travel Options' UI images (asked for as "TOcontrolUI.png")
+            // Travel Options' UI images (asked for as "TOcontrolUI.png"). Always indexed: this list is built once, often before the
+            // Mods window turns the mod on, and its map window fails on a null button when its images can't be found.
+            AddIndex(folder + "TravelOptions/");
 #endif
         }
         return names.TryGetValue(name, out path) ||

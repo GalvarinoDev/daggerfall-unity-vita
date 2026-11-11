@@ -567,7 +567,11 @@ namespace DaggerfallWorkshop.Game.UserInterface
 
             // Create virtual layout area
             totalWidth = width;
+#if UNITY_PSP2
+            totalHeight = font.RowHeight;    // GlyphHeight, plus the Chinese glyph pack's extra rows
+#else
             totalHeight = font.GlyphHeight;
+#endif
             numTextLines = 1;
 
             //
@@ -655,6 +659,35 @@ namespace DaggerfallWorkshop.Game.UserInterface
                 }
                 else
                 {
+#if UNITY_PSP2
+                    // Break before the glyph that overflowed (i): at the nearest space (dropped) or, for Chinese, between two glyphs
+                    // where a line may break (VitaCanBreakBefore); with neither, right before glyph i. Upstream's hard break dropped
+                    // glyph i and measured that row as 0 wide, and Chinese has no spaces, so every one of its lines took that path.
+                    int rowEnd = i, next = i;
+                    if (wrapWords)
+                    {
+                        for (int j = i; j > lastEndOfRowByte; j--)
+                        {
+                            if (codes[j] == DaggerfallFont.SpaceCode) { rowEnd = j; next = j + 1; break; }
+                            if (VitaCanBreakBefore(codes, j)) { rowEnd = j; next = j; break; }
+                        }
+                    }
+                    if (rowEnd == lastEndOfRowByte)
+                        rowEnd = next = i + 1;    // a single glyph wider than maxWidth: give it a row of its own
+                    List<int> vitaRow = new List<int>(codes).GetRange(lastEndOfRowByte, rowEnd - lastEndOfRowByte);
+                    while (vitaRow.Count > 1 && vitaRow[vitaRow.Count - 1] == DaggerfallFont.SpaceCode)
+                        vitaRow.RemoveAt(vitaRow.Count - 1);
+                    width = 0;
+                    for (int k = 0; k < vitaRow.Count; k++)
+                        width += font.GetGlyphWidth(vitaRow[k], LocalScale, spacing);
+                    rows.Add(vitaRow.ToArray());
+                    rowWidth.Add(width);
+                    if (greatestWidthFound < width)
+                        greatestWidthFound = width;
+                    width = 0;
+                    lastEndOfRowByte = next;
+                    i = next - 1;    // the loop's i++ moves on to the first glyph of the next row
+#else
                     int rowLength;
                     if (wrapWords)
                     {
@@ -713,6 +746,7 @@ namespace DaggerfallWorkshop.Game.UserInterface
                     width = 0;
 
                     lastEndOfRowByte = i + 1; // position after space for next line, note: i will be increased on next loop iteration anyway - so no need to increase i
+#endif
                 }
             }
 
@@ -736,7 +770,11 @@ namespace DaggerfallWorkshop.Game.UserInterface
 
             // Create virtual layout area
             totalWidth = maxWidth;
+#if UNITY_PSP2
+            totalHeight = rows.Count * font.RowHeight;
+#else
             totalHeight = (int)(rows.Count * font.GlyphHeight);
+#endif
             numTextLines = rows.Count;
 
             //
@@ -745,7 +783,11 @@ namespace DaggerfallWorkshop.Game.UserInterface
 
             // Second pass adds glyphs to label texture
             float xpos = 0;
+#if UNITY_PSP2
+            float ypos = totalHeight - font.RowHeight;
+#else
             float ypos = totalHeight - font.GlyphHeight;
+#endif
 
             //foreach (byte[] row in rows)
             for (int r = 0; r < rows.Count; r++)
@@ -806,7 +848,11 @@ namespace DaggerfallWorkshop.Game.UserInterface
                     GlyphLayoutData glyphPos = new GlyphLayoutData()
                     {
                         x = xpos,
+#if UNITY_PSP2
+                        y = totalHeight - font.RowHeight - ypos,
+#else
                         y = totalHeight - font.GlyphHeight - ypos,
+#endif
                         code = row[i],
                         width = glyphWidth,
                     };
@@ -814,11 +860,34 @@ namespace DaggerfallWorkshop.Game.UserInterface
                     glyphLayout.Add(glyphPos);
                     xpos += glyphWidth + font.GlyphSpacing;
                 }
+#if UNITY_PSP2
+                ypos -= font.RowHeight;
+#else
                 ypos -= font.GlyphHeight;
+#endif
             }
 
             Size = new Vector2(totalWidth * textScale, totalHeight * textScale);
         }
+
+#if UNITY_PSP2
+        static bool VitaIsCJK(int c)
+        {
+            return (c >= 0x2E80 && c <= 0x9FFF) || (c >= 0xF900 && c <= 0xFAFF) || (c >= 0xFF00 && c <= 0xFFEF);
+        }
+
+        /// <summary>Chinese line breaking: a line may break before codes[j] when either side is a CJK glyph, unless codes[j] is
+        /// punctuation that must not start a line or codes[j - 1] one that must not end it.</summary>
+        static bool VitaCanBreakBefore(int[] codes, int j)
+        {
+            int a = codes[j - 1], b = codes[j];
+            if (!VitaIsCJK(a) && !VitaIsCJK(b))
+                return false;
+            const string noStart = "\u3002\uFF0C\u3001\uFF01\uFF1F\uFF1A\uFF1B\uFF09\u300D\u300F\u300B\u3011\u3009\u2026\u00B7\u2014\u201D\u2019\uFF5E.,!?:;)]}%";
+            const string noEnd = "\uFF08\u300C\u300E\u300A\u3010\u3008\u201C\u2018([{";
+            return noStart.IndexOf((char)b) < 0 && noEnd.IndexOf((char)a) < 0;
+        }
+#endif
 
         #endregion
     }

@@ -131,8 +131,23 @@ namespace DaggerfallWorkshop.Game.UserInterface
 
         public bool IsSDFCapable
         {
+#if UNITY_PSP2
+            // Only the Chinese VPK's glyph pack (VitaCjkFont) fills sdfFontInfo, and its text can't draw without it, whatever the setting
+            get { return sdfFontInfo != null; }
+#else
             get { return (DaggerfallUnity.Settings.SDFFontRendering && sdfFontInfo != null); }
+#endif
         }
+
+#if UNITY_PSP2
+        int vitaRowExtra;
+
+        /// <summary>Line pitch: GlyphHeight plus the extra rows the Chinese glyph pack asks for (0 in other VPKs).</summary>
+        public int RowHeight
+        {
+            get { return glyphHeight + vitaRowExtra; }
+        }
+#endif
 
         public SDFFontInfo SDFInfo
         {
@@ -271,6 +286,10 @@ namespace DaggerfallWorkshop.Game.UserInterface
             Rect targetRect = new Rect(xpos, ypos, glyph.size.x * scalingRatio, glyph.size.y * scalingRatio);
 
             // Draw glyph
+#if UNITY_PSP2
+            // The Chinese glyph pack is a 1-bit atlas, not a distance field: plain alpha (GetMaterial)
+            Graphics.DrawTexture(targetRect, sdfFontInfo.Value.atlasTexture, glyph.rect, 0, 0, 0, 0, color, GetMaterial());
+#else
             if (SystemInfo.operatingSystemFamily == OperatingSystemFamily.MacOSX)
             {
                 DaggerfallUI.Instance.SDFFontMaterial.SetColor(UIShaderParam._Color, color);
@@ -280,6 +299,7 @@ namespace DaggerfallWorkshop.Game.UserInterface
             {
                 Graphics.DrawTexture(targetRect, sdfFontInfo.Value.atlasTexture, glyph.rect, 0, 0, 0, 0, color, DaggerfallUI.Instance.SDFFontMaterial);
             }
+#endif
 
             return GetGlyphWidth(glyph, scale, GlyphSpacing);
         }
@@ -537,7 +557,12 @@ namespace DaggerfallWorkshop.Game.UserInterface
 
         public Material GetMaterial()
         {
+#if UNITY_PSP2
+            // Classic atlases and the Chinese 1-bit glyph pack both draw with plain alpha
+            return DaggerfallUI.Instance.PixelFontMaterial;
+#else
             return (IsSDFCapable) ? DaggerfallUI.Instance.SDFFontMaterial : DaggerfallUI.Instance.PixelFontMaterial;
+#endif
         }
 
         /// <summary>
@@ -568,7 +593,18 @@ namespace DaggerfallWorkshop.Game.UserInterface
 
             return true;
 #else
-            return false; // no TextMeshPro on Vita: classic pixel fonts only
+            // No TextMeshPro on Vita: classic pixel fonts, plus the Chinese VPK's baked glyph pack
+#if !UNITY_EDITOR
+            SDFFontInfo info;
+            int rowExtra;
+            if (VitaCjkFont.Load((int)font, out info, out rowExtra))
+            {
+                sdfFontInfo = info;
+                vitaRowExtra = rowExtra;
+                return true;
+            }
+#endif
+            return false;
 #endif
         }
 

@@ -1253,8 +1253,14 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             if (zoom)
             {
                 results.x = (int)Math.Floor(pos.x / zoomfactor + zoomOffset.x + origin.x);
+#if UNITY_PSP2
+                // Vita adds a 4x zoom step: upstream's row formula is only right at 2x (it leaves pos.y * (1 - 2 / zoomfactor) over),
+                // so at 4x the cursor picked rows below the one it showed. Same result at 2x.
+                results.y = (int)Math.Floor(height - height / zoomfactor + pos.y / zoomfactor - zoomOffset.y + origin.y);
+#else
                 float diffy = height / zoomfactor - pos.y;
                 results.y = (int)Math.Floor(height - pos.y / zoomfactor - zoomOffset.y - diffy + origin.y);
+#endif
             }
             else
             {

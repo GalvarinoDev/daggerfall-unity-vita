@@ -10,6 +10,21 @@ This is an alpha, so expect bugs. Back up your saves before updating.
 
 ## Changelog
 
+### v.0.3.2-alpha
+
+Chinese, two new mods, a new D-pad layout and some fixes.
+
+- Chinese VPK (`DFU-zh.vpk`), translated by Czy2007.
+- Two new mods, both off by default: Dragon Rider (relentlessp0sitivity and Kamer) and Travel Options (Hazelnut). Turn them on from the Mods button on the setup screen. They're heavy on the Vita and can lower the frame rate. See [Dragon Rider controls](#dragon-rider-controls).
+- In the Chinese VPK, Dragon Rider's messages and its quest, The Stolen Egg, are in Chinese. Lines the translator didn't cover stay in English.
+- Long messages at the top of the screen wrap onto a second line instead of running off both edges.
+- D-pad Right opens the travel map, holding it opens the automap, and Down crouches or stands up. Tapping the rear touch pad still crouches too.
+- At the closest travel map zoom, the cursor picks the place it points at, not one a few rows below.
+- With Dynamic Skies on, the pale box around the moons is gone, and distant hills at the horizon are drawn in front of a rising moon again.
+
+<details>
+<summary>Older versions</summary>
+
 ### v.0.3.1-alpha
 
 Fixes for the translated versions, plus a frame rate option.
@@ -31,9 +46,6 @@ Built-in mods and four more languages.
 - Long translated labels shrink to fit their box.
 - Fixed a band of water colour on far hillsides with World of Daggerfall - Terrain on.
 - The Video settings page no longer puts Frame Rate on top of the Close button.
-
-<details>
-<summary>Older versions</summary>
 
 ### v.0.2.0-alpha
 
@@ -57,7 +69,7 @@ Please report bugs in this port here, not to the Daggerfall Unity team.
 
 You need a Vita running HENkaku or Enso with [VitaShell](https://github.com/TheOfficialFloW/VitaShell/releases) installed, and about 2 GB free on `ux0:` for the install. The game and its data take about 1.4 GB once you delete the VPK.
 
-- Download one VPK from the [Releases](https://github.com/GalvarinoDev/daggerfall-unity-vita/releases) page: `DFU-en.vpk` (English), `DFU-fr.vpk` (French), `DFU-de.vpk` (German), `DFU-it.vpk` (Italian) or `DFU-es.vpk` (Spanish). Install it with VitaShell. All five install as the same app, so switching languages keeps your saves and settings.
+- Download one VPK from the [Releases](https://github.com/GalvarinoDev/daggerfall-unity-vita/releases) page: `DFU-en.vpk` (English), `DFU-fr.vpk` (French), `DFU-de.vpk` (German), `DFU-it.vpk` (Italian), `DFU-es.vpk` (Spanish) or `DFU-zh.vpk` (Chinese). Install it with VitaShell. All six install as the same app, so switching languages keeps your saves and settings.
 - Install DOS Daggerfall on your PC. On Steam, the folder you need is `DF/DAGGER/ARENA2` inside the game's install folder.
 - Copy the whole `ARENA2` folder to your Vita, so that you end up with:
 
@@ -78,14 +90,24 @@ The game keeps saves and settings in `ux0:data/DaggerfallUnity/UserData`.
 
 A new game starts with the HUD hidden, so tap Select to bring it up. In a text box, Triangle reopens the system keyboard.
 
+### Dragon Rider controls
+
+- Activate your dragon in Steal or Grab mode to mount it, or in Talk mode to tell it to follow, wait or take a gem. You can also mount and dismount from the transport menu (hold Circle).
+- Triangle climbs and Cross dives.
+- Hold Square to switch between hovering and flying. Tap Square to ready your weapon.
+- L shoots a bolt of your dragon's element, and holding R boosts.
+- Flick the left stick hard to one side to dodge. Flick it twice for a barrel roll.
+
 ## Mods
 
-The Vita can't load PC `.dfmod` files, so each mod is converted for it. Turn them on from the Mods button on the setup screen, before the game loads. Mod text stays in English in every language.
+The Vita can't load PC `.dfmod` files, so each mod is converted for it. Turn them on from the Mods button on the setup screen, before the game loads. Mod text stays in English in every language, except Dragon Rider's in the Chinese VPK.
 
 If a mod breaks on the Vita, it's most likely a mistake I made while converting it. Please report it here, not to the mod's author.
 
+Dragon Rider and Travel Options are heavy on the Vita and can lower the frame rate.
+
 <details>
-<summary>All 21 mods and their authors</summary>
+<summary>All 23 mods and their authors</summary>
 
 | Mod | Version | By | Links |
 |---|---|---|---|
@@ -96,6 +118,7 @@ If a mod breaks on the Vita, it's most likely a mistake I made while converting 
 | DET Harvestable Crops | 1.0.1 | carademono, Ninelan and TheLacus | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/882) |
 | DIEP - Rosy's Resources | 1.1 | AlexanderSig, BenGamey974, PRAEst76 and RosyTheRascal | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/1053) |
 | Distant Terrain of the World of Daggerfall | 3.69 | MaoDeVaca, based on Nystul's [Distant Terrain](https://www.nexusmods.com/daggerfallunity/mods/128) | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/1284) |
+| Dragon Rider | 1.1 | relentlessp0sitivity and Kamer (SquidKamer) | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/1334) |
 | Dynamic Skies | 2.3.4 | BadLuckBurt and carademono | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/376), [GitHub](https://github.com/drcarademono/dynamic-skies) |
 | Finding My Religion | 1.23 | Cliffworms, with statues by King of Worms | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/344) |
 | Fixed Desert Architecture | 1.3.7 | Cliffworms | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/333) |
@@ -103,6 +126,7 @@ If a mod breaks on the Vita, it's most likely a mistake I made while converting 
 | Low Poly Trees | 5 | Kamer (SquidKamer) | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/380) |
 | Redguards of Hammerfell | 0.6 | WilhelmBlack | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/666) |
 | RMB Resource Pack | 0.3.0 | many asset creators, uploaded by Cliffworms and maintained by carademono | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/528), [GitHub](https://github.com/drcarademono/rmb-resource-pack) |
+| Travel Options | 1.11 | Hazelnut | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/122), [GitHub](https://github.com/ajrb/dfunity-mods) |
 | Vanilla Friendly Loading Screens | 1.1 | WilhelmBlack | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/838) |
 | Windmills of Daggerfall | 2.2 | Kamer (SquidKamer) | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/33) |
 | World of Daggerfall | 0.4.0 | World of Daggerfall Team: carademono, Cliffworms, JayH and Kamer, with Location Loader by KABoissonneault and UncannyValley | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/249), [GitHub](https://github.com/drcarademono/world-of-daggerfall), [Location Loader](https://github.com/KABoissonneault/DFU-LocationLoader) |
@@ -190,7 +214,7 @@ vita/tools/render_music.sh
 vita/build.sh && python3 vita/tools/pack_vpk.py
 ```
 
-Vita-only changes to upstream's files sit behind `#if UNITY_PSP2` with upstream's original lines kept beside them, so upstream merges stay readable. `vita/tools/guard_diff.py` helps keep them that way. The built-in mods compile in with `VITA_MODS` (`Assets/csc.rsp`).
+Vita-only changes to upstream's files sit behind `#if UNITY_PSP2` with upstream's original lines kept beside them, so upstream merges stay readable. `vita/tools/guard_diff.py` helps keep them that way. The built-in mods compile in with `VITA_MODS`, plus `VITA_DRAGONRIDER` and `VITA_TRAVELOPTIONS` for those two (`Assets/csc.rsp`).
 
 `vita/bootmusic` is an optional taiHEN plugin that plays the title theme during the engine load. `dfu-vita-converters` holds PC scripts that convert mod data for the port.
 
@@ -198,18 +222,19 @@ Vita-only changes to upstream's files sit behind `#if UNITY_PSP2` with upstream'
 
 ## Credits
 
-- My girlfriend, port was started because she was going to borrow my Vita when she visited her family this Thanksgiving.
+- My girlfriend. I started the port because she was going to borrow my Vita when she visited her family this Thanksgiving.
 - [Interkarma](https://github.com/Interkarma), Daggerfall Workshop and all the Daggerfall Unity contributors for [Daggerfall Unity](https://github.com/Interkarma/daggerfall-unity).
 - Bethesda Softworks for The Elder Scrolls II: Daggerfall.
 
 ### Translations
 
+- Chinese: [Czy2007](https://www.nexusmods.com/daggerfallunity/users/230972787), [Chinese translation](https://www.nexusmods.com/daggerfallunity/mods/1418)
 - French: [Daneel53](https://www.nexusmods.com/daggerfallunity/users/6838829) ([GitHub](https://github.com/Daneel53)) and Pango, [French Daggerfall](https://www.nexusmods.com/daggerfallunity/mods/456)
 - German: [Deepfighter](https://github.com/deepfighter) and Numenorean, [Daggerfall Deutsch](https://www.nexusmods.com/daggerfallunity/mods/826)
 - Italian: [XSpettro101X](https://www.nexusmods.com/profile/XSpettro101X?gameId=2927), with images and movies by [Rotary00](https://www.nexusmods.com/profile/Rotary00), [Traduzione Italiana](https://www.nexusmods.com/daggerfallunity/mods/1182)
 - Spanish: [raulpuro](https://forums.dfworkshop.net/memberlist.php?mode=viewprofile&u=1633), with some lines from [NarrodRecandriall](https://github.com/Narrod-Dev)'s [Spanish translation](https://www.nexusmods.com/daggerfallunity/mods/1251)
 
-I'm open to adding more languages if the translators approve. If you made a Daggerfall Unity translation and would like it on the Vita, open an issue here or message me.
+I'm open to adding more languages if the translators approve. If you made a Daggerfall Unity translation and would like it on the Vita, open an issue here or message me on the Lysandus' Tomb: DFU Fan Server Discord.
 
 ### Mod authors
 
@@ -221,7 +246,7 @@ These authors let their mods come to the Vita. Each mod's own page is linked und
 
 - [AJ](https://github.com/AJ170) and the PS Vita Forever server.
 - [Vwing](https://github.com/Vwing) for ideas from their Android port of Daggerfall Unity.
-- [shoui520](https://github.com/shoui520) for [vita-agent-use](https://github.com/shoui520/vita-agent-use). With it, an AI agent could install each test build on my Vita, launch it, and watch the screen, logs and frame rate while an auto-walk bot ran the character through cities, dungeons and the wilderness at different times of day and in different weather. Runs like that went overnight while I slept and covered hours of play, so they caught crashes, memory problems and slow spots much sooner than I could have by hand, and sped up the port a lot since I got to stress test things even when I couldn't physically do it myself.
+- [shoui520](https://github.com/shoui520) for [vita-agent-use](https://github.com/shoui520/vita-agent-use). I used it to install test builds on my Vita and run an auto-walk bot through them overnight, since the game is about the size of the UK and I can't visit every place myself. That caught a lot of crashes and slow spots.
 
 ## License
 

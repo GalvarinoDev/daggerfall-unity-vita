@@ -56,6 +56,8 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         // held (two fingers) crouch until released
         float vitaCircleDownTime;
         bool vitaCircleHeld;
+        float vitaRightDownTime;
+        bool vitaRightHeld;
         bool vitaRearActive, vitaRearMulti;
         Vector2 vitaRearStart, vitaRearLast;
         float vitaRearStartTime;
@@ -415,6 +417,25 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
                 vitaCircleHeld = false;
                 DaggerfallUI.PostMessage(DaggerfallUIMessages.dfuiOpenInventoryWindow);
             }
+
+            // D-pad Right: tap = travel map, hold = automap. D-pad Down: crouch / stand (crouching sneaks, PlayerSpeedChanger)
+            if (Input.GetKeyDown(KeyCode.JoystickButton9))
+            {
+                vitaRightHeld = true;
+                vitaRightDownTime = Time.unscaledTime;
+            }
+            if (vitaRightHeld && Time.unscaledTime - vitaRightDownTime >= vitaSelectHoldSeconds)
+            {
+                vitaRightHeld = false;
+                DaggerfallUI.PostMessage(DaggerfallUIMessages.dfuiOpenAutomap);
+            }
+            else if (vitaRightHeld && Input.GetKeyUp(KeyCode.JoystickButton9))
+            {
+                vitaRightHeld = false;
+                DaggerfallUI.PostMessage(DaggerfallUIMessages.dfuiOpenTravelMapWindow);
+            }
+            if (Input.GetKeyDown(KeyCode.JoystickButton10))
+                PlayerHeightChanger.VitaRearCrouchPressed = true;
 #endif
 #if UNITY_PSP2 && !UNITY_EDITOR
             UnityEngine.PSVita.PSVitaInput.secondaryTouchIsScreenSpace = true;

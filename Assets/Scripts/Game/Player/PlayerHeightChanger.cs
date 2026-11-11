@@ -123,7 +123,7 @@ namespace DaggerfallWorkshop.Game
         /// Determines what Height-changing action should be taken based on player's input and PlayerMotor.IsRiding
         /// </summary>
 #if UNITY_PSP2
-        // Vita: set by DaggerfallHUD on a tap in the top middle of the rear touch pad (toggles crouch)
+        // Vita: set by DaggerfallHUD on D-pad Down or a tap in the top middle of the rear touch pad (toggles crouch)
         public static bool VitaRearCrouchPressed;
 
 #endif

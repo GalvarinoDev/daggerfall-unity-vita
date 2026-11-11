@@ -116,7 +116,17 @@ namespace DaggerfallWorkshop.Game.UserInterface
                 nextPopDelay = Mathf.Max(nextPopDelay, delayInSeconds);
             // Apply grammar processor before display
             string pgText = GrammarManager.grammarProcessor.ProcessGrammar(text);
+#if UNITY_PSP2
+            // Vita: wrap lines wider than the 320 px HUD (long mod and translated messages ran off both edges), each row centred
+            TextLabel label = DaggerfallUI.AddTextLabel(DaggerfallUI.DefaultFont, Vector2.zero, string.Empty);
+            label.MaxWidth = 300;
+            label.WrapText = true;
+            label.WrapWords = true;
+            label.HorizontalTextAlignment = TextLabel.HorizontalTextAlignmentSetting.Center;
+            label.Text = pgText;
+#else
 			TextLabel label = DaggerfallUI.AddTextLabel(DaggerfallUI.DefaultFont, Vector2.zero, pgText);
+#endif
             label.HorizontalAlignment = HorizontalAlignment.Center;
             label.Parent = Parent;
             textRows.AddLast(label);

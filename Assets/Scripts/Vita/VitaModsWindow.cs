@@ -83,12 +83,12 @@ public class VitaModsWindow : DaggerfallPopupWindow
                 get = () => s.VitaRedguards, set = v => s.VitaRedguards = v },
 #if VITA_DRAGONRIDER
             new Entry { title = "Dragon Rider", author = "relentlessp0sitivity & SquidKamer", version = "1.1",
-                description = "Hatch a dragon from an egg (Akatosh Chantry quest, or a rare find on alchemists' shelves) and fly it. On the dragon: left stick speed/turn, right stick steers, hold Square hover/flight, Triangle up, Cross down, hold R boost, L fire, hold Circle to dismount.",
+                description = "Heavy on the Vita: can lower the frame rate. Hatch a dragon from an egg (Akatosh Chantry quest, or a rare find on alchemists' shelves) and fly it. On the dragon: left stick speed/turn, right stick steers, hold Square hover/flight, Triangle up, Cross down, hold R boost, L fire, hold Circle to dismount.",
                 get = () => s.VitaDragonRider, set = v => s.VitaDragonRider = v },
 #endif
 #if VITA_TRAVELOPTIONS
             new Entry { title = "Travel Options", author = "Hazelnut", version = "1.11",
-                description = "Travel in real time with sped-up time instead of fast travel (\"Cautiously\" on the travel map), follow roads (Start menu: Follow Road), ship travel from ports. The speed drops to 1x while new land is still loading.",
+                description = "Heavy on the Vita: can lower the frame rate. Travel in real time with sped-up time instead of fast travel (\"Cautiously\" on the travel map), follow roads (Start menu: Follow Road), ship travel from ports. The speed drops to 1x while new land is still loading.",
                 get = () => s.VitaTravelOptions, set = v => s.VitaTravelOptions = v },
 #endif
             new Entry { title = "World of Daggerfall", row = "World of Daggerfall", author = "World of Daggerfall Team", version = "0.4.0 (no rocks yet)",

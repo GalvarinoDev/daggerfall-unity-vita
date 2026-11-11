@@ -162,7 +162,11 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
                     break;
                 }
 
+#if UNITY_PSP2
+                y += currentFont.RowHeight + extraLeading;    // Chinese rows are taller
+#else
                 y += currentFont.GlyphHeight + extraLeading;
+#endif
             }
         }
 
