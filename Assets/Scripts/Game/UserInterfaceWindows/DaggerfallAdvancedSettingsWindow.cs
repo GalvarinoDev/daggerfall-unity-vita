@@ -789,7 +789,11 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         private HorizontalSlider AddSlider(Panel panel, string key, Action<HorizontalSlider> setIndicator)
         {
             AddLabel(panel, key);
+#if UNITY_PSP2
+            y += 6 + (DaggerfallUI.DefaultFont.RowHeight - DaggerfallUI.DefaultFont.GlyphHeight) * itemTextScale;    // taller Chinese rows
+#else
             y += 6;
+#endif
             HorizontalSlider slider = DaggerfallUI.AddSlider(new Vector2(0, y), setIndicator, itemTextScale, panel);
 
             y += itemSpacing;

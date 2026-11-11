@@ -158,7 +158,11 @@ namespace DaggerfallWorkshop.Game.UserInterface
             // Set tooltip size
             Size = new Vector2(
                 (widestRow + LeftMargin + RightMargin) * textScale,
+#if UNITY_PSP2
+                (font.RowHeight * textScale) * textRows.Length + TopMargin + BottomMargin - 1);    // Chinese rows are taller
+#else
                 (font.GlyphHeight * textScale) * textRows.Length + TopMargin + BottomMargin - 1);
+#endif
 
             // Set tooltip position
             Position = Parent.ScaledMousePosition + MouseOffset;
@@ -213,7 +217,11 @@ namespace DaggerfallWorkshop.Game.UserInterface
                 for (int i = 0; i < textRows.Length; i++)
                 {
                     font.DrawText(GrammarManager.grammarProcessor.ProcessGrammar(textRows[i]), textPos, LocalScale, textColor);
+#if UNITY_PSP2
+                    textPos.y += font.RowHeight * LocalScale.y;
+#else
                     textPos.y += font.GlyphHeight * LocalScale.y;
+#endif
                 }
 
                 // Lower flag

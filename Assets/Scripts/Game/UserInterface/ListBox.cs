@@ -191,8 +191,24 @@ namespace DaggerfallWorkshop.Game.UserInterface
         public int RowsDisplayed
         {
             get { return rowsDisplayed; }
+#if UNITY_PSP2
+            set { rowsDisplayed = VitaRowsFit(value); }
+#else
             set { rowsDisplayed = value; }
+#endif
         }
+
+#if UNITY_PSP2
+        // Callers size their lists in classic rows. Chinese rows are taller (DaggerfallFont.RowHeight), so the same box holds
+        // fewer of them; without this the extra rows drew below the box.
+        int VitaRowsFit(int rows)
+        {
+            DaggerfallFont f = font ?? DaggerfallUI.DefaultFont;    // items set the font later; most lists use the default
+            if (f == null || f.RowHeight <= f.GlyphHeight)
+                return rows;
+            return Mathf.Max(1, rows * (f.GlyphHeight + rowSpacing) / (f.RowHeight + rowSpacing));
+        }
+#endif
 
         public int RowSpacing
         {
@@ -435,7 +451,11 @@ namespace DaggerfallWorkshop.Game.UserInterface
             highlightedIndex = -1;
             if (verticalScrollMode == VerticalScrollModes.EntryWise)
             {
+#if UNITY_PSP2
+                int row = (y / ((int)(font.RowHeight * Scale.y) + rowSpacing));
+#else
                 int row = (y / ((int)(font.GlyphHeight * Scale.y) + rowSpacing));
+#endif
                 int index = scrollIndex + row;
                 if (index >= 0 && index < Count)
                 {
@@ -477,7 +497,11 @@ namespace DaggerfallWorkshop.Game.UserInterface
 
             if (verticalScrollMode == VerticalScrollModes.EntryWise)
             {
+#if UNITY_PSP2
+                int row = (int)(clickPosition.y / ((int)(font.RowHeight * Scale.y) + rowSpacing));
+#else
                 int row = (int)(clickPosition.y / ((int)(font.GlyphHeight * Scale.y) + rowSpacing));
+#endif
                 int index = scrollIndex + row;
                 if (index >= 0 && index < Count && listItems[index].Enabled)
                 {
@@ -820,7 +844,11 @@ namespace DaggerfallWorkshop.Game.UserInterface
             if (Count == 0)
                 return;
 
+#if UNITY_PSP2
+            rowsDisplayed = (int)(Size.y / (int)(font.RowHeight * Scale.y)) - 1;
+#else
             rowsDisplayed = (int)(Size.y / (int)(font.GlyphHeight * Scale.y)) - 1;
+#endif
         }
 
         public int FindIndex(string text)

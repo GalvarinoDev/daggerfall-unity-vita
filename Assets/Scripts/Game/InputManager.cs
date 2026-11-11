@@ -460,7 +460,7 @@ namespace DaggerfallWorkshop.Game
                 if (HasKeyBindsSave())
                     LoadKeyBinds();
 #if UNITY_PSP2
-                // Select and Circle are DaggerfallHUD's now (tap/hold): drop Select -> CastSpell, Circle -> Inventory saved by older builds
+                // Select, Circle and D-pad Right/Down are DaggerfallHUD's now (tap/hold): drop their old bindings saved by older builds
                 foreach (var dict in new[] { actionKeyDict, secondaryActionKeyDict })
                 {
                     Actions saved;
@@ -468,6 +468,11 @@ namespace DaggerfallWorkshop.Game
                         dict.Remove(KeyCode.JoystickButton6);
                     if (dict.TryGetValue(KeyCode.JoystickButton1, out saved) && saved == Actions.Inventory)
                         dict.Remove(KeyCode.JoystickButton1);
+                    // D-pad Right and Down are DaggerfallHUD's too (Right tap/hold = travel map/automap, Down = crouch)
+                    if (dict.TryGetValue(KeyCode.JoystickButton9, out saved) && saved == Actions.TravelMap)
+                        dict.Remove(KeyCode.JoystickButton9);
+                    if (dict.TryGetValue(KeyCode.JoystickButton10, out saved) && saved == Actions.AutoMap)
+                        dict.Remove(KeyCode.JoystickButton10);
                 }
 #endif
 
@@ -1116,8 +1121,8 @@ namespace DaggerfallWorkshop.Game
             // Select (JoystickButton6): DaggerfallHUD's, tap = HUD mode, hold = spellbook (bound to CastSpell, the spellbook would close on release)
             setBinding(KeyCode.JoystickButton7, Actions.Escape, false);                 // Start
             setBinding(KeyCode.JoystickButton8, Actions.RecastSpell, false);            // D-pad up
-            setBinding(KeyCode.JoystickButton9, Actions.TravelMap, false);              // D-pad right
-            setBinding(KeyCode.JoystickButton10, Actions.AutoMap, false);               // D-pad down
+            // D-pad right (JoystickButton9): DaggerfallHUD's, tap = travel map, hold = automap
+            // D-pad down (JoystickButton10): DaggerfallHUD's, crouch / stand
             setBinding(KeyCode.JoystickButton11, Actions.LogBook, false);               // D-pad left
 #endif
 
