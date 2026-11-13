@@ -104,6 +104,8 @@ The Vita can't load PC `.dfmod` files, so each mod is converted for it. Turn the
 
 If a mod breaks on the Vita, it's most likely a mistake I made while converting it. Please report it here, not to the mod's author.
 
+I repackage each mod for the Vita and ship it only inside this port's releases, as an optional mod. Textures go into Daggerfall's 256-colour palette or the Vita's own texture formats and then into atlases, and models, maps and other data get baked into the port's own packs. I never share the mods' original files. Their authors keep all rights to their work and gave permission for this port only (see License).
+
 Dragon Rider and Travel Options are heavy on the Vita and can lower the frame rate.
 
 <details>
@@ -214,9 +216,9 @@ vita/tools/render_music.sh
 vita/build.sh && python3 vita/tools/pack_vpk.py
 ```
 
-Vita-only changes to upstream's files sit behind `#if UNITY_PSP2` with upstream's original lines kept beside them, so upstream merges stay readable. `vita/tools/guard_diff.py` helps keep them that way. The built-in mods compile in with `VITA_MODS`, plus `VITA_DRAGONRIDER` and `VITA_TRAVELOPTIONS` for those two (`Assets/csc.rsp`).
+Vita-only changes to upstream's files sit behind `#if UNITY_PSP2` with upstream's original lines kept beside them, so upstream merges stay readable. `vita/tools/guard_diff.py` helps keep them that way. Neither the mods' converted data nor their code is in this repository; they're only in the VPK releases. Before building, take `VITA_MODS`, `VITA_DRAGONRIDER` and `VITA_TRAVELOPTIONS` out of `Assets/csc.rsp`. I haven't tested a build without them yet.
 
-`vita/bootmusic` is an optional taiHEN plugin that plays the title theme during the engine load. `dfu-vita-converters` holds PC scripts that convert mod data for the port.
+`vita/bootmusic` is an optional taiHEN plugin that plays the title theme during the engine load.
 
 </details>
 
@@ -250,4 +252,6 @@ These authors let their mods come to the Vita. Each mod's own page is linked und
 
 ## License
 
-MIT, the same as upstream Daggerfall Unity. See [LICENSE](./LICENSE). The game's data is not covered by this license and is not included in this repository.
+The port's code is MIT, the same as upstream Daggerfall Unity. See [LICENSE](./LICENSE).
+
+The license covers the code only. It doesn't cover the game's data or the mods, converted or not, and neither is in this repository. The mods belong to their authors, who gave permission for this port only, so anyone who wants to use them in a fork or anywhere else has to ask the authors first.
