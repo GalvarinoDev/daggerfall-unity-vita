@@ -106,9 +106,22 @@ namespace DaggerfallWorkshop
                 Destroy(terrainMaterial);
             Terrain terrain = GetComponent<Terrain>();
             if (terrain && terrain.terrainData)
-                Destroy(terrain.terrainData);
+            {
+                // Fast travel and dungeon entry destroy every terrain, and the next world makes new TerrainData for each
+                // (67-72 ms per new tile in play): keep a few for reuse. Same resolution every time.
+                if (!VitaTerrainDataPoolOff && vitaTerrainDataPool.Count < VitaTerrainDataPoolMax)
+                    vitaTerrainDataPool.Push(terrain.terrainData);
+                else
+                    Destroy(terrain.terrainData);
+            }
 #endif
         }
+
+#if UNITY_PSP2
+        public static bool VitaTerrainDataPoolOff;      // test harness A/B: new TerrainData per terrain, as upstream
+        const int VitaTerrainDataPoolMax = 9;
+        static readonly Stack<TerrainData> vitaTerrainDataPool = new Stack<TerrainData>();
+#endif
 
         /// <summary>
         /// This must be called when first creating terrain or before updating terrain.
@@ -220,6 +233,24 @@ namespace DaggerfallWorkshop
         /// <param name="terrainTexturing">Instance of ITerrainTexturing implementation class to use.</param>
         public void CompleteMapPixelDataUpdate(ITerrainTexturing terrainTexturing = null)
         {
+#if UNITY_PSP2
+            // Vita: the same copies by row and column from the stand-in arrays' storage: Row/Col are an integer % and / per sample (no
+            // hardware divide), and with the indexer calls the two loops were ~85-160 ms of one in-play frame per new tile
+            MapData.heightmapSamples = new float[heightmapDim, heightmapDim];
+            float[] vitaHeights = MapData.heightmapData.VitaArray;
+            for (int col = 0, i = 0; col < heightmapDim; col++)
+                for (int row = 0; row < heightmapDim; row++, i++)
+                    MapData.heightmapSamples[row, col] = vitaHeights[i];
+
+            MapData.tilemapSamples = new byte[tilemapDim, tilemapDim];
+            byte[] vitaTiles = MapData.tilemapData.VitaArray;
+            for (int col = 0, i = 0; col < tilemapDim; col++)
+                for (int row = 0; row < tilemapDim; row++, i++)
+                {
+                    byte tile = vitaTiles[i];
+                    MapData.tilemapSamples[row, col] = tile == byte.MaxValue ? (byte)0 : tile;
+                }
+#else
             // Convert heightmap data back to standard managed 2d array.
             MapData.heightmapSamples = new float[heightmapDim, heightmapDim];
             for (int i = 0; i < MapData.heightmapData.Length; i++)
@@ -235,6 +266,7 @@ namespace DaggerfallWorkshop
                     tile = 0;
                 MapData.tilemapSamples[JobA.Row(i, tilemapDim), JobA.Col(i, tilemapDim)] = tile;
             }
+#endif
 
             // Create tileMap array or resize if needed and copy native array.
             if (TileMap == null || TileMap.Length != MapData.tileMap.Length)
@@ -285,6 +317,22 @@ namespace DaggerfallWorkshop
 
             // Ensure TerrainData is created
             Terrain terrain = GetComponent<Terrain>();
+#if UNITY_PSP2
+            long vitaL0 = System.Diagnostics.Stopwatch.GetTimestamp();   // TEMPORARY 2026-11-20 promote laps (bot word "leadlog")
+            while (terrain.terrainData == null && vitaTerrainDataPool.Count > 0)
+            {
+                TerrainData pooled = vitaTerrainDataPool.Pop();
+                if (pooled && pooled.heightmapResolution == heightmapDimension)
+                {
+                    terrain.terrainData = pooled;
+                    terrain.GetComponent<TerrainCollider>().terrainData = pooled;
+                    terrain.basemapDistance = basemapDistance;
+                    terrain.heightmapPixelError = heightMapPixelError;
+                }
+                else if (pooled)
+                    Destroy(pooled);
+            }
+#endif
             if (terrain.terrainData == null)
             {
                 // Calculate width and length of terrain in world units
@@ -296,7 +344,12 @@ namespace DaggerfallWorkshop
                 terrainData.name = "TerrainData";
                 terrainData.heightmapResolution = heightmapDimension;
                 terrainData.size = new Vector3(terrainSize, dfUnity.TerrainSampler.MaxTerrainHeight, terrainSize);
+#if UNITY_PSP2
+                // No grass/detail layers on the Vita (nothing calls SetDetailLayer): smallest detail map
+                terrainData.SetDetailResolution(resolutionPerPatch, resolutionPerPatch);
+#else
                 terrainData.SetDetailResolution(detailResolution, resolutionPerPatch);
+#endif
 #if UNITY_PSP2
                 // The Vita terrain draws with its own tilemap material (materialType Custom below) and pushes the basemap 10 km away,
                 // so the splat map and basemap are never shown: the smallest sizes Unity allows. 129 each cost 46 ms per new terrain
@@ -315,10 +368,16 @@ namespace DaggerfallWorkshop
                 terrain.heightmapPixelError = heightMapPixelError;
             }
 
+#if UNITY_PSP2
+            long vitaL1 = System.Diagnostics.Stopwatch.GetTimestamp();
+#endif
             // Promote tileMap
             tileMapTexture.SetPixels32(TileMap);
             tileMapTexture.Apply(false);
 
+#if UNITY_PSP2
+            long vitaL2 = System.Diagnostics.Stopwatch.GetTimestamp();
+#endif
             // Promote material
             var terrainMaterialData = new TerrainMaterialData(terrainMaterial, terrain.terrainData, tileMapTexture, currentWorldClimate);
             dfUnity.TerrainMaterialProvider.PromoteMaterial(this, terrainMaterialData);
@@ -331,13 +390,69 @@ namespace DaggerfallWorkshop
             terrain.materialTemplate = terrainMaterial;
 
             // Promote heights
+#if UNITY_PSP2
+            long vitaL3 = System.Diagnostics.Stopwatch.GetTimestamp();
+#endif
             Vector3 size = terrain.terrainData.size;
+#if UNITY_PSP2
+            // Setting the size costs ~4 ms on every promote even when it doesn't change (pooled TerrainData keeps it)
+            Vector3 vitaSize = new Vector3(size.x, dfUnity.TerrainSampler.MaxTerrainHeight * TerrainScale, size.z);
+            if (vitaSize != size)
+                terrain.terrainData.size = vitaSize;
+#else
             terrain.terrainData.size = new Vector3(size.x, dfUnity.TerrainSampler.MaxTerrainHeight * TerrainScale, size.z);
+#endif
+#if UNITY_PSP2
+            long vitaL4 = System.Diagnostics.Stopwatch.GetTimestamp();
+            // Tiles built in play: the heights now, Unity's LOD/patch bounds on the next frame (StreamingWorld calls
+            // ApplyDelayedHeightmapModification before it shows the tile). SetHeights did both in one ~45 ms step.
+            // VitaHeightStrips > 1 (test): StreamingWorld sets the heights in row strips on frames of their own instead.
+            VitaHeightsPending = false;
+            if (StreamingWorld.VitaSpreadPromote && !StreamingWorld.VitaDelayLodOff && VitaHeightStrips > 1)
+                VitaHeightsPending = true;
+            else if (StreamingWorld.VitaSpreadPromote && !StreamingWorld.VitaDelayLodOff)
+                terrain.terrainData.SetHeightsDelayLOD(0, 0, MapData.heightmapSamples);
+            else
+                terrain.terrainData.SetHeights(0, 0, MapData.heightmapSamples);
+#else
             terrain.terrainData.SetHeights(0, 0, MapData.heightmapSamples);
+#endif
 
+#if UNITY_PSP2
+            long vitaL5 = System.Diagnostics.Stopwatch.GetTimestamp();
+#endif
             // Raise event
             RaiseOnPromoteTerrainDataEvent(terrain.terrainData);
+#if UNITY_PSP2
+            if (MaterialReader.VitaProbeLog && StreamingWorld.VitaSpreadPromote)
+            {
+                long vitaL6 = System.Diagnostics.Stopwatch.GetTimestamp();
+                double f = 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+                Debug.LogFormat("VITAPROMOTELAPS {0},{1}: data {2:F1}, tilemap {3:F1}, material {4:F1}, size {5:F1} (y {6} -> {7}), heights {8:F1}, event {9:F1} ms",
+                    MapPixelX, MapPixelY, (vitaL1 - vitaL0) * f, (vitaL2 - vitaL1) * f, (vitaL3 - vitaL2) * f, (vitaL4 - vitaL3) * f, size.y,
+                    terrain.terrainData.size.y, (vitaL5 - vitaL4) * f, (vitaL6 - vitaL5) * f);
+            }
+#endif
         }
+
+#if UNITY_PSP2
+        // TEMPORARY 2026-11-20 test (bot word "heightstrips=N"): in-play promote heights in N row strips, one per frame
+        public static int VitaHeightStrips = 1;
+        [NonSerialized] public bool VitaHeightsPending;
+        static float[,] vitaStrip;
+
+        public void VitaSetHeightStrip(int k, int n)
+        {
+            float[,] all = MapData.heightmapSamples;
+            int dim = all.GetLength(0), y0 = dim * k / n, y1 = dim * (k + 1) / n;
+            if (vitaStrip == null || vitaStrip.GetLength(0) != y1 - y0 || vitaStrip.GetLength(1) != dim)
+                vitaStrip = new float[y1 - y0, dim];
+            for (int y = y0; y < y1; y++)
+                for (int x = 0; x < dim; x++)
+                    vitaStrip[y - y0, x] = all[y, x];
+            GetComponent<Terrain>().terrainData.SetHeightsDelayLOD(0, y0, vitaStrip);
+        }
+#endif
 
         /// <summary>
         /// Updates neighbour terrains.

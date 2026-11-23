@@ -2,7 +2,8 @@
 // ~60 s Unity engine load. It streams ux0:data/DaggerfallUnity/bootmusic.raw (48 kHz stereo s16le, rendered by render.sh at the
 // default MusicVolume 0.5) on its own audio port, scaled by settings.ini's MusicVolume, and fades out when the game creates
 // UserData/bootmusic.stop (VitaBootMusic.cs: first video or the setup wizard), then removes the flag and ends its thread.
-// Start times go to TTY and UserData/bootmusic.log.
+// Start times go to TTY and UserData/bootmusic.log. Silent when UserData/relaunch.marker exists: a memory relaunch (VitaRelaunch.cs) goes
+// straight back to a loading screen, like any other load.
 #include <psp2/audioout.h>
 #include <psp2/io/fcntl.h>
 #include <psp2/io/stat.h>
@@ -17,6 +18,7 @@
 #define STOP_FLAG DIR "UserData/bootmusic.stop"
 #define SETTINGS DIR "UserData/settings.ini"
 #define LOG DIR "UserData/bootmusic.log"
+#define RELAUNCH_MARKER DIR "UserData/relaunch.marker"
 
 // 85 ms per output call: the hardware queues about two, so the thread may run ~85 ms late before a gap. With 21 ms grains it
 // crackled all through the engine load even with the data in memory: Unity's start-up threads keep the CPU.
@@ -213,6 +215,11 @@ int module_start(SceSize args, void *argp)
     LOGF("DFUBOOT module_start process_us=%llu system_us=%llu\n",
         (unsigned long long)sceKernelGetProcessTimeWide(), (unsigned long long)sceKernelGetSystemTimeWide());
     sceIoRemove(STOP_FLAG);   // left over from a crash or a quit before the first video
+    if (exists(RELAUNCH_MARKER))
+    {
+        LOGF("DFUBOOT relaunch: no music\n");
+        return SCE_KERNEL_START_SUCCESS;
+    }
     // Audio: highest user priority band, which must be pinned to one core (64-127)
     SceUID thread = sceKernelCreateThread("DFUBootMusic", music_thread, 64, 0x4000, 0, SCE_KERNEL_CPU_MASK_USER_2, NULL);
     if (thread >= 0)

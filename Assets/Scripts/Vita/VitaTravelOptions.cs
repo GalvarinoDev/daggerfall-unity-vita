@@ -7,7 +7,7 @@
 // from Resources/VitaModTextures/TravelOptions. Travel speed is capped and held at 1x while the world builds tiles
 // (TravelOptionsMod.VitaLimitTimeScale). settings.ini [Video] VitaTravelOptions (on unless "False"), read at start: applies from the next launch.
 
-#if UNITY_PSP2
+#if UNITY_PSP2 && VITA_TRAVELOPTIONS     // the mod's code ships only in the VPK
 using UnityEngine;
 using DaggerfallWorkshop;
 using DaggerfallWorkshop.Game;

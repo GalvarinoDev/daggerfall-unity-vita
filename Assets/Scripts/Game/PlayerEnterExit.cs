@@ -324,6 +324,9 @@ namespace DaggerfallWorkshop.Game
 
         void Update()
         {            
+#if UNITY_PSP2
+            VitaInteriorFallRescue();
+#endif
             // Track which dungeon block player is inside of
             if (dungeon && isPlayerInsideDungeon)
             {
@@ -732,6 +735,14 @@ namespace DaggerfallWorkshop.Game
             GameObject newInterior = new GameObject(DaggerfallInterior.GetSceneName(playerGPS.CurrentLocation, door));
             newInterior.hideFlags = defaultHideFlags;
             interior = newInterior.AddComponent<DaggerfallInterior>();
+#if UNITY_PSP2
+            // Faded entries: the screen is already black, so the layout runs one step per frame (VitaLayoutInteriorFrames)
+            if (doFade && !VitaInteriorFramesOff)
+            {
+                StartCoroutine(VitaLayoutInteriorFrames(doorOwner, door, climateBase, newInterior, start));
+                return;
+            }
+#endif
 
             // Try to layout interior
             // If we fail for any reason, use that old chestnut "this house has nothing of value"
@@ -747,6 +758,14 @@ namespace DaggerfallWorkshop.Game
                 RaiseOnFailedTransition(TransitionType.ToBuildingInterior);
                 return;
             }
+#if UNITY_PSP2
+            VitaFinishTransitionInterior(doorOwner, door, doFade, start, newInterior);
+        }
+
+        // The rest of TransitionInterior after the layout (upstream lines, unchanged)
+        void VitaFinishTransitionInterior(Transform doorOwner, StaticDoor door, bool doFade, bool start, GameObject newInterior)
+        {
+#endif
 
             // Position interior directly inside of exterior
             // This helps with finding closest enter/exit point relative to player position
@@ -782,6 +801,12 @@ namespace DaggerfallWorkshop.Game
                     return;
                 }
             }
+
+#if UNITY_PSP2
+            // A mod interior can hold a door that faces out of the room (Beautiful Villages placed house model 212's own shell inside
+            // TEMPASE0 building 6), and the landing above is then outside the floor: the player starts in a wall and falls (2026-11-15)
+            landingPosition = VitaCheckLanding(landingPosition, foundDoorNormal, checkPosition);
+#endif
 
             // Enumerate all exterior doors belonging to this building
             DaggerfallStaticDoors exteriorStaticDoors = interior.ExteriorDoors;
@@ -827,8 +852,106 @@ namespace DaggerfallWorkshop.Game
 
             // Fade in from black
             if (doFade)
+#if UNITY_PSP2
+            {
+                vitaDoorBlack = false;
+                DaggerfallUI.Instance.FadeBehaviour.FadeHUDFromBlack(0.4f);
+            }
+#else
                 DaggerfallUI.Instance.FadeBehaviour.FadeHUDFromBlack();
+#endif
         }
+
+#if UNITY_PSP2
+        // Building doors on the Vita fade to black over 0.3 s before the transition's heavy frames. The fade advances 0.02 s a frame
+        // (FadeBehaviour), so at low FPS it takes longer. Door activation is ignored meanwhile (PlayerActivate).
+        float vitaDoorFadeStart = -10f;
+        public bool VitaDoorFading { get { return Time.unscaledTime - vitaDoorFadeStart < 2f; } }   // expires: a stopped coroutine can't lock doors
+
+        public IEnumerator VitaDoorFadeOut()
+        {
+            vitaDoorFadeStart = Time.unscaledTime;
+            FadeBehaviour fade = DaggerfallUI.Instance.FadeBehaviour;
+            fade.FadeHUDToBlack(0.3f);
+            while (fade.FadeInProgress)     // a window pushed meanwhile clears the fade: go on at once
+                yield return null;
+            fade.SmashHUDToBlack();
+            vitaDoorBlack = true;
+            yield return new WaitForEndOfFrame();
+            vitaDoorFadeStart = -10f;
+        }
+
+        // Black from VitaDoorFadeOut until the entry fades in. A failed entry ("this house has nothing of value", no interior door) has no
+        // fade-in of its own, so RaiseOnFailedTransition fades in when this is set
+        bool vitaDoorBlack;
+
+        // Building interior layout one step per frame behind the black screen (models | flats | people + doors | flat merge): the whole
+        // layout was one 1.7-3.8 s frame. Doors stay ignored meanwhile (VitaDoorFading). VitaInteriorFramesOff = test harness A/B.
+        public static bool VitaInteriorFramesOff;
+        public static bool VitaAutomapPrebuildOff;      // test harness A/B: the automap copy back in the entry event
+
+        IEnumerator VitaLayoutInteriorFrames(Transform doorOwner, StaticDoor door, ClimateBases climateBase, GameObject newInterior, bool start)
+        {
+            DaggerfallInterior building = interior;
+            IEnumerator steps = building.VitaDoLayout(doorOwner, door, climateBase, buildingDiscoveryData);
+            while (true)
+            {
+                vitaDoorFadeStart = Time.unscaledTime;
+                bool more, failed = false;
+                try { more = steps.MoveNext(); }
+                catch (Exception e)
+                {
+                    DaggerfallUI.AddHUDText(TextManager.Instance.GetLocalizedText("thisHouseHasNothingOfValue"));
+                    Debug.LogException(e);
+                    more = false;
+                    failed = true;
+                }
+                if (failed || !building || interior != building)
+                {
+                    // Failed, or something else replaced or destroyed the interior meanwhile (a load): drop it like upstream's failure
+                    vitaDoorFadeStart = -10f;
+                    if (newInterior)
+                        Destroy(newInterior);
+                    if (failed)
+                        RaiseOnFailedTransition(TransitionType.ToBuildingInterior);
+                    yield break;
+                }
+                if (!more)
+                    break;
+                yield return null;
+            }
+
+            // The automap's copy of the building in a frame of its own (the entry event adopts it)
+            Automap automap = GameManager.Instance.InteriorAutomap;
+            if (automap && !VitaAutomapPrebuildOff)
+            {
+                IEnumerator map = automap.VitaPrebuildInterior(door);
+                bool more = true;
+                while (more)
+                {
+                    try { more = map.MoveNext(); }
+                    catch (Exception e)
+                    {
+                        // The entry event builds the copy as upstream does
+                        Debug.LogException(e);
+                        automap.VitaDropPrebuilt();
+                        more = false;
+                    }
+                    vitaDoorFadeStart = Time.unscaledTime;
+                    yield return null;
+                    if (!building || interior != building)
+                    {
+                        vitaDoorFadeStart = -10f;
+                        if (newInterior)
+                            Destroy(newInterior);
+                        yield break;
+                    }
+                }
+            }
+            vitaDoorFadeStart = -10f;
+            VitaFinishTransitionInterior(doorOwner, door, true, start, newInterior);
+        }
+#endif
 
         /// <summary>
         /// Transition player through an interior door to building exterior. Player must be inside.
@@ -853,16 +976,25 @@ namespace DaggerfallWorkshop.Game
 
         private IEnumerator FadedTransitionExterior()
         {
+#if UNITY_PSP2
+            // Vita: a short fade to black instead of the cut, the same total time (0.3 s out, 0.4 s in)
+            yield return StartCoroutine(VitaDoorFadeOut());
+#else
             // Smash to black
             DaggerfallUI.Instance.FadeBehaviour.SmashHUDToBlack();
             yield return new WaitForEndOfFrame();
+#endif
 
             // Perform transition
             BuildingTransitionExteriorLogic();
 
             // Increase fade time if outside world not ready
             // This indicates a first-time transition on fresh load
+#if UNITY_PSP2
+            float fadeTime = 0.4f;
+#else
             float fadeTime = 0.7f;
+#endif
             if (!GameManager.Instance.StreamingWorld.IsInit)
                 fadeTime = 1.5f;
 
@@ -942,9 +1074,24 @@ namespace DaggerfallWorkshop.Game
 
             // Layout dungeon
             GameObject newDungeon;
+#if UNITY_PSP2
+            if (vitaPrebuiltDungeon)
+            {
+                dungeon = vitaPrebuiltDungeon;
+                newDungeon = dungeon.gameObject;
+            }
+            else
+            {
+                dungeon = GameObjectHelper.CreateDaggerfallDungeonGameObject(location, DungeonParent.transform, out newDungeon);
+                dungeon.SetDungeon(location);
+                newDungeon.hideFlags = defaultHideFlags;
+            }
+            vitaPrebuiltDungeon = null;
+#else
             dungeon = GameObjectHelper.CreateDaggerfallDungeonGameObject(location, DungeonParent.transform, out newDungeon);
             dungeon.SetDungeon(location);
             newDungeon.hideFlags = defaultHideFlags;
+#endif
 
             // Find start marker to position player
             if (!dungeon.StartMarker)
@@ -1072,6 +1219,9 @@ namespace DaggerfallWorkshop.Game
                 if (interior) Destroy(interior.gameObject);
             }
 
+#if UNITY_PSP2
+            VitaExteriorKeep.Release();     // the exterior kept for a building interior goes back to upstream's state first
+#endif
             if (ExteriorParent != null) ExteriorParent.SetActive(false);
             if (InteriorParent != null) InteriorParent.SetActive(false);
             if (DungeonParent != null) DungeonParent.SetActive(false);
@@ -1088,8 +1238,23 @@ namespace DaggerfallWorkshop.Game
                 if (interior) Destroy(interior.gameObject);
                 SetExteriorDoors(null);
             }
+#if UNITY_PSP2
+            if (VitaExteriorKeep.Active)
+            {
+                // Out of a building: the town's colliders were kept cooked (VitaExteriorKeep), so put it back instead of activating it
+                if (InteriorParent != null) InteriorParent.SetActive(false);
+                if (DungeonParent != null) DungeonParent.SetActive(false);
+                VitaExteriorKeep.Restore();
+            }
+            else
+            {
+                DisableAllParents(false);
+                if (ExteriorParent != null) ExteriorParent.SetActive(true);
+            }
+#else
             DisableAllParents(false);
             if (ExteriorParent != null) ExteriorParent.SetActive(true);
+#endif
 
             world.suppressWorld = false;
             isPlayerInside = false;
@@ -1107,7 +1272,16 @@ namespace DaggerfallWorkshop.Game
             {
                 if (dungeon) Destroy(dungeon.gameObject);
             }
+#if UNITY_PSP2
+            // Into a building: everything but the town's static colliders goes off (VitaExteriorKeep), so leaving doesn't cook them again
+            if (!GameManager.Instance.IsReady)
+                GameManager.Instance.GetProperties();
+            if (DungeonParent != null) DungeonParent.SetActive(false);
+            if (InteriorParent != null) InteriorParent.SetActive(false);
+            VitaExteriorKeep.Keep(ExteriorParent);
+#else
             DisableAllParents(false);
+#endif
             if (InteriorParent != null) InteriorParent.SetActive(true);
 
             isPlayerInside = true;
@@ -1192,19 +1366,56 @@ namespace DaggerfallWorkshop.Game
 
 #if UNITY_PSP2
         bool vitaEnteringDungeon;
+        DaggerfallDungeon vitaPrebuiltDungeon;      // built over frames by VitaTransitionDungeonInterior, used by TransitionDungeonInterior
+        public static bool VitaNoDungeonSpread;     // TEMPORARY test switch (2026-11-12): upstream's one-frame dungeon build
 
         // Vita: DFU keeps the whole exterior (hidden) under a dungeon, so both were in memory at once. Behind a loading window: destroy
         // the exterior, give the GPU a few frames, unload, then build the dungeon. The exit rebuilds the exterior (TeleportToCoordinates).
         private IEnumerator VitaTransitionDungeonInterior(Transform doorOwner, StaticDoor door, DFLocation location, bool doFade)
         {
             VitaLoadingWindow loadingWindow = new VitaLoadingWindow(DaggerfallUI.UIManager, "Dungeon");
-            loadingWindow.Progress = 0.3f;      // the bar fills to here while the exterior is freed; the dungeon then builds in one long frame
+            loadingWindow.Progress = 0.3f;      // the bar fills to here while the exterior is freed; then the dungeon builds a block per frame
             DaggerfallUI.UIManager.PushWindow(loadingWindow);
             yield return null;
             yield return null;
 
             world.VitaClearWorld();
             yield return StartCoroutine(VitaUnload("dungeon entry unloaded"));
+
+            if (!VitaNoDungeonSpread)
+            {
+                // Same location override as TransitionDungeonInterior, then the spread build it picks up (vitaPrebuiltDungeon)
+                DFLocation buildLocation = location;
+                if (OverrideLocation != null)
+                {
+                    DFLocation overrideLocation = dfUnity.ContentReader.MapFileReader.GetLocation(OverrideLocation.Summary.RegionName, OverrideLocation.Summary.LocationName);
+                    if (overrideLocation.Loaded)
+                        buildLocation = overrideLocation;
+                }
+                GameObject newDungeon;
+                DaggerfallDungeon built = GameObjectHelper.CreateDaggerfallDungeonGameObject(buildLocation, DungeonParent.transform, out newDungeon);
+                if (built)
+                {
+                    IEnumerator build = built.VitaSetDungeonSpread(buildLocation);
+                    int blocks = Mathf.Max(1, buildLocation.Dungeon.Blocks.Length);
+                    for (int step = 0; build.MoveNext(); step++)
+                    {
+                        loadingWindow.Progress = 0.3f + 0.6f * Mathf.Min(1f, step / (float)(blocks + 2));
+                        yield return build.Current;
+                    }
+                    newDungeon.hideFlags = defaultHideFlags;
+                    vitaPrebuiltDungeon = built;
+
+                    // The automap's copy of the dungeon, one block per frame too
+                    Automap automap = GameManager.Instance.InteriorAutomap;
+                    if (automap)
+                    {
+                        IEnumerator map = automap.VitaPrebuildDungeon(built);
+                        while (map.MoveNext())
+                            yield return map.Current;
+                    }
+                }
+            }
 
             vitaEnteringDungeon = true;
             TransitionDungeonInterior(doorOwner, door, location, doFade);
@@ -1228,6 +1439,7 @@ namespace DaggerfallWorkshop.Game
             DaggerfallUnity.Instance.MeshReader.ClearCache();
             DaggerfallUnity.Instance.ContentReader.VitaDiscardBlocks();
             DaggerfallConnect.Utility.FileProxy.VitaClearLevelCache();
+            VitaMemory.KeepShaders();
             yield return Resources.UnloadUnusedAssets();
             GC.Collect();
             if (VitaMemory.Probes)
@@ -1341,6 +1553,53 @@ namespace DaggerfallWorkshop.Game
                     break;
             }
         }
+
+#if UNITY_PSP2
+        // Landing with interior floor below it (the town's ground is still there at this point, so only the interior's colliders count);
+        // else the other side of the same door, else above the closest enter marker as upstream does when a building has no interior door
+        Vector3 VitaCheckLanding(Vector3 landing, Vector3 doorNormal, Vector3 checkPosition)
+        {
+            Physics.SyncTransforms();
+            if (VitaInteriorFloorBelow(landing))
+                return landing;
+            Vector3 other = landing - doorNormal * 2f * (GameManager.Instance.PlayerController.radius + 0.4f);
+            if (doorNormal != Vector3.zero && VitaInteriorFloorBelow(other))
+            {
+                Debug.LogFormat("PlayerEnterExit: no floor at the landing {0}, using the other side of the door {1}", landing, other);
+                return other;
+            }
+            Vector3 marker;
+            if (interior.FindClosestEnterMarker(checkPosition, out marker))
+            {
+                Debug.LogFormat("PlayerEnterExit: no floor at the landing {0}, using the enter marker {1}", landing, marker);
+                return marker + Vector3.up * (controller.height * 0.6f);
+            }
+            return landing;
+        }
+
+        bool VitaInteriorFloorBelow(Vector3 position)
+        {
+            foreach (RaycastHit hit in Physics.RaycastAll(position + Vector3.up * 0.5f, Vector3.down, 3f, ~0, QueryTriggerInteraction.Ignore))
+                if (hit.collider.transform.IsChildOf(interior.transform))
+                    return true;
+            return false;
+        }
+
+        // Safety net: a player who still ends up below a building interior (or loads a save made while falling there) is put back
+        // above the closest enter marker, with the fall forgiven
+        void VitaInteriorFallRescue()
+        {
+            Vector3 marker;
+            if (!IsPlayerInsideBuilding || !interior || isRespawning || SaveLoadManager.Instance.LoadInProgress ||
+                transform.position.y > interior.transform.position.y - 50f ||
+                !interior.FindClosestEnterMarker(transform.position, out marker))
+                return;
+            Debug.LogFormat("PlayerEnterExit: fell below the interior to {0}, back to the enter marker {1}", transform.position, marker);
+            GameManager.Instance.AcrobatMotor.ClearFallingDamage();
+            transform.position = marker + Vector3.up * (controller.height * 0.6f);
+            SetStanding();
+        }
+#endif
 
         private void SetStanding()
         {
@@ -1607,6 +1866,13 @@ namespace DaggerfallWorkshop.Game
         public static event Action<TransitionEventArgs> OnFailedTransition;
         protected virtual void RaiseOnFailedTransition(TransitionType transitionType)
         {
+#if UNITY_PSP2
+            if (vitaDoorBlack)
+            {
+                vitaDoorBlack = false;
+                DaggerfallUI.Instance.FadeBehaviour.FadeHUDFromBlack(0.4f);
+            }
+#endif
             if (OnFailedTransition != null)
                 OnFailedTransition(new TransitionEventArgs(transitionType));
         }

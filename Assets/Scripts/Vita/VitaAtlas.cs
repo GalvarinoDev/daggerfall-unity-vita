@@ -13,6 +13,9 @@
 // Cities (BuildCity, from StreamingWorld when VitaCityMerge is off): the same per block CombinedModels, cells keyed by default texture key.
 // DaggerfallMesh.SetClimate asks OnClimate for those meshes: windows (day/night) are never in the atlas, so dusk only swaps the other
 // submeshes, and a season change refills the cells with the new season's textures (same sizes) instead of dropping the atlas.
+// Windows (2026-11-20): city window textures get cells in the same atlas and one more submesh per block with a second atlas material
+// (_EMISSION, the windows' shared emission palette). Their day/night look is only the shared emission colour, which OnClimate copies
+// from the new window material: ~50 window draws at a night street became one per block. Test switch WindowsOff (bot word "winatlasoff").
 // In play (a town or hamlet streamed in with no loading screen) BuildCityStaged spreads the same work over frames (~4 ms each): it was one
 // frame of 83-820 ms. The blocks draw their upstream submeshes until their atlas submesh is in, which looks the same.
 
@@ -35,8 +38,14 @@ public class VitaAtlas : MonoBehaviour
 
     public static bool KeepUpstream;            // test switch: keep the upstream submeshes so Show can switch back
 
+    // World of Daggerfall templates (LocationResourceManager) are destroyed on a climate change while their placed copies keep drawing with
+    // this atlas: then the atlas and material are left to Resources.UnloadUnusedAssets, which frees them once the last copy is gone
+    public bool KeepAssets;
+
     Texture2D atlas;
     Material material;
+    Material windowMaterial;                    // city: the atlas with _EMISSION for window cells (made on the first block with windows)
+    public static bool WindowsOff;
     readonly List<Swap> swaps = new List<Swap>();
 
     // City atlas: cells by default texture key and the climate they hold; per block mesh, its upstream submeshes kept after the atlas one
@@ -50,6 +59,8 @@ public class VitaAtlas : MonoBehaviour
     {
         public VitaAtlas atlas;
         public int[] rest;
+        public bool plain = true;
+        public int window = -1;                 // an upstream window submesh: OnClimate takes the emission colour from its new material
     }
 
     class Swap
@@ -60,15 +71,36 @@ public class VitaAtlas : MonoBehaviour
         public Material[] upstreamMaterials, atlasMaterials;
     }
 
+    // Per-vertex atlas rects (uv2), filled and handed to SetUVs within one call: one list for every build, so its capacity (16 bytes a
+    // vertex of the biggest mesh so far) is allocated once. A new list per build regrew to each mesh's size: 32 World of Daggerfall template
+    // builds per tour, and both such tours grew the GC heap 100 -> 109/114 MB where tours without them never did
+    static readonly List<Vector4> sharedRects = new List<Vector4>();
+
     struct Source
     {
         public int archive, record, width, height;
         public int x, y;                        // cell position in the atlas (level 0, border included)
         public bool packed;
+        // Cell size: the texture's own, or 2^MaxLod for a power-of-two side below it, filled with repeated copies (TEXTURE.067's 64x8
+        // trims: 55 town draws left out before). The rect (uv2) stays the texture's own size, so the shader wraps and picks mips as before
+        public int CellW { get { return Cell(width); } }
+        public int CellH { get { return Cell(height); } }
+    }
+
+    // Trial 2026-11-19 (revert candidate): small power-of-two sides tiled to 2^MaxLod. Test switch (bot word "tileoff")
+    public static bool TileSmallOff;
+    static int Cell(int side)
+    {
+        return side % border == 0 ? side : border;
+    }
+    static bool CellOk(int side)
+    {
+        return side > 0 && (side % border == 0 || !TileSmallOff && side < border && (side & (side - 1)) == 0);
     }
 
     /// <summary>Packs the plain textures of root's models into an atlas and gives each model one draw for them.</summary>
-    public static void Build(GameObject root)
+    /// log = false: no summary line (World of Daggerfall templates are built one by one, a log line costs 7-14 ms on hardware)
+    public static void Build(GameObject root, bool log = true)
     {
         DaggerfallUnity dfUnity = DaggerfallUnity.Instance;
         if (!Enabled())
@@ -86,6 +118,9 @@ public class VitaAtlas : MonoBehaviour
             Mesh mesh = filter ? filter.sharedMesh : null;
             Material[] materials = renderer.sharedMaterials;
             if (!mesh || !mesh.isReadable || mesh.subMeshCount != materials.Length || mesh.subMeshCount < 2 || !renderer.GetComponent<DaggerfallMesh>())
+                continue;
+            // A model that already has an atlas (a nested template's shared mesh): its uv2 belongs to that atlas
+            if (materials[0] && materials[0].shader.name == VitaPalette.AtlasShaderName)
                 continue;
             int plain = 0;
             foreach (Material m in materials)
@@ -120,7 +155,7 @@ public class VitaAtlas : MonoBehaviour
 
         // Each model: its plain submeshes become one atlas submesh (first), the rest keep their own
         int drawsBefore = 0, drawsAfter = 0, conflicts = 0;
-        var rects = new List<Vector4>();
+        List<Vector4> rects = sharedRects;
         foreach (MeshRenderer renderer in renderers)
         {
             Mesh mesh = renderer.GetComponent<MeshFilter>().sharedMesh;
@@ -174,9 +209,10 @@ public class VitaAtlas : MonoBehaviour
             drawsBefore += upstream.Length;
             drawsAfter += swap.atlasTriangles.Length;
         }
-        Debug.LogFormat("VitaAtlas: {0} textures in {1}x{1} ({2} not packed), {3} models: submeshes {4} -> {5} ({6} shared-vertex models left), {7:F0} ms",
-            packedCount, dim, sources.Count - packedCount, renderers.Count - conflicts, drawsBefore, drawsAfter, conflicts,
-            (Time.realtimeSinceStartup - started) * 1000f);
+        if (log)
+            Debug.LogFormat("VitaAtlas: {0} textures in {1}x{1} ({2} not packed), {3} models: submeshes {4} -> {5} ({6} shared-vertex models left), {7:F0} ms",
+                packedCount, dim, sources.Count - packedCount, renderers.Count - conflicts, drawsBefore, drawsAfter, conflicts,
+                (Time.realtimeSinceStartup - started) * 1000f);
     }
 
     static bool Enabled()
@@ -208,7 +244,7 @@ public class VitaAtlas : MonoBehaviour
         owner.cellSeason = climateOf.Season;
 
         int drawsBefore = 0, drawsAfter = 0, conflicts = 0;
-        var rects = new List<Vector4>();
+        List<Vector4> rects = sharedRects;
         foreach (MeshRenderer renderer in renderers)
             owner.ApplyCity(renderer, cached, ref palette, rects, ref drawsBefore, ref drawsAfter, ref conflicts);
         Debug.LogFormat("VitaAtlas city: {0} textures in {1}x{1}, {2} blocks: submeshes {3} -> {4} ({5} shared-vertex blocks left), {6:F0} ms",
@@ -234,6 +270,13 @@ public class VitaAtlas : MonoBehaviour
         var keys = new List<int>(sources.Keys);
         int dim = renderers.Count == 0 ? 0 : PackAll(keys, sources);
         if (dim == 0)
+            yield break;
+        // the scan and pack on a frame of their own, before the first fills (73-147 ms with ApplyTimeAndSpace before it)
+        work += Time.realtimeSinceStartup - frameStart;
+        yield return null;
+        frames++;
+        frameStart = Time.realtimeSinceStartup;
+        if (!location)
             yield break;
         DaggerfallMesh climateOf = renderers[0].GetComponent<DaggerfallMesh>();
         ClimateBases climate = climateOf.Climate;
@@ -291,7 +334,7 @@ public class VitaAtlas : MonoBehaviour
 
         // Blocks a few at a time; each one is whole (atlas submesh + the rest) after its frame
         int drawsBefore = 0, drawsAfter = 0, conflicts = 0;
-        var rects = new List<Vector4>();
+        List<Vector4> rects = sharedRects;
         cached = DaggerfallUnity.Instance.MaterialReader.VitaMaterialsByKey();   // a new dictionary each call: once a frame
         foreach (MeshRenderer renderer in renderers)
         {
@@ -331,16 +374,20 @@ public class VitaAtlas : MonoBehaviour
             Material[] materials = renderer.sharedMaterials;
             if (keys.Length < 2 || keys.Length != mesh.subMeshCount || materials.Length != keys.Length)
                 continue;
-            int plain = 0;
+            int plain = 0, windows = 0;
             for (int s = 0; s < keys.Length; s++)
             {
-                if (!IsPlain(materials[s], cached, ref palette))
+                bool window = false;
+                if (!IsPlain(materials[s], cached, ref palette) && !(window = IsWindow(materials[s], cached, ref palette)))
                     continue;
-                plain++;
+                if (window)
+                    windows++;
+                else
+                    plain++;
                 if (!sources.ContainsKey(keys[s]))
                     sources.Add(keys[s], SourceOf(materials[s], cached[materials[s]].key));
             }
-            if (plain >= 2)
+            if (plain >= 2 || windows >= 2)
                 renderers.Add(renderer);
         }
         return renderers;
@@ -359,46 +406,83 @@ public class VitaAtlas : MonoBehaviour
         rects.Clear();
         for (int i = 0; i < mesh.vertexCount; i++)
             rects.Add(Vector4.zero);
-        var merged = new List<int>();
-        var upstream = new int[mesh.subMeshCount][];
+        // Shared lists (2026-11-17): per-submesh int[] copies + the merged ToArray were ~4 copies of every block's indices in garbage per city
+        int submeshesBefore = mesh.subMeshCount;
+        cityMerged.Clear();
+        cityWindows.Clear();
+        int windowSource = -1;
         var rest = new List<int>();
+        var restTriangles = new List<int[]>();
         bool conflict = false;
         for (int s = 0; s < mesh.subMeshCount && !conflict; s++)
         {
-            upstream[s] = mesh.GetTriangles(s);
+            mesh.GetTriangles(cityTriangles, s);
             Vector4 rect;
-            if (!IsPlain(materials[s], cached, ref palette) || !TryGetRect(keys[s], out rect))
+            bool window = false;
+            if ((!IsPlain(materials[s], cached, ref palette) && !(window = IsWindow(materials[s], cached, ref palette))) || !TryGetRect(keys[s], out rect))
             {
                 rest.Add(s);
+                restTriangles.Add(cityTriangles.ToArray());     // read before the submeshes are rewritten
                 continue;
             }
-            foreach (int v in upstream[s])
+            for (int i = 0; i < cityTriangles.Count; i++)
             {
+                int v = cityTriangles[i];
                 if (rects[v] != Vector4.zero && rects[v] != rect)
                     conflict = true;    // a vertex shared by two textures: would need splitting; leave this block alone
                 rects[v] = rect;
             }
-            merged.AddRange(upstream[s]);
+            if (window)
+            {
+                cityWindows.AddRange(cityTriangles);
+                if (windowSource < 0)
+                    windowSource = s;
+            }
+            else
+                cityMerged.AddRange(cityTriangles);
         }
-        if (conflict || mesh.subMeshCount - rest.Count < 2)
+        // Atlas submeshes first: plain (if any), then windows (if any), then the rest
+        int atlasCount = (cityMerged.Count > 0 ? 1 : 0) + (cityWindows.Count > 0 ? 1 : 0);
+        if (conflict || mesh.subMeshCount - rest.Count - atlasCount < 1)
         {
             conflicts += conflict ? 1 : 0;
             return;
         }
-        var triangles = new int[rest.Count + 1][];
-        var atlasMaterials = new Material[rest.Count + 1];
-        triangles[0] = merged.ToArray();
-        atlasMaterials[0] = material;
+        if (cityWindows.Count > 0 && !windowMaterial)
+            windowMaterial = MakeWindowMaterial(materials[windowSource]);
+        var atlasMaterials = new Material[rest.Count + atlasCount];
+        int first = 0;
+        if (cityMerged.Count > 0)
+            atlasMaterials[first++] = material;
+        if (cityWindows.Count > 0)
+            atlasMaterials[first++] = windowMaterial;
         for (int i = 0; i < rest.Count; i++)
-        {
-            triangles[i + 1] = upstream[rest[i]];
-            atlasMaterials[i + 1] = materials[rest[i]];
-        }
+            atlasMaterials[first + i] = materials[rest[i]];
         mesh.SetUVs(1, rects);
-        Apply(mesh, renderer, triangles, atlasMaterials);
-        cityMeshes[dfMesh] = new CityMesh { atlas = this, rest = rest.ToArray() };
-        drawsBefore += upstream.Length;
-        drawsAfter += triangles.Length;
+        mesh.subMeshCount = rest.Count + atlasCount;     // as Apply does
+        first = 0;
+        if (cityMerged.Count > 0)
+            mesh.SetTriangles(cityMerged, first++, false);
+        if (cityWindows.Count > 0)
+            mesh.SetTriangles(cityWindows, first++, false);
+        for (int i = 0; i < rest.Count; i++)
+            mesh.SetTriangles(restTriangles[i], first + i, false);
+        renderer.sharedMaterials = atlasMaterials;
+        cityMeshes[dfMesh] = new CityMesh { atlas = this, rest = rest.ToArray(), plain = cityMerged.Count > 0, window = cityWindows.Count > 0 ? windowSource : -1 };
+        drawsBefore += submeshesBefore;
+        drawsAfter += rest.Count + atlasCount;
+    }
+    static readonly List<int> cityTriangles = new List<int>(), cityMerged = new List<int>(), cityWindows = new List<int>();
+
+    // The city atlas for window cells: same texture and palette, _EMISSION with the windows' emission palette and current colour
+    Material MakeWindowMaterial(Material source)
+    {
+        var m = new Material(material);
+        m.name = "VitaAtlasWindows";
+        m.SetTexture(VitaPalette.EmissionPaletteTex, source.GetTexture(VitaPalette.EmissionPaletteTex));
+        m.SetColor("_EmissionColor", source.GetColor("_EmissionColor"));
+        m.EnableKeyword("_EMISSION");
+        return m;
     }
 
     // The atlas rect (x, y, width, height in atlas UV) of a default texture key, for the shader's uv2
@@ -425,10 +509,20 @@ public class VitaAtlas : MonoBehaviour
             return materials;
         if (climate != city.atlas.cellClimate || season != city.atlas.cellSeason)
             city.atlas.Refill(climate, season);
-        var result = new Material[city.rest.Length + 1];
-        result[0] = city.atlas.material;
+        int first = (city.plain ? 1 : 0) + (city.window >= 0 ? 1 : 0);
+        var result = new Material[city.rest.Length + first];
+        int n = 0;
+        if (city.plain)
+            result[n++] = city.atlas.material;
+        if (city.window >= 0)
+        {
+            // the window style (day/night/fog) is only the emission colour MaterialReader.ChangeClimate just set on the window material
+            if (city.atlas.windowMaterial && city.window < materials.Length && materials[city.window])
+                city.atlas.windowMaterial.SetColor("_EmissionColor", materials[city.window].GetColor("_EmissionColor"));
+            result[n++] = city.atlas.windowMaterial;
+        }
         for (int i = 0; i < city.rest.Length; i++)
-            result[i + 1] = materials[city.rest[i]];
+            result[first + i] = materials[city.rest[i]];
         return result;
     }
 
@@ -448,7 +542,7 @@ public class VitaAtlas : MonoBehaviour
         {
             Source source = cells[key];
             Material m = dfUnity.MaterialReader.ChangeClimate(key, climate, season, WindowStyle.Day);
-            if (!source.packed || !IsPlain(m, cached, ref palette))
+            if (!source.packed || (!IsPlain(m, cached, ref palette) && !IsWindow(m, cached, ref palette)))
                 continue;
             Source next = SourceOf(m, cached[m].key);
             if (next.width != source.width || next.height != source.height || (next.archive == source.archive && next.record == source.record))
@@ -465,6 +559,8 @@ public class VitaAtlas : MonoBehaviour
             return;
         refilled.wrapMode = TextureWrapMode.Clamp;
         material.mainTexture = refilled;
+        if (windowMaterial)
+            windowMaterial.mainTexture = refilled;
         Destroy(atlas);
         atlas = refilled;
         Debug.LogFormat("VitaAtlas city: {0} cells refilled for {1} {2}, {3:F0} ms", changed, climate, season, (Time.realtimeSinceStartup - started) * 1000f);
@@ -496,7 +592,7 @@ public class VitaAtlas : MonoBehaviour
     // Packs keys (sorted tallest first) at the smallest dim that holds them all, up to maxDim; the dim, or 0 if fewer than 2 fit
     static int PackAll(List<int> keys, Dictionary<int, Source> sources)
     {
-        keys.Sort((a, b) => sources[b].height != sources[a].height ? sources[b].height - sources[a].height : a - b);
+        keys.Sort((a, b) => sources[b].CellH != sources[a].CellH ? sources[b].CellH - sources[a].CellH : a - b);
         int dim = 256;
         while (!Pack(keys, sources, dim) && dim < maxDim)
             dim *= 2;
@@ -614,9 +710,9 @@ public class VitaAtlas : MonoBehaviour
         {
             try
             {
-                for (int l = 0, w = source.width, h = source.height; l <= MaxLod; l++, w /= 2, h /= 2)
-                    CopyWrapped((byte*)levels[l], w, h, border >> l, atlas, levelOffsets[l] + ((source.y >> l) + (border >> l)) * (dim >> l) +
-                        (source.x >> l) + (border >> l), dim >> l);
+                for (int l = 0; l <= MaxLod; l++)   // baked levels stop halving at 1 (ReadLevels)
+                    CopyTiled((byte*)levels[l], Mathf.Max(1, source.width >> l), Mathf.Max(1, source.height >> l), source.CellW >> l, source.CellH >> l,
+                        border >> l, atlas, levelOffsets[l] + ((source.y >> l) + (border >> l)) * (dim >> l) + (source.x >> l) + (border >> l), dim >> l);
             }
             finally
             {
@@ -633,7 +729,14 @@ public class VitaAtlas : MonoBehaviour
             source.packed = false;      // replaced or resized texture: keep it separate
             return;
         }
-        for (int l = 0, w = source.width, h = source.height; l <= MaxLod; l++)
+        int w = source.width, h = source.height;
+        if (source.CellW != w || source.CellH != h)
+        {
+            level = Tiled(level, w, h, source.CellW, source.CellH);     // mips from the tiled cell, so no side halves below 1
+            w = source.CellW;
+            h = source.CellH;
+        }
+        for (int l = 0; l <= MaxLod; l++)
         {
             fixed (byte* src = level)
                 CopyWrapped(src, w, h, border >> l, atlas, levelOffsets[l] + ((source.y >> l) + (border >> l)) * (dim >> l) +
@@ -644,6 +747,35 @@ public class VitaAtlas : MonoBehaviour
                 w /= 2;
                 h /= 2;
             }
+        }
+    }
+
+    // A w x h level repeated over a cw x ch cell (cw, ch multiples of w, h)
+    static byte[] Tiled(byte[] level, int w, int h, int cw, int ch)
+    {
+        var cell = new byte[cw * ch];
+        for (int y = 0; y < ch; y++)
+            for (int x = 0; x < cw; x++)
+                cell[y * cw + x] = level[(y % h) * w + x % w];
+        return cell;
+    }
+
+    static byte[] tileScratch = new byte[0];    // one buffer for every tiled level (cells are at most 512 x 16)
+    static unsafe void CopyTiled(byte* level, int w, int h, int cw, int ch, int b, byte* data, int origin, int stride)
+    {
+        if (w == cw && h == ch)
+        {
+            CopyWrapped(level, w, h, b, data, origin, stride);
+            return;
+        }
+        if (tileScratch.Length < cw * ch)
+            tileScratch = new byte[cw * ch];
+        fixed (byte* cell = tileScratch)
+        {
+            for (int y = 0; y < ch; y++)
+                for (int x = 0; x < cw; x++)
+                    cell[y * cw + x] = level[(y % h) * w + x % w];
+            CopyWrapped(cell, cw, ch, b, data, origin, stride);
         }
     }
 
@@ -687,7 +819,7 @@ public class VitaAtlas : MonoBehaviour
         int width = 0, height = 0;
         if (texture)
             VitaPalette.OriginalSize(texture, out width, out height);
-        if (!texture || width % border != 0 || height % border != 0 || width > 512 || height > 512 ||
+        if (!texture || !CellOk(width) || !CellOk(height) || width > 512 || height > 512 ||
             !paletteTexture || (palette && palette != paletteTexture))
             return false;
         int archive, record, frame;
@@ -695,6 +827,37 @@ public class VitaAtlas : MonoBehaviour
         if (frame != 0)
             return false;
         palette = paletteTexture;
+        return true;
+    }
+
+    // A city window texture otherwise plain (IsPlain's tests, the _EMISSION keyword allowed), with the shared window emission palette
+    static Texture windowEmission;
+    static bool IsWindow(Material m, Dictionary<Material, CachedMaterial> cached, ref Texture palette)
+    {
+        CachedMaterial cm;
+        if (WindowsOff || !m || m.shader.name != VitaPalette.ShaderName || m.color != Color.white || !cached.TryGetValue(m, out cm) ||
+            !cm.isWindow || cm.singleFrameCount > 1)
+            return false;
+        string[] keywords = m.shaderKeywords;
+        if (keywords.Length != 1 || keywords[0] != "_EMISSION")
+            return false;
+        Texture emission = m.GetTexture(VitaPalette.EmissionPaletteTex);
+        if (!emission || (windowEmission && windowEmission != emission))
+            return false;
+        Texture texture = m.mainTexture;
+        Texture paletteTexture = m.GetTexture(VitaPalette.PaletteTex);
+        int width = 0, height = 0;
+        if (texture)
+            VitaPalette.OriginalSize(texture, out width, out height);
+        if (!texture || !CellOk(width) || !CellOk(height) || width > 512 || height > 512 ||
+            !paletteTexture || (palette && palette != paletteTexture))
+            return false;
+        int archive, record, frame;
+        MaterialReader.ReverseTextureKey(cm.key, out archive, out record, out frame);
+        if (frame != 0)
+            return false;
+        palette = paletteTexture;
+        windowEmission = emission;
         return true;
     }
 
@@ -706,7 +869,7 @@ public class VitaAtlas : MonoBehaviour
         foreach (int key in keys)
         {
             Source source = sources[key];
-            int w = source.width + border * 2, h = source.height + border * 2;
+            int w = source.CellW + border * 2, h = source.CellH + border * 2;
             if (x + w > dim)
             {
                 x = 0;
@@ -739,10 +902,14 @@ public class VitaAtlas : MonoBehaviour
             foreach (DaggerfallMesh mesh in gone)
                 cityMeshes.Remove(mesh);
         }
+        if (KeepAssets)
+            return;
         if (atlas)
             Destroy(atlas);
         if (material)
             Destroy(material);
+        if (windowMaterial)
+            Destroy(windowMaterial);
     }
 }
 #endif

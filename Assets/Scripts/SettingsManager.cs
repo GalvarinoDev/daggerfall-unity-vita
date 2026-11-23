@@ -213,6 +213,10 @@ namespace DaggerfallWorkshop
         public int VitaFireLight { get; set; }
         public int VitaFireColour { get; set; }     // VitaLights warmth 0-3 (White / Slightly warm / Warm / Warmest)
         public int VitaTorchReach { get; set; }     // the player torch's range in metres (6 = stock)
+        public int VitaFarThin { get; set; }        // nature billboards smaller than this many pixels are not drawn (0 = all)
+        public int VitaQuickTime { get; set; }      // quick menu (hold L): 0 = paused, 1 = real time, 2 = slow motion
+        public string VitaQuickSpell { get; set; }  // L tap spell: "<character name>|<spell name>"
+        public string VitaHotkeys { get; set; }     // D-pad Left/Right tap/hold: "<character name>|<key 1>|..|<key 4>" (VitaQuickMenuWindow)
 #endif
         public bool DungeonLightShadows { get; set; }
         public bool InteriorLightShadows { get; set; }
@@ -225,6 +229,7 @@ namespace DaggerfallWorkshop
         public float InteriorShadowDistance { get; set; }
         public float ExteriorShadowDistance { get; set; }
         public bool EnableTextureArrays { get; set; }
+        public bool EnableObjectCulling { get; set; }
         public int RandomDungeonTextures { get; set; }
         public int CursorWidth { get; set; }
         public int CursorHeight { get; set; }
@@ -372,6 +377,7 @@ namespace DaggerfallWorkshop
         public float TerrainHeightmapPixelError { get; set; }
         public bool SmallerDungeons { get; set; }
         public int AssetCacheThreshold { get; set; }
+        public int DungeonsPoolSizeTarget { get; set; }
 
         // [Enhancements]
         public bool LypyL_GameConsole { get; set; }
@@ -549,8 +555,9 @@ namespace DaggerfallWorkshop
             VitaWorldOfDaggerfall = GetData(sectionVideo, "VitaWorldOfDaggerfall") == "True";
             // Vita: World of Daggerfall - Terrain (VitaWodTerrain.cs); off unless "True" until it passes a hardware run
             VitaWodTerrain = GetData(sectionVideo, "VitaWodTerrain") == "True";
-            // Vita: Snowless Swamp and Jungle textures (VitaWorldTextures snowless.pak); on unless "False"
-            VitaSnowlessSwamp = GetData(sectionVideo, "VitaSnowlessSwamp") != "False";
+            // Vita: Snowless - Swamp and Jungle (summer textures and weather in winter there, ClimateSwaps.VitaSnowless); off unless "True"
+            // (2026-11-14: it covered more climates than the PC mods it stands in for, Mountain Woods among them)
+            VitaSnowlessSwamp = GetData(sectionVideo, "VitaSnowlessSwamp") == "True";
             VitaWorldOfDaggerfallBiomes = GetData(sectionVideo, "VitaWorldOfDaggerfallBiomes") != "False";
             // Vita: Distant Terrain mod (VitaDistantTerrain.cs); off unless "True"
             VitaDistantTerrain = GetData(sectionVideo, "VitaDistantTerrain") == "True";
@@ -576,6 +583,12 @@ namespace DaggerfallWorkshop
             int vitaFireColour, vitaTorchReach;
             VitaFireColour = int.TryParse(GetData(sectionVideo, "VitaFireTone"), out vitaFireColour) ? Mathf.Clamp(vitaFireColour, 0, 3) : 0;
             VitaTorchReach = int.TryParse(GetData(sectionVideo, "VitaTorchReach"), out vitaTorchReach) ? Mathf.Clamp(vitaTorchReach, 3, 20) : 6;
+            int vitaFarThin;
+            VitaFarThin = int.TryParse(GetData(sectionVideo, "VitaFarThin"), out vitaFarThin) ? Mathf.Clamp(vitaFarThin, 0, 8) : 4;
+            int vitaQuickTime;
+            VitaQuickTime = int.TryParse(GetData(sectionVideo, "VitaQuickTime"), out vitaQuickTime) ? Mathf.Clamp(vitaQuickTime, 0, 2) : 0;
+            VitaQuickSpell = GetData(sectionVideo, "VitaQuickSpell") ?? "";
+            VitaHotkeys = GetData(sectionVideo, "VitaHotkeys") ?? "";
 #if !VITA_MODS
             // No-mods alpha (vita/nomods.txt): no mod is in the build, whatever an older ini says
             VitaLowPolyTrees = VitaDynamicSkies = VitaBasicRoads = VitaLoadScreenArt = VitaWindmills = VitaDragonRider = VitaTravelOptions = false;
@@ -595,6 +608,7 @@ namespace DaggerfallWorkshop
             InteriorShadowDistance = GetFloat(sectionVideo, "InteriorShadowDistance", 0.1f, 50.0f);
             ExteriorShadowDistance = GetFloat(sectionVideo, "ExteriorShadowDistance", 0.1f, 150.0f);
             EnableTextureArrays = GetBool(sectionVideo, "EnableTextureArrays");
+            EnableObjectCulling = GetBool(sectionVideo, "EnableObjectCulling");
             RandomDungeonTextures = GetInt(sectionVideo, "RandomDungeonTextures", 0, 4);
 
             AntialiasingMethod = GetInt(sectionEffects, "AntialiasingMethod", 0, 3);
@@ -728,6 +742,7 @@ namespace DaggerfallWorkshop
             TerrainHeightmapPixelError = GetFloat(sectionExperimental, "TerrainHeightmapPixelError", 1, 10);
             SmallerDungeons = GetBool(sectionExperimental, "SmallerDungeons");
             AssetCacheThreshold = GetInt(sectionExperimental, "AssetCacheThreshold", 0, 120);
+            DungeonsPoolSizeTarget = GetInt(sectionExperimental, "DungeonsPoolSizeTarget", 0, 999);
 
             LypyL_GameConsole = GetBool(sectionEnhancements, "LypyL_GameConsole");
             LypyL_ModSystem = GetBool(sectionEnhancements, "LypyL_ModSystem");
@@ -828,6 +843,10 @@ namespace DaggerfallWorkshop
             SetInt(sectionVideo, "VitaFireLevel", VitaFireLight);
             SetInt(sectionVideo, "VitaFireTone", VitaFireColour);
             SetInt(sectionVideo, "VitaTorchReach", VitaTorchReach);
+            SetInt(sectionVideo, "VitaFarThin", VitaFarThin);
+            SetInt(sectionVideo, "VitaQuickTime", VitaQuickTime);
+            SetString(sectionVideo, "VitaQuickSpell", VitaQuickSpell ?? "");
+            SetString(sectionVideo, "VitaHotkeys", VitaHotkeys ?? "");
 #endif
             SetBool(sectionVideo, "DungeonLightShadows", DungeonLightShadows);
             SetBool(sectionVideo, "InteriorLightShadows", InteriorLightShadows);
@@ -840,6 +859,7 @@ namespace DaggerfallWorkshop
             SetFloat(sectionVideo, "InteriorShadowDistance", InteriorShadowDistance);
             SetFloat(sectionVideo, "ExteriorShadowDistance", ExteriorShadowDistance);
             SetBool(sectionVideo, "EnableTextureArrays", EnableTextureArrays);
+            SetBool(sectionVideo, "EnableObjectCulling", EnableObjectCulling);
             SetInt(sectionVideo, "RandomDungeonTextures", RandomDungeonTextures);
 
             SetInt(sectionEffects, "AntialiasingMethod", AntialiasingMethod);
@@ -968,6 +988,7 @@ namespace DaggerfallWorkshop
             SetFloat(sectionExperimental, "TerrainHeightmapPixelError", TerrainHeightmapPixelError);
             SetBool(sectionExperimental, "SmallerDungeons", SmallerDungeons);
             SetInt(sectionExperimental, "AssetCacheThreshold", AssetCacheThreshold);
+            SetInt(sectionExperimental, "DungeonsPoolSizeTarget", DungeonsPoolSizeTarget);
 
             SetBool(sectionEnhancements, "LypyL_GameConsole", LypyL_GameConsole);
             SetBool(sectionEnhancements, "LypyL_ModSystem", LypyL_ModSystem);

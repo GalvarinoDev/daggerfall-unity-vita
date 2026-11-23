@@ -27,6 +27,7 @@ Shader "Daggerfall/Vita/BillboardPalette" {
         CGPROGRAM
         #pragma target 3.0
         #pragma surface surf Lambert alphatest:_Cutoff addshadow vertex:vert noambient
+        #pragma multi_compile __ VITA_FILL_2   // VitaLights: slots 2-3 empty, VitaFillVertexLights does half the work
         #pragma multi_compile __ VITA_TOWN_LIGHTS
         #pragma multi_compile_local __ _NORMALMAP
         #pragma multi_compile __ _EMISSION // 2018.2 skips multi_compile_local (2019.1+): the glow variant was never built

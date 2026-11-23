@@ -330,6 +330,40 @@ namespace DaggerfallWorkshop.Game.Serialization
             return data;
         }
 
+        // The save thumb straight from the backbuffer, read in strips of 16 rows: a full-screen GetPixels32 was one 2 MB array (plus
+        // 0.5 MB halved), and a save with no contiguous room for it grew the never-shrinking GC heap 97.6 -> 111.8 MB (2026-11-15).
+        // Same pixels as before: channel fix, then 2x2 average; rows bottom first as Unity's texture data.
+        static byte[] VitaThumbFromScreen()
+        {
+            const int strip = 16;
+            int width = Screen.width, height = Screen.height, w = width / 2, h = height / 2;
+            byte[] data = new byte[8 + w * h * 3];
+            BitConverter.GetBytes(w).CopyTo(data, 0);
+            BitConverter.GetBytes(h).CopyTo(data, 4);
+            Texture2D band = new Texture2D(width, strip, TextureFormat.RGBA32, false);
+            for (int y0 = 0; y0 < h * 2; y0 += strip)
+            {
+                int rows = Math.Min(strip, h * 2 - y0);
+                band.ReadPixels(new Rect(0, y0, width, rows), 0, 0);
+                Color32[] p = band.GetPixels32();
+                for (int y = 0; y < rows / 2; y++)
+                {
+                    int o = 8 + ((y0 / 2 + y) * w) * 3;
+                    for (int x = 0; x < w; x++)
+                    {
+                        Color32 a = p[2 * y * width + 2 * x], b = p[2 * y * width + 2 * x + 1];
+                        Color32 c = p[(2 * y + 1) * width + 2 * x], d = p[(2 * y + 1) * width + 2 * x + 1];
+                        // backbuffer reads land one channel over (alpha in red, red in green, ...): g, b, a hold r, g, b
+                        data[o++] = (byte)((a.g + b.g + c.g + d.g + 2) >> 2);
+                        data[o++] = (byte)((a.b + b.b + c.b + d.b + 2) >> 2);
+                        data[o++] = (byte)((a.a + b.a + c.a + d.a + 2) >> 2);
+                    }
+                }
+            }
+            Destroy(band);
+            return data;
+        }
+
         static Texture2D ReadVitaThumb(byte[] data)
         {
             int w = data.Length >= 8 ? BitConverter.ToInt32(data, 0) : 0, h = data.Length >= 8 ? BitConverter.ToInt32(data, 4) : 0;
@@ -872,7 +906,25 @@ namespace DaggerfallWorkshop.Game.Serialization
 
         // The Vita's save (one file per save, VitaSaveIO): everything SaveGame writes, as parts of Saves/SAVEn.vita. The game state is
         // encoded before the screenshot frames, as SaveGame serializes it before them. No JPG: the save list shows the raw thumbnail.
-        IEnumerator VitaSaveGame(string characterName, string saveName, bool instantReload)
+        /// <summary>VitaRelaunch: the game saved into a file outside the save list (no picture, no "saved" popup, no OnSave); done(false) on failure.</summary>
+        public IEnumerator VitaHiddenSave(string path, Action<bool> done)
+        {
+            yield return StartCoroutine(VitaSaveGame(GameManager.Instance.PlayerEntity.Name, "Relaunch", false, path, done));
+        }
+
+        /// <summary>VitaRelaunch: Load(key) for a save file given by path.</summary>
+        public void VitaLoadFile(string path)
+        {
+            if (!IsReady())
+                throw new Exception(notReadyExceptionText);
+            if (loadInProgress)
+                return;
+            loadInProgress = true;
+            GameManager.Instance.PauseGame(false);
+            StartCoroutine(LoadGame(path));
+        }
+
+        IEnumerator VitaSaveGame(string characterName, string saveName, bool instantReload, string hiddenPath = null, Action<bool> hiddenDone = null)
         {
             float saveStart = Time.realtimeSinceStartup;
             VitaLapStart();
@@ -883,9 +935,11 @@ namespace DaggerfallWorkshop.Game.Serialization
             string vitaHeapBefore = VitaMemory.GcHeapForLog();   // probes: does a save grow the managed heap?
 
             // Look for existing save with this character and name, else the first free SAVEn
-            int key = FindSaveFolderByNames(characterName, saveName);
+            int key = hiddenPath != null ? -2 : FindSaveFolderByNames(characterName, saveName);
             string path;
-            if (key == -1)
+            if (hiddenPath != null)
+                path = hiddenPath;
+            else if (key == -1)
             {
                 int free = 0;
                 while (enumeratedSaveFolders.ContainsKey(free))
@@ -919,7 +973,7 @@ namespace DaggerfallWorkshop.Game.Serialization
                     new KeyValuePair<string, object>(notebookDataFilename, GameManager.Instance.PlayerEntity.Notebook.GetNotebookSaveData()),
                     new KeyValuePair<string, object>(worldVariationDataFilename, WorldDataVariants.GetWorldVariationSaveData()),
                     new KeyValuePair<string, object>(questExceptionsFilename, QuestMachine.Instance.GetStoredExceptions()),
-                    new KeyValuePair<string, object>(bioFileName, string.Join("\n", GameManager.Instance.PlayerEntity.BackStory.ToArray())),
+                    new KeyValuePair<string, object>(bioFileName, string.Join("\n", GameManager.Instance.PlayerEntity.BackStory != null ? GameManager.Instance.PlayerEntity.BackStory.ToArray() : new string[0])),
                 };
                 try
                 {
@@ -953,27 +1007,35 @@ namespace DaggerfallWorkshop.Game.Serialization
                 // The last save in this slot stays as it was
                 Debug.LogError("VITASAVE encode failed: " + ex);
                 DaggerfallUI.AddHUDText("Save failed. Check log for errors.", 3);
+                if (hiddenDone != null)
+                    hiddenDone(false);
                 yield break;
             }
             VitaLap("encode");
+            if (hiddenPath != null)
+            {
+                bool written = false;
+                try
+                {
+                    long hiddenLength = VitaSaveIO.WriteSave(hiddenPath, parts);
+                    Debug.LogFormat("VITASAVE hidden {0}: steps:{1}, file {2} KB, total {3:F2} s", hiddenPath, vitaLapSb, hiddenLength / 1024,
+                        Time.realtimeSinceStartup - saveStart);
+                    written = true;
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogError("VITASAVE hidden write failed: " + ex.Message);
+                }
+                hiddenDone(written);
+                yield break;
+            }
 
             // Screenshot: read back on the CPU only, channels fixed, half size (see SaveGame)
             VitaMenuNav.HideCursor = true; // the D-pad arrow ended up in save pictures
             yield return new WaitForEndOfFrame();
             yield return new WaitForEndOfFrame();
-            Texture2D screenshot = new Texture2D(Screen.width, Screen.height, TextureFormat.RGBA32, false);
-            screenshot.ReadPixels(new Rect(0, 0, Screen.width, Screen.height), 0, 0);
+            parts.Insert(1, new KeyValuePair<string, byte[]>(vitaThumbFilename, VitaThumbFromScreen()));
             VitaMenuNav.HideCursor = false;
-            Color32[] pixels = screenshot.GetPixels32();
-            int fullWidth = screenshot.width;
-            Destroy(screenshot);
-            for (int i = 0; i < pixels.Length; i++)
-            {
-                Color32 c = pixels[i];
-                pixels[i] = new Color32(c.g, c.b, c.a, 255);
-            }
-            pixels = HalveVitaPixels(pixels, fullWidth, Screen.height);
-            parts.Insert(1, new KeyValuePair<string, byte[]>(vitaThumbFilename, VitaThumbBytes(pixels, fullWidth / 2, Screen.height / 2)));
             VitaLap("shot");
 
             long fileLength = VitaSaveIO.WriteSave(path, parts);

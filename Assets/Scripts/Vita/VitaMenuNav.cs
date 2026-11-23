@@ -50,7 +50,7 @@ public static class VitaMenuNav
         Measure(top);
         DaggerfallTravelMapWindow travelMap = top as DaggerfallTravelMapWindow;
         if (top is DaggerfallHUD || !InputManager.Instance.CursorVisible || (travelMap != null && travelMap.VitaRegionSelected) ||
-            top is DaggerfallAutomapWindow || top is DaggerfallExteriorAutomapWindow)
+            top is DaggerfallAutomapWindow || top is DaggerfallExteriorAutomapWindow || top is VitaQuickMenuWindow)
         {
             heldKey = -1;
             lastTop = null;
@@ -291,7 +291,7 @@ public static class VitaMenuNav
     {
         InputManager im = InputManager.Instance;
         Texture2D image = im.controllerCursorImage;
-        if (HideCursor || top is DaggerfallHUD || top is VitaLoadingWindow || !im.CursorVisible || !im.UsingController || image == null)
+        if (HideCursor || top is DaggerfallHUD || top is VitaLoadingWindow || top is VitaQuickMenuWindow || !im.CursorVisible || !im.UsingController || image == null)
             return;
         Vector3 mouse = im.MousePosition;
         Vector2 at = new Vector2(mouse.x, Screen.height - mouse.y);

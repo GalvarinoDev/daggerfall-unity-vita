@@ -69,7 +69,10 @@ public class VitaLights : MonoBehaviour
 
     public static string State = "";   // slots, fades and keywords of the last frame, for test logs
     public static bool Off;   // test switch: no point lights in the palette shaders
+    public static bool NoFillTwo;   // test switch: VITA_FILL_2 off (the shaders evaluate all 4 slots)
     public static bool TownOff;   // test switch: town lamps in the slots again
+    public static bool ThinOff;   // test switch: no far billboard thinning (as VitaFarThin 0)
+    static readonly int farThinId = Shader.PropertyToID("_VitaFarThin");
 
     // xz only, so a lamp's pool lights a wall to any height and the lamps don't flicker. If roofs glow, add a height falloff.
     const int townSize = 512;     // 1 MB RGBA32; ~1.6 m a texel over the biggest city, against 18 m lamp ranges
@@ -84,7 +87,7 @@ public class VitaLights : MonoBehaviour
 
     Light[] lights = new Light[0];
     float nextRefresh, nextLog;
-    bool keywordOn, terrainKeywordOn;
+    bool keywordOn, terrainKeywordOn, fillTwoOn;
     readonly System.Collections.Generic.Dictionary<Light, float> shown = new System.Collections.Generic.Dictionary<Light, float>();   // fade 0-1
     readonly System.Collections.Generic.List<Light> dropped = new System.Collections.Generic.List<Light>();
     readonly Light[] picked = new Light[count];
@@ -111,6 +114,10 @@ public class VitaLights : MonoBehaviour
         Camera camera = Camera.main;
         if (camera == null)
             return;
+        // Nature batches: a billboard under VitaFarThin pixels tall drops out (shader: distance x this > height). Revert candidate (VitaFarThin 0)
+        int thinPixels = DaggerfallWorkshop.DaggerfallUnity.Settings.VitaFarThin;
+        Shader.SetGlobalFloat(farThinId, thinPixels > 0 && !ThinOff ?
+            thinPixels * 2f * Mathf.Tan(camera.fieldOfView * 0.5f * Mathf.Deg2Rad) / camera.pixelHeight : 0f);
         Vector3 eye = camera.transform.position;
         DaggerfallWorkshop.Game.PlayerEnterExit enterExit = DaggerfallWorkshop.Game.GameManager.HasInstance ?
             DaggerfallWorkshop.Game.GameManager.Instance.PlayerEnterExit : null;
@@ -214,6 +221,18 @@ public class VitaLights : MonoBehaviour
                     line.AppendFormat(" [{0} d={1:F1} r={2:F1} i={3:F2} c={4}]", picked[i].name, Vector3.Distance(picked[i].transform.position, eye),
                         picked[i].range, picked[i].intensity, picked[i].color);
             Debug.Log(line.ToString());
+        }
+
+        // Slots 2-3 empty (picks fill from slot 0; usually just IndirectLight, or the torch + IndirectLight): VitaFillVertexLights evaluates
+        // slots 0-1 only, same result. The 4 lights were ~5 ms of a forest frame in the billboard batches' vertex program (forest3)
+        bool fillTwo = (count < 3 || picked[2] == null) && !NoFillTwo;
+        if (fillTwo != fillTwoOn)
+        {
+            fillTwoOn = fillTwo;
+            if (fillTwo)
+                Shader.EnableKeyword("VITA_FILL_2");
+            else
+                Shader.DisableKeyword("VITA_FILL_2");
         }
 
         bool on = picked[0] != null && !Off;

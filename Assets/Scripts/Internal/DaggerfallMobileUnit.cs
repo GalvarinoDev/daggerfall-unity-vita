@@ -793,6 +793,22 @@ namespace DaggerfallWorkshop
             }
         }
 
+#if UNITY_PSP2
+        /// <summary>
+        /// Vita: builds (or finds cached) the atlas AssignMeshAndMaterial will ask for, same arguments, so a later spawn hits the cache.
+        /// Skips archives a mod replaces (the import is cached for that spawn instead). LocationLoader calls it behind the loading screen.
+        /// </summary>
+        public static void VitaPrewarmAtlas(int archive)
+        {
+            DaggerfallUnity dfUnity = DaggerfallUnity.Instance;
+            if (archive <= 0 || !dfUnity.MaterialReader.IsReady || dfUnity.MaterialReader.VitaHasAtlas(archive) || TextureReplacement.VitaHasBillboardReplacement(archive, 0))
+                return;
+            Rect[] rects;
+            RecordIndex[] indices;
+            dfUnity.MaterialReader.GetMaterialAtlas(archive, 0, 4, 1024, out rects, out indices, 4, true, 0, false, true);
+        }
+#endif
+
         /// <summary>
         /// Creates mesh and material for this enemy.
         /// </summary>

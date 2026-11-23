@@ -10,13 +10,15 @@
 // still runs over the whole tiled texture, so the shader wraps it into the rect itself (frac), and picks the same whole mip level as
 // VitaPaletteIndex would for the separate texture. Mips stop at VITA_ATLAS_MAX_LOD: each texture has a wrapped border of
 // 2^VITA_ATLAS_MAX_LOD texels in the atlas, which is one texel at that level. Lighting is DefaultPalette's (no keyword variants:
-// VitaAtlas only takes plain textures).
+// VitaAtlas only takes plain textures). _EMISSION: a city's window cells (VitaAtlas window material), glowing as DefaultPalette's windows.
 Shader "Daggerfall/Vita/AtlasPalette" {
     Properties {
         _Color("Color", Color) = (1,1,1,1)
         _SpecColor("Spec color", color) = (0.5,0.5,0.5,0.5)
         _MainTex("Palette Index Atlas", 2D) = "white" {}
         _PaletteTex("Palette", 2D) = "white" {}
+        _EmissionPalette("Emission Palette", 2D) = "black" {}
+        _EmissionColor("Emission Color", Color) = (0,0,0)
     }
     SubShader {
         Tags { "RenderType" = "Opaque" }
@@ -27,6 +29,7 @@ Shader "Daggerfall/Vita/AtlasPalette" {
         #pragma surface surf BlinnPhong vertex:vert nolightmap nodynlightmap nodirlightmap nometa noinstancing exclude_path:deferred exclude_path:prepass noambient
         #pragma multi_compile __ VITA_NEAR_LIGHTS
         #pragma multi_compile __ VITA_TOWN_LIGHTS
+        #pragma multi_compile __ _EMISSION
 
         #define VITA_ATLAS_MAX_LOD 4.0     // VitaAtlas.MaxLod
 
@@ -34,6 +37,8 @@ Shader "Daggerfall/Vita/AtlasPalette" {
         sampler2D _MainTex;
         sampler2D _PaletteTex;
         float4 _MainTex_TexelSize;
+        sampler2D _EmissionPalette;
+        half4 _EmissionColor;
 
     	// Vita: the ambient colour (VitaFill.cginc): Unity's SH cost 16 cycles per pixel here (shaderaudit)
     	#include "VitaFill.cginc"
@@ -79,8 +84,16 @@ Shader "Daggerfall/Vita/AtlasPalette" {
             float lod = clamp(floor(0.5 * log2(max(dot(dx, dx), dot(dy, dy))) + 0.5), 0.0, VITA_ATLAS_MAX_LOD);
             float2 uv = IN.atlasRect.xy + frac(IN.uv_MainTex) * IN.atlasRect.zw;
             float paletteIndex = tex2Dlod(_MainTex, float4(uv, 0.0, lod)).a;
-            half4 albedo = tex2D(_PaletteTex, float2((floor(paletteIndex * 255.0 + 0.5) + 0.5) / 256.0, 0.5)) * _Color;
-            o.Albedo = albedo.rgb;
+            float2 paletteUV = float2((floor(paletteIndex * 255.0 + 0.5) + 0.5) / 256.0, 0.5);
+            half4 albedo = tex2D(_PaletteTex, paletteUV) * _Color;
+            #ifdef _EMISSION
+                // as DefaultPalette's windows
+                half3 emission = tex2D(_EmissionPalette, paletteUV).rgb * _EmissionColor;
+                o.Albedo = albedo.rgb - emission;
+                o.Emission = emission;
+            #else
+                o.Albedo = albedo.rgb;
+            #endif
 
             // Unity's surface analysis defines no pass macro: without SHADER_TARGET_SURFACE_ANALYSIS it saw the light inputs unused, dropped them,
             // and the lights got position 0 (no torch light at all)

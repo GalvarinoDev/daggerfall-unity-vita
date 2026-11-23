@@ -59,14 +59,36 @@ public class VitaBootSplash : MonoBehaviour
 {
     static VitaBootSplash instance;
     Texture2D art;
+    bool ownArt;        // made here (relaunch picture), not a Resources asset
+    bool fullScreen;    // the relaunch's saved screen: drawn 1:1
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
     static void Init()
     {
+        Debug.LogFormat("VITABOOT first picture at {0:F2} s of the process{1}", VitaPower.ProcessSeconds(), VitaRelaunch.Pending ? " (relaunch)" : "");
         var go = new GameObject("VitaBootSplash");
         DontDestroyOnLoad(go);
         instance = go.AddComponent<VitaBootSplash>();
-        instance.art = Resources.Load<Texture2D>("VitaBootSplash");   // missing in a fresh clone: then only the scene hand-off
+        // A memory relaunch (VitaRelaunch) shows the loading screen it left (picture, "Loading...", bar), else its picture alone, or
+        // black, instead of the splash art
+        if (VitaRelaunch.Pending)
+        {
+            instance.ownArt = true;
+            try
+            {
+                instance.art = VitaRelaunch.TakeScreen();
+                instance.fullScreen = instance.art != null;
+                string line = VitaRelaunch.PendingPicture;
+                if (!instance.art && line != null)
+                    instance.art = VitaLoadingWindow.PictureFromLine(line);
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogWarning("VitaBootSplash: relaunch picture: " + e.Message);
+            }
+        }
+        else
+            instance.art = Resources.Load<Texture2D>("VitaBootSplash");   // missing in a fresh clone: then only the scene hand-off
         if (SceneManager.GetActiveScene().buildIndex < SceneControl.StartupSceneIndex)
         {
             var cam = new GameObject("VitaBootCamera").AddComponent<Camera>();   // part of the VitaBoot scene, gone with it
@@ -83,7 +105,7 @@ public class VitaBootSplash : MonoBehaviour
         yield return null;
         if (SceneManager.GetActiveScene().buildIndex < SceneControl.StartupSceneIndex)
             SceneManager.LoadScene(SceneControl.StartupSceneIndex);
-        if (!art)
+        if (!art && !ownArt)     // a relaunch without a picture stays black until its loading window
             Hide();
     }
 
@@ -92,7 +114,7 @@ public class VitaBootSplash : MonoBehaviour
         if (!art)
             return;
         GUI.depth = -1000;      // over DaggerfallUI's own OnGUI
-        GUI.DrawTexture(new Rect(0, 0, Screen.width, Screen.height), art, ScaleMode.ScaleAndCrop);
+        GUI.DrawTexture(new Rect(0, 0, Screen.width, Screen.height), art, fullScreen ? ScaleMode.StretchToFill : ownArt ? ScaleMode.ScaleToFit : ScaleMode.ScaleAndCrop);   // fitted as VitaLoadingWindow fits it
     }
 
     public static void Hide()
@@ -102,7 +124,9 @@ public class VitaBootSplash : MonoBehaviour
         // Destroy waits for the end of the frame, so clear art first: OnGUI must not draw the unloaded texture (white) this frame
         var art = instance.art;
         instance.art = null;
-        if (art)
+        if (art && instance.ownArt)
+            Destroy(art);
+        else if (art)
             Resources.UnloadAsset(art);
         Destroy(instance.gameObject);
         instance = null;

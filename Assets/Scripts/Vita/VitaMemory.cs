@@ -26,6 +26,8 @@ using Object = UnityEngine.Object;
 
 public static class VitaMemory
 {
+    public static bool RegexCacheOff;       // test harness A/B (bot word "regexoff")
+    public static bool NoBuildingUnload;    // TEMPORARY test switch (2026-11-12, entry/exit cost): skip the unload on building entry and exit
     // The development player crashes at startup on consumer Vitas,
     public static readonly bool Probes = Debug.isDebugBuild ||
         System.IO.File.Exists(System.IO.Path.Combine(DaggerfallUnityApplication.PersistentDataPath, "probes.txt"));
@@ -35,9 +37,13 @@ public static class VitaMemory
     {
         SceneManager.sceneLoaded += (scene, mode) => { if (Probes) { CheckLeaks(scene.name); periodicDumps = 12; } Unload("scene " + scene.name); };
         PlayerEnterExit.OnTransitionDungeonInterior += args => Unload("dungeon");
-        PlayerEnterExit.OnTransitionInterior += args => Unload("interior");
-        PlayerEnterExit.OnTransitionExterior += args => Unload("exterior");
+        PlayerEnterExit.OnTransitionInterior += args => BuildingUnload("interior");
+        PlayerEnterExit.OnTransitionExterior += args => BuildingUnload("exterior");
         Debug.Log(heapStepLog); // logged here: BeforeSceneLoad runs before DFU's log file is open
+        // Quest parsing tries all 83 action patterns per line through static Regex calls; .NET caches only 15 parsed patterns, so
+        // every try rebuilt its regex (Main Quest Backbone ~1.4-1.7 s per load, Tutorial ~1.3 s). Keep them all.
+        if (!RegexCacheOff)
+            System.Text.RegularExpressions.Regex.CacheSize = 256;
         CheckAudioThreadPin();
         var menuCollect = new GameObject("VitaMenuCollect");
         Object.DontDestroyOnLoad(menuCollect);
@@ -679,7 +685,8 @@ public static class VitaMemory
     }
 
     // Once per paused window, on its second drawn frame (the first shows it before the stop). Not the loading screen (it collects
-    // when it closes) or videos (a stop would show as a skipped frame there).
+    // when it closes), videos (a stop would show as a skipped frame there) or the quick menu (opened mid-fight for a few seconds:
+    // the stop came on every open, ~250 ms right as it appeared).
     class MenuCollect : MonoBehaviour
     {
         object window;
@@ -692,7 +699,8 @@ public static class VitaMemory
                 return;
             }
             DaggerfallWorkshop.Game.UserInterface.IUserInterfaceWindow top = DaggerfallUI.Instance.UserInterfaceManager.TopWindow;
-            if (top == null || top is VitaLoadingWindow || top is DaggerfallWorkshop.Game.UserInterfaceWindows.DaggerfallVidPlayerWindow)
+            if (top == null || top is VitaLoadingWindow || top is VitaQuickMenuWindow ||
+                top is DaggerfallWorkshop.Game.UserInterfaceWindows.DaggerfallVidPlayerWindow)
                 return;
             if (top != window)
             {
@@ -702,6 +710,16 @@ public static class VitaMemory
             if (++framesShown == 2)
                 IdleCollect(top.GetType().Name);
         }
+    }
+
+    /// <summary>Free video memory (CDRAM) in bytes; long.MaxValue in the editor.</summary>
+    public static long FreeCdram()
+    {
+#if !UNITY_EDITOR
+        return (long)Diagnostics.GetFreeMemoryCDRAM();
+#else
+        return long.MaxValue;
+#endif
     }
 
     /// <summary>Free main memory (LPDDR) in bytes; long.MaxValue in the editor.</summary>
@@ -821,8 +839,28 @@ public static class VitaMemory
     class HeapLog : MonoBehaviour
     {
         float next;
+        int lastGcHeap;
         void Update()
         {
+#if !UNITY_EDITOR
+            // TEMPORARY probe (2026-11-15, heap reserve drift): the frame the Boehm heap grows, so the step that grew it can be found
+            try
+            {
+                if (FindGcArrays())
+                {
+                    int heap = System.Runtime.InteropServices.Marshal.ReadInt32(new IntPtr(gcArrays));
+                    if (lastGcHeap != 0 && heap > lastGcHeap)
+                        Debug.Log(string.Format("VITAGROW t={0:F1}s frame={1} gcHeap {2:F1} -> {3:F1}MB, free blocks {4:F1}MB, allocated since GC {5} KB, gcs {6}",
+                            Time.realtimeSinceStartup, Time.frameCount, lastGcHeap / 1048576.0, heap / 1048576.0,
+                            System.Runtime.InteropServices.Marshal.ReadInt32(new IntPtr(gcArrays + 16)) / 1048576.0,
+                            GcBytesSinceCollect() / 1024, System.GC.CollectionCount(0)));
+                    lastGcHeap = heap;
+                }
+            }
+            catch (Exception)
+            {
+            }
+#endif
             if (Time.realtimeSinceStartup < next)
                 return;
             next = Time.realtimeSinceStartup + 5;
@@ -885,8 +923,38 @@ public static class VitaMemory
         createdTotal = createdReadable = 0;
     }
 
+    // Trial (2026-11-12, revert candidate): UnloadUnusedAssets cost 0.6-0.7 s at each building door, so doors only unload when memory
+    // runs low. Dungeons, fast travel and scene loads still always unload, and DFU's own 180 s unload keeps running.
+    const long BuildingUnloadMain = 50L << 20, BuildingUnloadCdram = 20L << 20;
+    static void BuildingUnload(string tag)
+    {
+        if (NoBuildingUnload)
+            return;
+#if !UNITY_EDITOR
+        long main = FreeMain(), cdram = (long)Diagnostics.GetFreeMemoryCDRAM();
+        bool low = main < BuildingUnloadMain || cdram < BuildingUnloadCdram;
+        if (!low)
+        {
+            ActiveGameObjectDatabase.VitaClearEnemyList();
+            return;
+        }
+#endif
+        Unload(tag);
+    }
+
+    // UnloadUnusedAssets dropped every shader no live material used, so each load found (Shader.Find), loaded and set up the same
+    // shaders again: the nature billboard material alone took 1.2-1.4 s per load (2026-11-17). Every shader loaded so far stays.
+    public static bool ShaderKeepOff;     // test harness A/B (bot word "shaderkeepoff")
+    static readonly HashSet<Shader> keptShaders = new HashSet<Shader>();
+    public static void KeepShaders()
+    {
+        if (!ShaderKeepOff)
+            keptShaders.UnionWith(Resources.FindObjectsOfTypeAll<Shader>());
+    }
+
     internal static void Unload(string tag)
     {
+        KeepShaders();
         ActiveGameObjectDatabase.VitaClearEnemyList();
         if (Probes)
             ReportTextures(tag);
@@ -924,6 +992,11 @@ public static class VitaMemory
         sb.AppendFormat("VITAMEM [{0}] Mesh: count={1} verts={2} profiler={3:F1}MB\n", tag, meshes.Length,
             meshes.Sum(m => (long)m.vertexCount), meshes.Sum(m => Profiler.GetRuntimeMemorySizeLong(m)) / 1048576.0);
         sb.AppendFormat("VITAMEM [{0}] billboard batches={1}\n", tag, Resources.FindObjectsOfTypeAll<DaggerfallWorkshop.DaggerfallBillboardBatch>().Length);
+        // TEMPORARY probe (2026-11-15): HeapBig grows ~1.7 MB per city while textures and meshes don't pile up; which native objects do
+        sb.AppendFormat("VITAMEM [{0}] objects: Material={1} GameObject={2} Component={3} AudioClip={4} Shader={5} all={6}\n", tag,
+            Resources.FindObjectsOfTypeAll<Material>().Length, Resources.FindObjectsOfTypeAll<GameObject>().Length,
+            Resources.FindObjectsOfTypeAll<Component>().Length, Resources.FindObjectsOfTypeAll<AudioClip>().Length,
+            Resources.FindObjectsOfTypeAll<Shader>().Length, Resources.FindObjectsOfTypeAll<Object>().Length);
         // After a transition's unload: who still holds meshes
         if (tag.Contains("unloaded"))
         {

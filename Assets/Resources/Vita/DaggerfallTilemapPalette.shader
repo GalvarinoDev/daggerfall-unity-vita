@@ -29,6 +29,7 @@ Shader "Daggerfall/Vita/TilemapPalette" {
 		CGPROGRAM
 		#pragma target 3.0
 		#pragma surface surf Lambert noforwardadd nolightmap nodynlightmap nodirlightmap nometa noinstancing exclude_path:deferred exclude_path:prepass vertex:vert noambient
+		#pragma multi_compile __ VITA_FILL_2   // VitaLights: slots 2-3 empty, VitaFillVertexLights does half the work
 		#pragma multi_compile __ VITA_PIXEL_TERRAIN_LIGHTS
 		#pragma multi_compile __ VITA_TOWN_LIGHTS
 

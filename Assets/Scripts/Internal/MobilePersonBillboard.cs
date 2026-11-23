@@ -471,7 +471,17 @@ namespace DaggerfallWorkshop
             normals[3] = normal;
 
             // Create mesh
+#if UNITY_PSP2
+            // Reuse the quad this billboard made on an earlier spawn: pooled civilians are respawned all day, and each new
+            // Mesh stayed in native memory until the next UnloadUnusedAssets
+            Mesh mesh = meshFilter.sharedMesh;
+            if (mesh && mesh.name == "MobilePersonMesh")
+                mesh.Clear();
+            else
+                mesh = new Mesh();
+#else
             Mesh mesh = new Mesh();
+#endif
             mesh.name = string.Format("MobilePersonMesh");
             mesh.vertices = vertices;
             mesh.triangles = indices;

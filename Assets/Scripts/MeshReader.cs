@@ -67,6 +67,16 @@ namespace DaggerfallWorkshop
 
         #endregion
 
+#if UNITY_PSP2
+        // Vita: no shader here reads mesh tangents (the normal-map variants are multi_compile_local, which 2018.2 never builds; the
+        // billboard batches fill their own). TangentSolver read every mesh's arrays back and built its tangents: ~10 MB of garbage per
+        // city load, plus 16 bytes per vertex of mesh memory.
+        void Awake()
+        {
+            AddMeshTangents = false;
+        }
+#endif
+
         #region Properties
 
         /// <summary>
@@ -238,6 +248,19 @@ namespace DaggerfallWorkshop
         /// <param name="solveTangents">Solve tangents for this mesh.</param>
         /// <param name="lightmapUVs">Add secondary lightmap UVs to this mesh.</param>
         /// <returns>Mesh object or null.</returns>
+#if UNITY_PSP2
+        static readonly List<int> vitaTriangles = new List<int>();
+#endif
+
+#if UNITY_PSP2
+        public static double VitaLastMaterialMs;   // TEMPORARY probe 2026-11-21 (VITABAKELAPS): GetCombinedMesh's material loop
+        public static bool VitaTriBoundsOld;   // test harness A/B (bot word "triboundsold")
+        public static int VitaLastNewMaterials;
+        public static double VitaLapArrays, VitaLapTris, VitaLapBounds, VitaLapVerts, VitaLapNormals;   // TEMPORARY probe 2026-11-21 (VITABAKELAPS)
+        public static double VitaLapUV, VitaLapCopy;   // TEMPORARY probe 2026-11-21 (VITABAKELAPS)
+        public static bool VitaBoundsRecalc;   // test harness A/B (bot word "boundsrecalc"): RecalculateBounds as before
+        static long vitaLap;
+#endif
         public Mesh GetCombinedMesh(
             DaggerfallUnity dfUnity,
             ModelCombiner combiner,
@@ -261,6 +284,10 @@ namespace DaggerfallWorkshop
                 return null;
 
             // Load materials
+#if UNITY_PSP2
+            long vitaMat0 = System.Diagnostics.Stopwatch.GetTimestamp();   // TEMPORARY probe 2026-11-21 (VITABAKELAPS)
+            VitaLastNewMaterials = 0;
+#endif
             cachedMaterialsOut = new CachedMaterial[combinedModel.SubMeshes.Length];
             textureKeysOut = new int[combinedModel.SubMeshes.Length];
             for (int i = 0; i < combinedModel.SubMeshes.Length; i++)
@@ -268,6 +295,10 @@ namespace DaggerfallWorkshop
                 int archive = combinedModel.SubMeshes[i].TextureArchive;
                 int record = combinedModel.SubMeshes[i].TextureRecord;
                 textureKeysOut[i] = MaterialReader.MakeTextureKey((short)archive, (byte)record, (byte)0);
+#if UNITY_PSP2
+                if (!dfUnity.MaterialReader.VitaHasMaterial(archive, record))   // TEMPORARY probe 2026-11-21
+                    VitaLastNewMaterials++;
+#endif
 
                 // Add material to array
                 CachedMaterial cachedMaterial;
@@ -279,15 +310,51 @@ namespace DaggerfallWorkshop
                     hasAnimationsOut = true;
             }
 
+#if UNITY_PSP2
+            VitaLastMaterialMs = (System.Diagnostics.Stopwatch.GetTimestamp() - vitaMat0) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+#endif
             // Create mesh
+#if UNITY_PSP2
+            vitaLap = System.Diagnostics.Stopwatch.GetTimestamp();   // TEMPORARY probe
+#endif
             Mesh mesh = new Mesh();
             mesh.name = "CombinedMesh";
             mesh.vertices = combinedModel.Vertices;
+#if UNITY_PSP2
+            VitaLapVerts = (System.Diagnostics.Stopwatch.GetTimestamp() - vitaLap) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;   // TEMPORARY probe
+#endif
             mesh.normals = combinedModel.Normals;
+#if UNITY_PSP2
+            VitaLapNormals = (System.Diagnostics.Stopwatch.GetTimestamp() - vitaLap) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;   // TEMPORARY probe
             mesh.uv = combinedModel.UVs;
+            VitaLapUV = (System.Diagnostics.Stopwatch.GetTimestamp() - vitaLap) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;   // TEMPORARY probe
+#else
+            mesh.uv = combinedModel.UVs;
+#endif
             mesh.subMeshCount = combinedModel.SubMeshes.Length;
+#if UNITY_PSP2
+            VitaLapArrays = (System.Diagnostics.Stopwatch.GetTimestamp() - vitaLap) * 1000.0 / System.Diagnostics.Stopwatch.Frequency; vitaLap = System.Diagnostics.Stopwatch.GetTimestamp();   // TEMPORARY probe
+#endif
 
             // Set submesh triangles
+#if UNITY_PSP2
+            // Vita: one shared list, not a new int[] per submesh (a copy of every block's indices was garbage during city loads)
+            long vitaCopy = 0;   // TEMPORARY probe
+            for (int s = 0; s < mesh.subMeshCount; s++)
+            {
+                var sub = combinedModel.SubMeshes[s];
+                long vitaC0 = System.Diagnostics.Stopwatch.GetTimestamp();   // TEMPORARY probe
+                vitaTriangles.Clear();
+                for (int t = 0; t < sub.PrimitiveCount * 3; t++)
+                {
+                    vitaTriangles.Add(combinedModel.Indices[sub.StartIndex + t]);
+                }
+                vitaCopy += System.Diagnostics.Stopwatch.GetTimestamp() - vitaC0;   // TEMPORARY probe
+                // bounds once below (RecalculateBounds), not per submesh: a 60-submesh dock block spent ~47 ms here.
+                // TRIAL 2026-11-21 (revert candidate; bot word "triboundsold" = bounds per submesh, as before)
+                mesh.SetTriangles(vitaTriangles, s, VitaTriBoundsOld);
+            }
+#else
             for (int s = 0; s < mesh.subMeshCount; s++)
             {
                 var sub = combinedModel.SubMeshes[s];
@@ -298,11 +365,41 @@ namespace DaggerfallWorkshop
                 }
                 mesh.SetTriangles(triangles, s);
             }
+#endif
 
             // Finalise mesh
+#if UNITY_PSP2
+            VitaLapCopy = vitaCopy * 1000.0 / System.Diagnostics.Stopwatch.Frequency;   // TEMPORARY probe
+            VitaLapTris = (System.Diagnostics.Stopwatch.GetTimestamp() - vitaLap) * 1000.0 / System.Diagnostics.Stopwatch.Frequency; vitaLap = System.Diagnostics.Stopwatch.GetTimestamp();   // TEMPORARY probe
+#endif
             if (solveTangents) TangentSolver(mesh);
             if (lightmapUVs) AddLightmapUVs(mesh);
+#if UNITY_PSP2
+            // The box of the vertices already in hand, not RecalculateBounds reading them back from the mesh (7.6 ms for a 20,842-vertex
+            // dock block in play). Same box: every vertex counts either way. TRIAL 2026-11-21 (revert candidate; bot word "boundsrecalc")
+            if (VitaBoundsRecalc || combinedModel.Vertices.Length == 0)
+                mesh.RecalculateBounds();
+            else
+            {
+                Vector3[] v = combinedModel.Vertices;
+                Vector3 min = v[0], max = v[0];
+                for (int i = 1; i < v.Length; i++)
+                {
+                    Vector3 p = v[i];
+                    if (p.x < min.x) min.x = p.x; else if (p.x > max.x) max.x = p.x;
+                    if (p.y < min.y) min.y = p.y; else if (p.y > max.y) max.y = p.y;
+                    if (p.z < min.z) min.z = p.z; else if (p.z > max.z) max.z = p.z;
+                }
+                Bounds b = new Bounds();
+                b.SetMinMax(min, max);
+                mesh.bounds = b;
+            }
+#else
             mesh.RecalculateBounds();
+#endif
+#if UNITY_PSP2
+            VitaLapBounds = (System.Diagnostics.Stopwatch.GetTimestamp() - vitaLap) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;   // TEMPORARY probe
+#endif
 
             return mesh;
         }
@@ -570,6 +667,20 @@ namespace DaggerfallWorkshop
         /// <returns>Final scaled size.</returns>
         public Vector2 GetScaledBillboardSize(int archive, int record)
         {
+#if UNITY_PSP2
+            // Vita: light flats only need the record's size, but GetCachedMaterial built a whole per-record material and texture for it
+            // (card read, decode, upload) although the billboard draws from the atlas: 119-226 ms per WoD ruin/camp light in play
+            // and every town and interior light. The baked TEXTURE headers give the same numbers; replaced records go the old way.
+            Vector2 size, scale;
+            if (DaggerfallWorkshop.Utility.AssetInjection.TextureReplacement.VitaHasBillboardReplacement(archive, record) || !VitaTextureInfo.RecordSizeScale(archive, record, out size, out scale))
+            {
+                CachedMaterial cm;
+                if (!dfUnity.MaterialReader.GetCachedMaterial(archive, record, 0, out cm))
+                    return Vector2.zero;
+                size = cm.recordSizes[0];
+                scale = cm.recordScales[0];
+            }
+#else
             // Get cached material data
             CachedMaterial cm;
             if (!dfUnity.MaterialReader.GetCachedMaterial(archive, record, 0, out cm))
@@ -578,6 +689,7 @@ namespace DaggerfallWorkshop
             // Get size and scale
             Vector2 size = cm.recordSizes[0];
             Vector2 scale = cm.recordScales[0];
+#endif
 
             // Apply scale
             Vector2 finalSize;

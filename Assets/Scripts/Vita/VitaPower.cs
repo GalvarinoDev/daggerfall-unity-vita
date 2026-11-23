@@ -28,7 +28,22 @@ public class VitaPower : MonoBehaviour
     [DllImport("VitaPower")] static extern int VitaPower_SetGpuClock(int mhz);
     [DllImport("VitaPower")] static extern int VitaPower_GetGpuClock();
     [DllImport("__Internal")] static extern int sceKernelExitProcess(int res);
+    [DllImport("VitaPower")] static extern int VitaPower_Relaunch();
+    [DllImport("VitaPower")] static extern ulong VitaPower_ProcessTimeUs();
+    [DllImport("VitaPower")] static extern int VitaPower_GetBudgetInfo(byte[] info);
+    [DllImport("VitaPower")] static extern int VitaPower_WatchdogStart(int seconds);
+    [DllImport("VitaPower")] static extern void VitaPower_WatchdogTick();
 #endif
+
+    /// <summary>Seconds since this process started (boot timing).</summary>
+    public static double ProcessSeconds()
+    {
+#if !UNITY_EDITOR
+        return VitaPower_ProcessTimeUs() / 1e6;
+#else
+        return Time.realtimeSinceStartup;
+#endif
+    }
 
     /// <summary>Exit Game: Application.Quit does nothing on the Vita, so restore normal power and end the process (back to the LiveArea).</summary>
     public static void Exit()
@@ -39,6 +54,17 @@ public class VitaPower : MonoBehaviour
 #endif
     }
 
+    /// <summary>Starts the game again from its own package (a full memory reset). Returns only on failure, with the error code.</summary>
+    public static int Relaunch()
+    {
+#if !UNITY_EDITOR
+        Restore();
+        return VitaPower_Relaunch();
+#else
+        return -1;
+#endif
+    }
+
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     static void Create()
     {
@@ -46,6 +72,35 @@ public class VitaPower : MonoBehaviour
         DontDestroyOnLoad(go);
         go.AddComponent<VitaPower>();
         Apply();
+        LogBudget();
+#if !UNITY_EDITOR
+        // Freeze watchdog, testing only (UserData/watchdog.txt, or a test run's autopilot.txt): no frame for this many seconds = a
+        // deliberate fault in the plugin, so a hang leaves a core dump (the longest single frames seen are ~12-16 s, the automap copy of a castle)
+        string userData = DaggerfallUnityApplication.PersistentDataPath;
+        if (System.IO.File.Exists(System.IO.Path.Combine(userData, "watchdog.txt")) || System.IO.File.Exists(System.IO.Path.Combine(userData, "autopilot.txt")))
+        {
+            watchdogOn = true;
+            Debug.LogFormat("VitaPower: watchdog {0} s, thread {1:x}", WatchdogSeconds, VitaPower_WatchdogStart(WatchdogSeconds));
+        }
+#endif
+    }
+
+    const int WatchdogSeconds = 45;
+    static bool watchdogOn;
+
+    // 2026-11-20 (memory headroom): the app's memory budget as the system reports it (a budget plugin can grow MAIN up to 381 MiB)
+    static void LogBudget()
+    {
+#if !UNITY_EDITOR
+        byte[] info = new byte[0x88];
+        int result = VitaPower_GetBudgetInfo(info);
+        Debug.LogFormat("VitaPower: budget result {0:x}, mode {1}, MAIN total {2:F1} free {3:F1} MB, extra allowed {4} total {5:F1} free {6:F1} MB, " +
+            "phycont {7:F1}/{8:F1} MB, CDRAM {9:F1}/{10:F1} MB", result, System.BitConverter.ToInt32(info, 4),
+            System.BitConverter.ToUInt32(info, 12) / 1048576.0, System.BitConverter.ToUInt32(info, 16) / 1048576.0, System.BitConverter.ToInt32(info, 20),
+            System.BitConverter.ToUInt32(info, 28) / 1048576.0, System.BitConverter.ToUInt32(info, 32) / 1048576.0,
+            System.BitConverter.ToUInt32(info, 44) / 1048576.0, System.BitConverter.ToUInt32(info, 48) / 1048576.0,
+            System.BitConverter.ToUInt32(info, 92) / 1048576.0, System.BitConverter.ToUInt32(info, 96) / 1048576.0);
+#endif
     }
 
     public static void Apply()
@@ -96,6 +151,10 @@ public class VitaPower : MonoBehaviour
 
     void Update()
     {
+#if !UNITY_EDITOR
+        if (watchdogOn)
+            VitaPower_WatchdogTick();
+#endif
         // DaggerfallUI lives in the game scene, after this object is made
         if (registeredWith || !DaggerfallUI.Instance)
             return;

@@ -30,11 +30,11 @@ namespace DaggerfallWorkshop.Utility
         /// <param name="season">Climate season to apply</param>
         /// <returns>Archive index of new texture.</returns>
 #if UNITY_PSP2 && VITA_MODS
-        // Vita: "Snowless - Swamp, Jungle, and Woodlands" (Mods window): climates on the swamp base (swamp, jungle) and the temperate base
-        // (the woodlands) keep their summer textures and weather in winter, as DFU already does for the desert. No art of its own.
+        // Vita: "Snowless - Swamp and Jungle" (Mods window): climates on the swamp base (swamp, jungle) keep their summer textures and
+        // weather in winter, as DFU already does for the desert. No art of its own.
         public static bool VitaSnowless(ClimateBases climate)
         {
-            return DaggerfallUnity.Settings.VitaSnowlessSwamp && (climate == ClimateBases.Swamp || climate == ClimateBases.Temperate);
+            return DaggerfallUnity.Settings.VitaSnowlessSwamp && climate == ClimateBases.Swamp;
         }
 
         public static bool VitaSnowless(int worldClimate)
@@ -444,11 +444,6 @@ namespace DaggerfallWorkshop.Utility
 
             var archive = (int) textureSet;
 
-#if UNITY_PSP2 && VITA_MODS
-            // Vita: Snowless keeps the woodland trees green (the mountain set is the only winter set on another base)
-            if (climateSeason == ClimateSeason.Winter && DaggerfallUnity.Settings.VitaSnowlessSwamp && natureSet != ClimateNatureSets.Mountains)
-                climateSeason = ClimateSeason.Summer;
-#endif
             // Winter modifier
             if (climateSeason == ClimateSeason.Winter)
             {

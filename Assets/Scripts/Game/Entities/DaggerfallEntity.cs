@@ -399,7 +399,7 @@ namespace DaggerfallWorkshop.Game.Entity
 
         public void SetIncreasedArmorValueModifier(int amount)
         {
-            // Increased armor value does not stack, only effect with the highest modifier used
+            // Increased armor value does not stack, only effect with the strongest modifier used
             // In classic effects this never goes below -5 (lower modifier -> higher armor)
             if (amount < IncreasedArmorValueModifier)
             {
@@ -409,10 +409,12 @@ namespace DaggerfallWorkshop.Game.Entity
 
         public void SetDecreasedArmorValueModifier(int amount)
         {
-            // Decreased armor value does not stack, only effect with the lowest modifier uses
+            // Decreased armor value does not stack, only effect with the strongest modifier uses
             // In classic effects this never goes above +5 (higher modifier -> lower armor)
-            if (amount < DecreasedArmorValueModifier)
+            if (amount > DecreasedArmorValueModifier)
+            {
                 DecreasedArmorValueModifier = amount;
+            }
         }
 
         public void ChangeChanceToHitModifier(int amount)
@@ -1139,6 +1141,19 @@ namespace DaggerfallWorkshop.Game.Entity
         {
             ResetEntityState();
         }
+#if UNITY_PSP2
+
+        /// <summary>
+        /// Vita: the constructor's two static subscriptions had no matching unsubscribe, so every entity ever made (each enemy and
+        /// guard of every world built, plus the default one Awake makes before the real one is set) stayed reachable from them with
+        /// its items and behaviour: ~1 MB of live heap per fast travel. Called by DaggerfallEntityBehaviour when it drops this entity.
+        /// </summary>
+        public void VitaUnsubscribe()
+        {
+            SaveLoadManager.OnStartLoad -= SaveLoadManager_OnStartLoad;
+            StartGameBehaviour.OnNewGame -= StartGameBehaviour_OnNewGame;
+        }
+#endif
 
         #endregion
     }

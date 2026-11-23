@@ -27,8 +27,26 @@ namespace DaggerfallWorkshop.Game
         void Start()
         {
             if (damageTexture == null)
+#if UNITY_PSP2
+            {
+                // Vita: the flash is one solid colour stretched to the screen, so 1x1 draws the same. The full-screen
+                // texture cost 2 MB for good plus an 8 MB Color[] at boot (the IL2CPP heap never shrinks).
+                damageTexture = new Texture2D(1, 1, TextureFormat.ARGB32, false);
+                damageTexture.SetPixel(0, 0, new Color(1, 0, 0, 1));
+                damageTexture.Apply(false, true);
+            }
+#else
                 damageTexture = __ExternalAssets.iTween.CameraTexture(new Color(1, 0, 0, 1));
+#endif
         }
+
+#if UNITY_PSP2
+        void OnDestroy()
+        {
+            if (damageTexture != null)
+                Destroy(damageTexture);
+        }
+#endif
 
         public void Flash()
         {

@@ -7,6 +7,7 @@
 // index swap (0x70-0x7F) and BaseImageFile.GetColor32 a palette lookup with index 0 transparent, so the pixels are the same.
 // Point filtering only (filtering would blend indices); other filter modes keep upstream's ARGB32 atlas.
 // Pack: "VWPN", version, count, then per file: name, atlas width, height, frame count, x/y/w/h per frame (rows bottom-up), index bytes.
+// Version 2 (vita/tools/lz4ownpacks.py): the index bytes as one LZ4 block after its stored length (34.1 -> 1.6 MB, same load time on hardware).
 
 #if UNITY_PSP2
 using System.Collections.Generic;
@@ -20,6 +21,7 @@ public static class VitaWeaponPack
 {
     public const int Magic = 0x4e505756;   // "VWPN"
     public const int Version = 1;
+    public const int VersionLz4 = 2;
     public const string ShaderName = "Daggerfall/Vita/UIPalette";
     public static bool Enabled = true;     // test switch: the original weapon path
 
@@ -30,6 +32,7 @@ public static class VitaWeaponPack
         public int Width, Height;
         public int[] Frames;   // x, y, w, h per frame
         public long Offset;    // index bytes
+        public int Stored;     // LZ4 block length (version 2), 0 = raw
     }
 
     static Dictionary<string, Entry> entries;
@@ -48,7 +51,10 @@ public static class VitaWeaponPack
         {
             using (var reader = new BinaryReader(File.OpenRead(PackPath)))
             {
-                if (reader.ReadInt32() != Magic || reader.ReadInt32() != Version)
+                if (reader.ReadInt32() != Magic)
+                    return;
+                int version = reader.ReadInt32();
+                if (version != Version && version != VersionLz4)
                     return;
                 int count = reader.ReadInt32();
                 for (int i = 0; i < count; i++)
@@ -58,8 +64,10 @@ public static class VitaWeaponPack
                     entry.Frames = new int[reader.ReadInt32() * 4];
                     for (int f = 0; f < entry.Frames.Length; f++)
                         entry.Frames[f] = reader.ReadInt32();
+                    if (version == VersionLz4)
+                        entry.Stored = reader.ReadInt32();
                     entry.Offset = reader.BaseStream.Position;
-                    reader.BaseStream.Seek(entry.Width * entry.Height, SeekOrigin.Current);
+                    reader.BaseStream.Seek(entry.Stored > 0 ? entry.Stored : entry.Width * entry.Height, SeekOrigin.Current);
                     entries[name] = entry;
                 }
             }
@@ -84,13 +92,16 @@ public static class VitaWeaponPack
             return null;
 
         var data = new byte[entry.Width * entry.Height];
+        byte[] block = entry.Stored > 0 ? new byte[entry.Stored] : data;
         using (var stream = File.OpenRead(PackPath))
         {
             stream.Seek(entry.Offset, SeekOrigin.Begin);
             int read = 0, n;
-            while (read < data.Length && (n = stream.Read(data, read, data.Length - read)) > 0)
+            while (read < block.Length && (n = stream.Read(block, read, block.Length - read)) > 0)
                 read += n;
         }
+        if (entry.Stored > 0 && !Decode(block, data))
+            return null;
         Texture2D texture = VitaPalette.AtlasTexture(data, entry.Width, entry.Height, null, 0, false, false);
         if (!texture)
             return null;
@@ -103,6 +114,13 @@ public static class VitaWeaponPack
             rects[i] = new Rect(f[i * 4] * ru, f[i * 4 + 1] * rv, f[i * 4 + 2] * ru, f[i * 4 + 3] * rv);
         }
         return texture;
+    }
+
+    static unsafe bool Decode(byte[] block, byte[] data)
+    {
+        fixed (byte* src = block)
+        fixed (byte* dst = data)
+            return VitaLz4.Decode((System.IntPtr)src, block.Length, (System.IntPtr)dst, data.Length);
     }
 
     /// <summary>256x1 palette with the metal's dye swap applied, as FPSWeapon.GetWeaponTexture2D tints (none for steel).</summary>

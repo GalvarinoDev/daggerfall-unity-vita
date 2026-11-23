@@ -24,7 +24,11 @@ namespace DaggerfallWorkshop
         const int tileDim = 128;            // MapsFile.WorldMapTileDim
         const int bucketTiles = 4;          // trees are kept in 4x4-tile buckets (32x32 per terrain); cells gather them
         const int bucketsPerSide = tileDim / bucketTiles;
-        const int treesPerFrame = 24;       // build budget
+        const int treesPerFrame = 24;       // build budget (VitaTreeBudgetOff)
+        // Build budget in time instead: 24 trees plus a mesh upload were 20-36 ms frames every few seconds while walking. About this many ms
+        // of trees per frame (at least one), and the upload on a frame of its own once they have used it. Test switch: bot word "treebudgetoff"
+        const float treeBuildMs = 5f;
+        public static bool VitaTreeBudgetOff;
         const int maxVertices = 65000;      // 16-bit indices
         const string keyword = "VITA_NEAR_TREES";
         static readonly int rectId = Shader.PropertyToID("_VitaNearTreeRect");
@@ -130,7 +134,9 @@ namespace DaggerfallWorkshop
                 var go = new GameObject("VitaNearTrees");
                 go.transform.SetParent(batch.transform, false);
                 go.layer = batch.gameObject.layer;
+                DaggerfallBillboardBatch.VitaPoolNext = true;     // terrain nature batch: buffers pooled with the others
                 treeBatch = go.AddComponent<DaggerfallBillboardBatch>();
+                DaggerfallBillboardBatch.VitaPoolNext = false;
             }
             treeBatch.SetMaterial(VitaBiomes.ModelArchive(batch.TextureArchive));
             Material material = treeBatch.GetComponent<MeshRenderer>().sharedMaterial;
@@ -161,7 +167,7 @@ namespace DaggerfallWorkshop
             tree.position = new Vector3(x / tilemapDim * data.size.x, data.GetInterpolatedHeight(x / tilemapDim, y / tilemapDim), y / tilemapDim * data.size.z);
             int bucket = Mathf.Min(y / bucketTiles, bucketsPerSide - 1) * bucketsPerSide + Mathf.Min(x / bucketTiles, bucketsPerSide - 1);
             if (tile.buckets[bucket] == null)
-                tile.buckets[bucket] = new List<Instance>();
+                tile.buckets[bucket] = NewBucket();
             tile.buckets[bucket].Add(tree);
             return true;
         }
@@ -172,6 +178,7 @@ namespace DaggerfallWorkshop
             var terrains = new List<DaggerfallTerrain>(tiles.Keys);
             foreach (DaggerfallTerrain terrain in terrains)
                 ReleaseTile(terrain);
+            freeBuckets.Clear();    // setting off: nothing lays trees out until it is on again
             Shader.SetGlobalVector(rectId, noRect);
             if (instance)
                 instance.Forget();
@@ -263,6 +270,8 @@ namespace DaggerfallWorkshop
         bool BuildStep()
         {
             int budget = treesPerFrame;
+            long start = System.Diagnostics.Stopwatch.GetTimestamp();
+            long budgetTicks = (long)(treeBuildMs * System.Diagnostics.Stopwatch.Frequency / 1000);
             foreach (CellKey key in wanted)
             {
                 Tile tile = tiles[key.terrain];
@@ -271,10 +280,24 @@ namespace DaggerfallWorkshop
                 if (!isBuilding || building.terrain != key.terrain || building.index != key.index)
                     StartCell(key);
                 int count = cellTrees.Count;
-                while (buildNext < count && budget-- > 0)
-                    AddTree(tile, cellTrees[buildNext++]);
+                if (VitaTreeBudgetOff)
+                {
+                    while (buildNext < count && budget-- > 0)
+                        AddTree(tile, cellTrees[buildNext++]);
+                }
+                else
+                {
+                    bool first = true;
+                    while (buildNext < count && (first || System.Diagnostics.Stopwatch.GetTimestamp() - start < budgetTicks))
+                    {
+                        AddTree(tile, cellTrees[buildNext++]);
+                        first = false;
+                    }
+                }
                 if (buildNext < count)
                     return false;
+                if (!VitaTreeBudgetOff && System.Diagnostics.Stopwatch.GetTimestamp() - start >= budgetTicks / 2)
+                    return false;   // the upload next frame (this cell stays the one being built)
                 FinishCell(tile);
                 return false;   // next cell next frame
             }
@@ -480,6 +503,17 @@ namespace DaggerfallWorkshop
                     ReleaseTile(terrain);
         }
 
+        // Bucket lists of released tiles, reused by the next layout: a new set per layout (growing from empty) was most of the 0.6-2.3 MB
+        // of garbage each terrain's nature layout made. Cell builds copy the trees out (cellTrees).
+        static readonly Stack<List<Instance>> freeBuckets = new Stack<List<Instance>>();
+
+        public static bool VitaPoolOff;     // test harness A/B (same trees either way)
+
+        static List<Instance> NewBucket()
+        {
+            return freeBuckets.Count > 0 && !VitaPoolOff ? freeBuckets.Pop() : new List<Instance>();
+        }
+
         static void ReleaseTile(DaggerfallTerrain terrain)
         {
             Tile tile;
@@ -487,6 +521,12 @@ namespace DaggerfallWorkshop
                 return;
             for (int i = 0; i < tile.cells.Length; i++)
                 ReleaseCell(terrain, i);
+            foreach (List<Instance> bucket in tile.buckets)
+                if (bucket != null && !VitaPoolOff)
+                {
+                    bucket.Clear();
+                    freeBuckets.Push(bucket);
+                }
             tiles.Remove(terrain);
             foreach (VitaLocationTrees owner in locationOwners)
                 if (owner && owner.terrain == terrain)
@@ -633,6 +673,11 @@ namespace DaggerfallWorkshop
 
         const float keepReleased = 10f;
         static readonly List<int> droppedAtlases = new List<int>();
+        // Released atlases stay loaded while the world is up and CDRAM has room: walking a town released an atlas after 10 s and the next
+        // cell loaded it again (card read + RGBA expand + upload on one frame): 95-409 ms render frames. The town load already holds them
+        // all, so keeping them adds nothing to the peak. Test switch: bot word "keepatlasoff"
+        const long keepAtlasMinFreeCdram = 16L << 20;
+        public static bool VitaKeepAtlasOff;
 
         static void DropReleasedAtlases()
         {
@@ -641,6 +686,8 @@ namespace DaggerfallWorkshop
             foreach (var pair in atlases)
                 if (pair.Value.refs <= 0 && pair.Value.releasedAt >= 0 && now - pair.Value.releasedAt > keepReleased)
                     droppedAtlases.Add(pair.Key);
+            if (droppedAtlases.Count > 0 && !VitaKeepAtlasOff && tiles.Count > 0 && VitaMemory.FreeCdram() >= keepAtlasMinFreeCdram)
+                droppedAtlases.Clear();
             foreach (int key in droppedAtlases)
             {
                 Atlas atlas = atlases[key];
@@ -734,7 +781,7 @@ namespace DaggerfallWorkshop
                     int y = Mathf.Clamp(Mathf.RoundToInt(tree.position.z / size * tileDim), 0, tileDim - 1);
                     int bucket = y / bucketTiles * bucketsPerSide + x / bucketTiles;
                     if (tile.buckets[bucket] == null)
-                        tile.buckets[bucket] = new List<Instance>();
+                        tile.buckets[bucket] = NewBucket();
                     tile.buckets[bucket].Add(tree);
                 }
                 owner.terrain = terrain;

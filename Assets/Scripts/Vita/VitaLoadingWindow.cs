@@ -46,6 +46,8 @@ public class VitaLoadingWindow : DaggerfallBaseWindow
 #else
         picture = DaggerfallWorkshop.DaggerfallUnity.Settings.VitaLoadScreenArt ? LoadPicture(category) : null;
 #endif
+        if (picture == null)
+            LastPicture = null;
         if (picture != null)
         {
             ParentPanel.BackgroundTexture = picture;
@@ -99,6 +101,7 @@ public class VitaLoadingWindow : DaggerfallBaseWindow
     public override void Update()
     {
         base.Update();
+        VitaBootSplash.Hide();     // a relaunch's boot drew this picture until now (no-op otherwise)
         if (Time.realtimeSinceStartup - lastTick > 5)
             KeepScreenOn();
         if (GameManager.HasInstance && GameManager.Instance.StreamingWorld.VitaIsBuilding)
@@ -154,12 +157,23 @@ public class VitaLoadingWindow : DaggerfallBaseWindow
         picture = null;
     }
 
+    /// <summary>Plain black, nothing drawn (VitaRelaunch shows its notice box over it).</summary>
+    public void ShowBlack()
+    {
+        ParentPanel.BackgroundTexture = null;
+        ParentPanel.BackgroundColor = Color.black;
+        NativePanel.Enabled = false;
+    }
+
     void AddCentred(DaggerfallFont font, string text, float y)
     {
         TextLabel label = DaggerfallUI.AddTextLabel(font, new Vector2(0, y), text, NativePanel);
         label.HorizontalAlignment = HorizontalAlignment.Center;
         label.TextColor = DaggerfallUI.DaggerfallDefaultTextColor;
     }
+
+    public static string LastPicture;     // list line of the picture shown last (VitaRelaunch writes it into its marker)
+    public static string NextPicture;     // list line the next window shows instead of a random one (set by a relaunch's boot)
 
     // StreamingAssets/LoadScreens holds raw RGB565 files from vita/tools/loadscreens.py, listed in list.txt ("w h file"),
     // so nothing is decoded or listed on the Vita. Files whose name starts with category are preferred.
@@ -169,23 +183,36 @@ public class VitaLoadingWindow : DaggerfallBaseWindow
         {
             string dir = System.IO.Path.Combine(Application.streamingAssetsPath, "LoadScreens");
             string[] lines = System.IO.File.ReadAllLines(System.IO.Path.Combine(dir, "list.txt"));
-            List<string> picks = new List<string>();
-            foreach (string line in lines)
-                if (category != null && line.Contains(" " + category + "_"))
-                    picks.Add(line);
-            if (picks.Count == 0)
-                picks.AddRange(lines);
-            string[] fields = picks[UnityEngine.Random.Range(0, picks.Count)].Split(' ');
-            Texture2D texture = new Texture2D(int.Parse(fields[0]), int.Parse(fields[1]), TextureFormat.RGB565, false);
-            texture.LoadRawTextureData(System.IO.File.ReadAllBytes(System.IO.Path.Combine(dir, fields[2])));
-            texture.Apply(false, true);
-            return texture;
+            string pick = NextPicture != null && Array.IndexOf(lines, NextPicture) >= 0 ? NextPicture : null;
+            NextPicture = null;
+            if (pick == null)
+            {
+                List<string> picks = new List<string>();
+                foreach (string line in lines)
+                    if (category != null && line.Contains(" " + category + "_"))
+                        picks.Add(line);
+                if (picks.Count == 0)
+                    picks.AddRange(lines);
+                pick = picks[UnityEngine.Random.Range(0, picks.Count)];
+            }
+            LastPicture = pick;
+            return PictureFromLine(pick);
         }
         catch (Exception e)
         {
             Debug.LogWarning("VitaLoadingWindow: no picture: " + e.Message);
             return null;
         }
+    }
+
+    /// <summary>The picture of one list.txt line ("w h file"); the caller owns the texture. Throws if the file is missing.</summary>
+    public static Texture2D PictureFromLine(string line)
+    {
+        string[] fields = line.Split(' ');
+        Texture2D texture = new Texture2D(int.Parse(fields[0]), int.Parse(fields[1]), TextureFormat.RGB565, false);
+        texture.LoadRawTextureData(System.IO.File.ReadAllBytes(System.IO.Path.Combine(System.IO.Path.Combine(Application.streamingAssetsPath, "LoadScreens"), fields[2])));
+        texture.Apply(false, true);
+        return texture;
     }
 }
 #endif

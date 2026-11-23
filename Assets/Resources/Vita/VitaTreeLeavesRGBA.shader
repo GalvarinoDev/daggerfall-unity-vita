@@ -17,6 +17,7 @@ Shader "Daggerfall/Vita/TreeLeavesRGBA" {
 		CGPROGRAM
 		#pragma target 3.0
 		#pragma surface surf VitaLeaf alphatest:_Cutoff vertex:vert addshadow nolightmap nodynlightmap nodirlightmap nometa noinstancing noambient
+		#pragma multi_compile __ VITA_FILL_2   // VitaLights: slots 2-3 empty, VitaFillVertexLights does half the work
 
 		sampler2D _MainTex;
 		#include "VitaFill.cginc"

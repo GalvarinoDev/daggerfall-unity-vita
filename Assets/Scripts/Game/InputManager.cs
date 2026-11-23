@@ -99,8 +99,7 @@ namespace DaggerfallWorkshop.Game
         List<Actions> previousActions = new List<Actions>();
 #if UNITY_PSP2
         LevitateMotor vitaLevitateMotor;
-        float vitaSquareDownTime;
-        public const float VitaHoldSeconds = 0.5f;      // a pad button held this long is a "hold" (Circle, Select, Square on the dragon)
+        public const float VitaHoldSeconds = 0.5f;      // a pad button held this long is a "hold" (DaggerfallHUD's tap/hold buttons)
 #endif
         KeyCode[] heldKeys = new KeyCode[totalHeldKeys];
         KeyCode[] previousKeys = new KeyCode[totalHeldKeys];
@@ -473,6 +472,17 @@ namespace DaggerfallWorkshop.Game
                         dict.Remove(KeyCode.JoystickButton9);
                     if (dict.TryGetValue(KeyCode.JoystickButton10, out saved) && saved == Actions.AutoMap)
                         dict.Remove(KeyCode.JoystickButton10);
+                    // D-pad Up too (tap = quick spell, hold = quick menu)
+                    if (dict.TryGetValue(KeyCode.JoystickButton8, out saved) && saved == Actions.RecastSpell)
+                        dict.Remove(KeyCode.JoystickButton8);
+                    // and D-pad Left (a hotkey; the logbook moved to holding Start), L (tap = L spell, hold = quick menu; R attacks)
+                    // and Square (tap = draw / sheathe, hold = swap hands)
+                    if (dict.TryGetValue(KeyCode.JoystickButton11, out saved) && saved == Actions.LogBook)
+                        dict.Remove(KeyCode.JoystickButton11);
+                    if (dict.TryGetValue(KeyCode.JoystickButton4, out saved) && saved == Actions.SwingWeapon)
+                        dict.Remove(KeyCode.JoystickButton4);
+                    if (dict.TryGetValue(KeyCode.JoystickButton2, out saved) && saved == Actions.ReadyWeapon)
+                        dict.Remove(KeyCode.JoystickButton2);
                 }
 #endif
 
@@ -586,33 +596,29 @@ namespace DaggerfallWorkshop.Game
             if (DragonRider.DragonRider.IsDragonMounted)
 #endif
             {
-                // Vita, on Dragon Rider's dragon: Triangle climbs, Cross dives, DragonRider.cs reads L (fire), R (boost)
-                // and a Square hold (hover/flight) itself, so no activating or swinging while riding; a Square tap still readies the weapon,
-                // sent on release so a hold doesn't draw it
+                // Vita, on Dragon Rider's dragon: Triangle climbs, Cross dives; DragonRider.cs reads R (fire breath) itself and DaggerfallHUD
+                // L (wingbeat boost) and D-pad Down (hover/flight), so no activating or swinging while riding
                 for (int i = currentActions.Count - 1; i >= 0; i--)
                 {
                     if (currentActions[i] == Actions.ActivateCenterObject)
                         currentActions[i] = Actions.FloatDown;
-                    else if (currentActions[i] == Actions.ReadyWeapon || currentActions[i] == Actions.SwingWeapon)
+                    else if (currentActions[i] == Actions.SwingWeapon)
                         currentActions.RemoveAt(i);
                 }
-                if (Input.GetKeyDown(KeyCode.JoystickButton2))
-                    vitaSquareDownTime = Time.unscaledTime;
-                if (Input.GetKeyUp(KeyCode.JoystickButton2) && Time.unscaledTime - vitaSquareDownTime < VitaHoldSeconds)
-                    currentActions.Add(Actions.ReadyWeapon);
             }
-            else
+            else if (currentActions.Contains(Actions.ActivateCenterObject))
             {
-                // Vita: no pad button for FloatDown, so holding Square (Ready Weapon) sinks while levitating (the spell)
-                int readyIndex = currentActions.IndexOf(Actions.ReadyWeapon);
-                if (readyIndex >= 0)
-                {
-                    if (!vitaLevitateMotor && GameManager.HasInstance && GameManager.Instance.PlayerObject)
-                        vitaLevitateMotor = GameManager.Instance.PlayerObject.GetComponent<LevitateMotor>();
-                    if (vitaLevitateMotor && vitaLevitateMotor.IsLevitating)
-                        currentActions[readyIndex] = Actions.FloatDown;
-                }
+                // Vita: holding Cross sinks while levitating or swimming, as it dives on the dragon (Triangle = Jump rises); a tap still
+                // activates on release (PlayerActivate skips the release of a long press)
+                if (!vitaLevitateMotor && GameManager.HasInstance && GameManager.Instance.PlayerObject)
+                    vitaLevitateMotor = GameManager.Instance.PlayerObject.GetComponent<LevitateMotor>();
+                if (vitaLevitateMotor && (vitaLevitateMotor.IsLevitating || vitaLevitateMotor.IsSwimming))
+                    currentActions.Add(Actions.FloatDown);
             }
+            // Quick menu open in real time or slow motion: only walking reaches the game (the buttons and right stick are the menu's)
+            if (VitaQuickMenuOpen)
+                currentActions.RemoveAll(a => a != Actions.MoveForwards && a != Actions.MoveBackwards && a != Actions.MoveLeft &&
+                    a != Actions.MoveRight && a != Actions.Run);
 #endif
 
             // Update look impulse
@@ -634,9 +640,8 @@ namespace DaggerfallWorkshop.Game
                     GUI.depth = 0;
 
 #if UNITY_PSP2
-                    // Not over the loading screen
-                    if (!(DaggerfallUI.UIManager.TopWindow is VitaLoadingWindow))
-                        GUI.DrawTexture(controllerCursorRect, controllerCursorImage);
+                    // Drawn by VitaMenuNav.DrawCursor after the top window instead: this draw landed under the UI on the Vita and showed
+                    // as a second arrow behind see-through windows
 #else
                     GUI.DrawTexture(controllerCursorRect, controllerCursorImage);
 #endif
@@ -1084,7 +1089,7 @@ namespace DaggerfallWorkshop.Game
 
             setBinding(KeyCode.Z, Actions.ReadyWeapon, true);
 #if UNITY_PSP2
-            setBinding(KeyCode.JoystickButton4, Actions.SwingWeapon, true);     // L (R is the secondary below)
+            setBinding(KeyCode.JoystickButton5, Actions.SwingWeapon, true);     // R (L: DaggerfallHUD's, tap = L spell, hold = quick menu)
 #else
             setBinding(KeyCode.Mouse1, Actions.SwingWeapon, true);
 #endif
@@ -1113,17 +1118,15 @@ namespace DaggerfallWorkshop.Game
 #if UNITY_PSP2
 
             // Vita pad (button numbers from Unity's PS Vita Input manual page). L/R attack, nothing else goes there.
-            setBinding(KeyCode.JoystickButton5, Actions.SwingWeapon, false);            // R
             setBinding(KeyCode.JoystickButton0, Actions.ActivateCenterObject, false);   // Cross (UI: click)
             // Circle (JoystickButton1, UI: back): DaggerfallHUD's, tap = inventory, hold = transport
-            setBinding(KeyCode.JoystickButton2, Actions.ReadyWeapon, false);            // Square
+            // Square (JoystickButton2): DaggerfallHUD's, tap = draw / sheathe, hold = swap hands
             setBinding(KeyCode.JoystickButton3, Actions.Jump, false);                   // Triangle
-            // Select (JoystickButton6): DaggerfallHUD's, tap = HUD mode, hold = spellbook (bound to CastSpell, the spellbook would close on release)
-            setBinding(KeyCode.JoystickButton7, Actions.Escape, false);                 // Start
-            setBinding(KeyCode.JoystickButton8, Actions.RecastSpell, false);            // D-pad up
-            // D-pad right (JoystickButton9): DaggerfallHUD's, tap = travel map, hold = automap
-            // D-pad down (JoystickButton10): DaggerfallHUD's, crouch / stand
-            setBinding(KeyCode.JoystickButton11, Actions.LogBook, false);               // D-pad left
+            // Select (JoystickButton6): DaggerfallHUD's, tap = spellbook, hold = HUD style box until released (bound to CastSpell, the spellbook would close on release)
+            setBinding(KeyCode.JoystickButton7, Actions.Escape, false);                 // Start (tap; DaggerfallHUD: hold = logbook)
+            // D-pad up (JoystickButton8): DaggerfallHUD's, tap = travel map, hold = automap
+            // D-pad left / right (JoystickButton11 / 9): DaggerfallHUD's, tap = hotkey 1 / 2, hold = hotkey 3 / 4 (set in VitaQuickMenuWindow)
+            // D-pad down (JoystickButton10): DaggerfallHUD's, tap = crouch / stand (dragon: hover/flight), hold = action ring until released
 #endif
 
             setAxisBinding("Axis1", AxisActions.MovementHorizontal);
@@ -1165,6 +1168,8 @@ namespace DaggerfallWorkshop.Game
 #if UNITY_PSP2
         /// <summary>Vita: set when holding Circle opened a window (DaggerfallHUD), so letting go of that hold isn't read as Back</summary>
         public bool VitaIgnoreBackRelease;
+        /// <summary>Vita: VitaQuickMenuWindow is open (it reads the pad itself; the game only gets movement)</summary>
+        public bool VitaQuickMenuOpen;
 
         public bool GetBackButtonUp()
         {

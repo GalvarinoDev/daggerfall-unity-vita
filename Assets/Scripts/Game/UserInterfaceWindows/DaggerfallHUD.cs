@@ -46,18 +46,15 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
         Panel debugPanel = null;
         bool renderHUD = true;
 #if UNITY_PSP2
-        // Vita: Select cycles the HUD: 0 = none (vitals still come up in combat or at
-        // low health), 1 = full (large HUD), 2 = minimal (vitals + compass); holding Select opens the spellbook
+        // Vita: the HUD style (Select hold box): 0 = none (vitals still come up in combat or at
+        // low health), 1 = full (large HUD), 2 = minimal (vitals + compass); tapping Select opens the spellbook
         const float vitaSelectHoldSeconds = 0.5f;
         int vitaHudMode = 0;
-        float vitaSelectDownTime;
-        bool vitaSelectHeld;
-        // Circle: tap = inventory, hold = transport (horse/cart). Rear touch pad: a quick tap on the left half toggles sneak, both halves
-        // held (two fingers) crouch until released
-        float vitaCircleDownTime;
-        bool vitaCircleHeld;
-        float vitaRightDownTime;
-        bool vitaRightHeld;
+        public int VitaHudMode { get { return vitaHudMode; } set { vitaHudMode = value; } }   // the Select hold box sets it (VitaHudStyleWindow)
+        // Pad buttons with a tap and a hold (VitaTapHold), by joystick button number. Rear touch pad: a quick tap on the left half toggles
+        // sneak, both halves held (two fingers) crouch until released
+        readonly float[] vitaDownTime = new float[12];
+        readonly bool[] vitaHeld = new bool[12];
         bool vitaRearActive, vitaRearMulti;
         Vector2 vitaRearStart, vitaRearLast;
         float vitaRearStartTime;
@@ -384,58 +381,90 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             }
 
 #if UNITY_PSP2
-            // Select: tap = next HUD mode, hold = spellbook (GameManager leaves a Select-bound CastSpell to this). Only while the HUD is on top.
-            if (Input.GetKeyDown(KeyCode.JoystickButton6))
-            {
-                vitaSelectHeld = true;
-                vitaSelectDownTime = Time.unscaledTime;
-            }
-            if (vitaSelectHeld && Time.unscaledTime - vitaSelectDownTime >= vitaSelectHoldSeconds)
-            {
-                vitaSelectHeld = false;
+            // Vita pad, only while the HUD is on top (InputManager has no bindings for these). Tap = released within vitaSelectHoldSeconds,
+            // hold = fires once at that time, before the release.
+#if VITA_DRAGONRIDER
+            bool vitaMounted = DragonRider.DragonRider.IsDragonMounted;
+#else
+            bool vitaMounted = false;
+#endif
+            int press;
+            // Select: tap = spellbook, hold = HUD style box until Select is let go (GameManager leaves a Select-bound CastSpell to this)
+            press = VitaTapHold(KeyCode.JoystickButton6);
+            if (press == 1)
                 DaggerfallUI.PostMessage(DaggerfallUIMessages.dfuiOpenSpellBookWindow);
-            }
-            else if (vitaSelectHeld && Input.GetKeyUp(KeyCode.JoystickButton6))
-            {
-                vitaSelectHeld = false;
-                vitaHudMode = (vitaHudMode + 1) % 3;
-            }
+            else if (press == 2)
+                uiManager.PushWindow(new VitaHudStyleWindow(uiManager, this));
 
-            if (Input.GetKeyDown(KeyCode.JoystickButton1))
+            // Circle: tap = inventory, or drops a readied spell (PC: AbortSpell); hold = transport (horse, cart; the dragon: land / get off)
+            press = VitaTapHold(KeyCode.JoystickButton1);
+            if (press == 1)
             {
-                vitaCircleHeld = true;
-                vitaCircleDownTime = Time.unscaledTime;
+                if (GameManager.Instance.PlayerEffectManager && GameManager.Instance.PlayerEffectManager.HasReadySpell)
+                    GameManager.Instance.PlayerEffectManager.AbortReadySpell();
+                else
+                    DaggerfallUI.PostMessage(DaggerfallUIMessages.dfuiOpenInventoryWindow);
             }
-            if (vitaCircleHeld && Time.unscaledTime - vitaCircleDownTime >= vitaSelectHoldSeconds)
+            else if (press == 2)
             {
-                vitaCircleHeld = false;
                 InputManager.Instance.VitaIgnoreBackRelease = true;
                 DaggerfallUI.PostMessage(DaggerfallUIMessages.dfuiOpenTransportWindow);
             }
-            else if (vitaCircleHeld && Input.GetKeyUp(KeyCode.JoystickButton1))
+
+            // L: tap = the L spell (on the dragon: a wingbeat of boost), hold = quick menu until L is let go. R attacks (InputManager).
+            press = VitaTapHold(KeyCode.JoystickButton4);
+            if (press == 2)
+                uiManager.PushWindow(new VitaQuickMenuWindow(uiManager, this));
+            else if (press == 1)
             {
-                vitaCircleHeld = false;
-                DaggerfallUI.PostMessage(DaggerfallUIMessages.dfuiOpenInventoryWindow);
+#if VITA_DRAGONRIDER
+                if (vitaMounted)
+                    DragonRider.DragonRider.VitaWingbeat();
+                else
+#endif
+                    VitaQuickMenuWindow.CastLSpell();
             }
 
-            // D-pad Right: tap = travel map, hold = automap. D-pad Down: crouch / stand (crouching sneaks, PlayerSpeedChanger)
-            if (Input.GetKeyDown(KeyCode.JoystickButton9))
-            {
-                vitaRightHeld = true;
-                vitaRightDownTime = Time.unscaledTime;
-            }
-            if (vitaRightHeld && Time.unscaledTime - vitaRightDownTime >= vitaSelectHoldSeconds)
-            {
-                vitaRightHeld = false;
-                DaggerfallUI.PostMessage(DaggerfallUIMessages.dfuiOpenAutomap);
-            }
-            else if (vitaRightHeld && Input.GetKeyUp(KeyCode.JoystickButton9))
-            {
-                vitaRightHeld = false;
+            // Square: tap = draw / sheathe, hold = swap hands (nothing on the dragon)
+            press = vitaMounted ? 0 : VitaTapHold(KeyCode.JoystickButton2);
+            if (press == 1)
+                GameManager.Instance.WeaponManager.VitaToggleSheath();
+            else if (press == 2)
+                GameManager.Instance.WeaponManager.VitaToggleHand();
+
+            // D-pad Up: tap = travel map, hold = automap
+            press = VitaTapHold(KeyCode.JoystickButton8);
+            if (press == 1)
                 DaggerfallUI.PostMessage(DaggerfallUIMessages.dfuiOpenTravelMapWindow);
+            else if (press == 2)
+                DaggerfallUI.PostMessage(DaggerfallUIMessages.dfuiOpenAutomap);
+
+            // D-pad Left / Right: tap = hotkey 1 / 2, hold = hotkey 3 / 4 (set in the quick menu)
+            press = VitaTapHold(KeyCode.JoystickButton11);
+            if (press > 0)
+                VitaQuickMenuWindow.UseHotkey(press == 1 ? 0 : 2);
+            press = VitaTapHold(KeyCode.JoystickButton9);
+            if (press > 0)
+                VitaQuickMenuWindow.UseHotkey(press == 1 ? 1 : 3);
+
+            // D-pad Down: tap = crouch / stand (crouching sneaks, PlayerSpeedChanger; on the dragon: hover / flight),
+            // hold = action ring until Down is let go (Talk, Info, Grab, Rest, Use Magic Item, Steal; VitaQuickMenuWindow)
+            press = VitaTapHold(KeyCode.JoystickButton10);
+            if (press == 1)
+            {
+#if VITA_DRAGONRIDER
+                if (vitaMounted)
+                    DragonRider.DragonRider.VitaToggleFlightMode();
+                else
+#endif
+                    PlayerHeightChanger.VitaRearCrouchPressed = true;
             }
-            if (Input.GetKeyDown(KeyCode.JoystickButton10))
-                PlayerHeightChanger.VitaRearCrouchPressed = true;
+            else if (press == 2 && !vitaMounted)
+                uiManager.PushWindow(new VitaQuickMenuWindow(uiManager, this, true));
+
+            // Start: tap = pause menu (GameManager, on release, as upstream), hold = logbook (opens before the release, so no pause)
+            if (VitaTapHold(KeyCode.JoystickButton7) == 2)
+                DaggerfallUI.PostMessage(DaggerfallUIMessages.dfuiOpenQuestJournalWindow);
 #endif
 #if UNITY_PSP2 && !UNITY_EDITOR
             UnityEngine.PSVita.PSVitaInput.secondaryTouchIsScreenSpace = true;
@@ -499,6 +528,32 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             if (renderHUD)
                 base.Draw();
         }
+
+#if UNITY_PSP2
+        // 1 = tapped (let go within vitaSelectHoldSeconds), 2 = held (once, at that time, before the release), 0 = neither yet
+        int VitaTapHold(KeyCode key)
+        {
+            int b = key - KeyCode.JoystickButton0;
+            if (Input.GetKeyDown(key))
+            {
+                vitaHeld[b] = true;
+                vitaDownTime[b] = Time.unscaledTime;
+            }
+            if (!vitaHeld[b])
+                return 0;
+            if (Time.unscaledTime - vitaDownTime[b] >= vitaSelectHoldSeconds)
+            {
+                vitaHeld[b] = false;
+                return 2;
+            }
+            if (Input.GetKeyUp(key))
+            {
+                vitaHeld[b] = false;
+                return 1;
+            }
+            return 0;
+        }
+#endif
 
         public void SetMidScreenText(string message, float delay = 1.5f)
         {

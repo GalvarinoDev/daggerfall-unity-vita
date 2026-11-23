@@ -140,7 +140,58 @@ public static class VitaPalette
         texture.SetPixels32(row);
         texture.Apply(false, true);
         palettes[Key(hash, alphaIndex)] = texture;
+        if (alphaIndex == -1)
+            opaqueRows[texture.GetInstanceID()] = row;
         return lastByAlpha[alphaIndex] = texture;
+    }
+
+    // Snowless "dry winter" ground (2026-11-14, user picked it over plain summer ground): where Snowless turns winter swamp/jungle
+    // ground back to the summer set, the terrain draws it through a recoloured palette: greens moved toward olive/straw, 20% less
+    // saturated, everything 10% darker. Same atlas, no art of its own, no cost per pixel. false = plain summer ground.
+    public static bool SnowlessDry = true;
+    static readonly Dictionary<int, Color32[]> opaqueRows = new Dictionary<int, Color32[]>();   // alphaIndex -1 palettes' colours, for Dry
+    static readonly Dictionary<int, Texture2D> dryPalettes = new Dictionary<int, Texture2D>();  // by source palette; live all session like palettes
+
+    /// <summary>The palette a terrain tile of this world climate uses: the cached tileset palette, or its Dry copy (SnowlessDry).</summary>
+    public static Texture2D TerrainPalette(int worldClimate)
+    {
+        Texture2D palette = CachedPalette(-1);
+#if VITA_MODS
+        if (SnowlessDry && DaggerfallWorkshop.DaggerfallUnity.Instance.WorldTime.Now.SeasonValue == DaggerfallWorkshop.Utility.DaggerfallDateTime.Seasons.Winter
+            && DaggerfallWorkshop.Utility.ClimateSwaps.VitaSnowless(worldClimate))
+            palette = Dry(palette);
+#endif
+        return palette;
+    }
+
+    static Texture2D Dry(Texture2D source)
+    {
+        Texture2D texture;
+        Color32[] row;
+        if (!source || !opaqueRows.TryGetValue(source.GetInstanceID(), out row))
+            return source;
+        if (dryPalettes.TryGetValue(source.GetInstanceID(), out texture) && texture)
+            return texture;
+        var shifted = new Color32[256];
+        for (int i = 0; i < 256; i++)
+        {
+            float h, s, v;
+            Color.RGBToHSV(row[i], out h, out s, out v);
+            if (h > 0.15f && h < 0.45f)
+            {
+                h = 0.11f + (h - 0.15f) * 0.15f;
+                s *= 0.8f;
+            }
+            Color c = Color.HSVToRGB(h, s, v * 0.9f);
+            shifted[i] = new Color32((byte)(c.r * 255), (byte)(c.g * 255), (byte)(c.b * 255), row[i].a);
+        }
+        texture = new Texture2D(256, 1, TextureFormat.RGBA32, false);
+        texture.name = "VitaDryPalette";
+        texture.filterMode = FilterMode.Point;
+        texture.wrapMode = TextureWrapMode.Clamp;
+        texture.SetPixels32(shifted);
+        texture.Apply(false, true);
+        return dryPalettes[source.GetInstanceID()] = texture;
     }
 
     static long Key(uint hash, int alphaIndex)

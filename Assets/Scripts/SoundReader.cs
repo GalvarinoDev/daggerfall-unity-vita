@@ -97,6 +97,10 @@ namespace DaggerfallWorkshop
 
                 // Set clip data
                 clip.SetData(data, 0);
+#if UNITY_PSP2
+                // The clip is cached for the session, so SndFile's raw PCM copy is never read again
+                soundFile.DiscardSound(soundIndex);
+#endif
             }
 
             // Cache the clip

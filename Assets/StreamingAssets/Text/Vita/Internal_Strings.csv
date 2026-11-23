@@ -3,9 +3,15 @@ true,True
 vitaRest,Rest
 vitaCharacterSheet,Character Sheet
 vitaUseMagicItem,Use Magic Item
+vitaMap,Map
+vitaMapAbove,Travel
+vitaAutomap,Automap
+vitaRelaunch1,Freeing up memory.
+vitaRelaunch2,The screen goes dark for a few seconds.
 vitaLauncherOn,Launcher at next boot: On
 vitaLauncherOff,Launcher at next boot: Off
 vitaDungeonLight,Dungeon light: {0:F0}%
+vitaLookSensitivity,Look sensitivity: {0:0.##}
 vitaFireLight,Fire light: {0}%
 vitaFireColour,Fire colour: {0}
 vitaFireColours,"White
@@ -27,3 +33,39 @@ Fast"
 vitaGpuSpeed,CPU/GPU speed: {0}
 vitaLowPolyTreesOn,Low poly trees: On (next area)
 vitaLowPolyTreesOff,Low poly trees: Off
+vitaQuickTime,Quick menu: {0}
+vitaQuickTimes,"Paused
+Real time
+Slow motion"
+vitaQuickWeapons,Weapons
+vitaQuickSpells,Spells
+vitaQuickItems,Items
+vitaQuickRHand,R hand
+vitaQuickLHand,L hand
+vitaQuickSwap,Swap hands
+vitaQuickSpellbook,Spellbook
+vitaQuickOnL,on L
+vitaQuickCost,{0} SP
+vitaQuickPage,Page {0}/{1}
+vitaQuickNextPage,Next
+vitaQuickNothing,Nothing here
+vitaQuickCast,Cast
+vitaQuickSetL,L spell
+vitaQuickUse,Use
+vitaQuickPageHint,Page
+vitaQuickPick,Pick
+vitaQuickRelease,Release: choose
+vitaQuickHotkey,Hotkey
+vitaQuickNoHotkey,Nothing on this hotkey
+vitaQuickNotCarried,You don't have that
+vitaModeTalk,Talk
+vitaModeInfo,Info
+vitaModeGrab,Grab
+vitaModeSteal,Steal
+vitaActionRingHint,Right stick: pick      Release Down: choose
+vitaHudStyle,HUD Style
+vitaHudClassic,Classic HUD
+vitaHudMinimal,Minimal
+vitaHudNone,No HUD
+vitaHudStyleHint,Left / Right: pick      Release Select: choose
+vitaHudRelease,Release Select: choose

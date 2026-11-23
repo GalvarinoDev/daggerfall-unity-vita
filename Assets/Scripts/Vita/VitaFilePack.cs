@@ -4,6 +4,7 @@
 // the Vita, so every first read of a UI image or palette stalled the menu that wanted it: the travel map spent 1.76 s of its 2.01 s first
 // open finding 11 images (ui1). vita/tools/filepack.py stores the files FileProxy keeps in its byte cache (IMG CIF RCI COL CFG BSA up to
 // 256 KB, 363 files, 12 MB) unchanged in StreamingAssets/VitaNative/arena2.pak; FileProxy.LoadMemory reads them from here instead.
+// Version 2 (vita/tools/lz4ownpacks.py): every file one LZ4 block, index entries name / offset / stored length / raw length.
 
 #if UNITY_PSP2
 using System.Collections.Generic;
@@ -15,8 +16,9 @@ public static class VitaFilePack
 {
     const int Magic = 0x50465356;   // "VSFP"
     const int Version = 1;
+    const int VersionLz4 = 2;
 
-    static Dictionary<string, int[]> index;   // upper-case name -> offset, length
+    static Dictionary<string, int[]> index;   // upper-case name -> offset, length (, stored length in version 2)
     static FileStream stream;
     static readonly object gate = new object();
 
@@ -41,12 +43,22 @@ public static class VitaFilePack
             if (stream == null || !index.TryGetValue(Path.GetFileName(filePath).ToUpperInvariant(), out entry))
                 return null;
             var data = new byte[entry[1]];
+            byte[] block = entry.Length > 2 ? new byte[entry[2]] : data;
             stream.Seek(entry[0], SeekOrigin.Begin);
             int read = 0, n;
-            while (read < data.Length && (n = stream.Read(data, read, data.Length - read)) > 0)
+            while (read < block.Length && (n = stream.Read(block, read, block.Length - read)) > 0)
                 read += n;
-            return read == data.Length ? data : null;
+            if (read != block.Length)
+                return null;
+            return block == data || Decode(block, data) ? data : null;
         }
+    }
+
+    static unsafe bool Decode(byte[] block, byte[] data)
+    {
+        fixed (byte* src = block)
+        fixed (byte* dst = data)
+            return VitaLz4.Decode((System.IntPtr)src, block.Length, (System.IntPtr)dst, data.Length);
     }
 
     static void Open()
@@ -56,7 +68,8 @@ public static class VitaFilePack
         {
             stream = File.OpenRead(PackPath);
             var reader = new BinaryReader(stream);
-            if (reader.ReadInt32() != Magic || reader.ReadInt32() != Version)
+            int version = 0;
+            if (reader.ReadInt32() != Magic || ((version = reader.ReadInt32()) != Version && version != VersionLz4))
             {
                 stream.Dispose();
                 stream = null;
@@ -66,7 +79,13 @@ public static class VitaFilePack
             for (int i = 0; i < count; i++)
             {
                 string name = System.Text.Encoding.ASCII.GetString(reader.ReadBytes(16)).TrimEnd('\0');
-                index[name] = new[] { reader.ReadInt32(), reader.ReadInt32() };
+                if (version == VersionLz4)
+                {
+                    int offset = reader.ReadInt32(), stored = reader.ReadInt32();
+                    index[name] = new[] { offset, reader.ReadInt32(), stored };
+                }
+                else
+                    index[name] = new[] { reader.ReadInt32(), reader.ReadInt32() };
             }
         }
         catch (System.Exception e)

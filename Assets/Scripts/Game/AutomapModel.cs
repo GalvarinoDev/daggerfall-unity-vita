@@ -74,8 +74,32 @@ namespace DaggerfallWorkshop
             }
         }
 
+#if UNITY_PSP2
+        // Automap.VitaPrebuildDungeon injects each block's models in the block's own frame behind the loading window, instead of every
+        // model in the entry frame (1.4-3.7 s); VitaPrebuildInterior does the same behind a building door's black screen. Same
+        // arguments as the entry's event; no automap shader reads _PlayerPosition.
+        public void VitaInject(Vector3 playerAdvancedPos, Material automapMaterial, bool playerIsInsideBuilding)
+        {
+            Automap_OnInjectMeshAndMaterialProperties(playerIsInsideBuilding, playerAdvancedPos, automapMaterial, true);
+        }
+#endif
+
         private void UpdateMaterialsOfMeshRenderer(Vector3 playerAdvancedPos, Material automapMaterial, MeshRenderer meshRenderer, bool visitedInThisEntering = false)
         {
+#if UNITY_PSP2
+            // One automap material per source material and visited state, shared by every renderer that uses it, instead of a clone per
+            // renderer slot (1,275 in the start dungeon, 4,068 in Daggerfall's Palace, 5,919 in the biggest; 5,000 clones took ~6-8 MB of
+            // engine heap and 3.4 s on hardware). Automap.cs swaps between the two variants where upstream toggles the keyword.
+            if (!VitaSharedOff)
+            {
+                Material[] srcMaterials = meshRenderer.sharedMaterials;
+                Material[] sharedMaterials = new Material[srcMaterials.Length];
+                for (int i = 0; i < srcMaterials.Length; i++)
+                    sharedMaterials[i] = VitaShared(srcMaterials[i], automapMaterial, playerAdvancedPos, !visitedInThisEntering);
+                meshRenderer.sharedMaterials = sharedMaterials;
+                return;
+            }
+#endif
 #if UNITY_PSP2
             // Read the shared materials once: the .materials getter cloned every material of the renderer (all replaced right
             // below, so the clones were orphans until the next UnloadUnusedAssets) and made a new array per call
@@ -142,6 +166,94 @@ namespace DaggerfallWorkshop
                 vitaPaletteTemplateFrame = Time.frameCount;
             }
             return vitaPaletteTemplate;
+        }
+
+        public static bool VitaSharedOff;   // test harness A/B: a clone per renderer slot, as upstream
+        // source material -> {colour, grey}, and each variant -> the same pair (for the swaps in Automap.cs)
+        static readonly System.Collections.Generic.Dictionary<Material, Material[]> vitaVariants = new System.Collections.Generic.Dictionary<Material, Material[]>();
+        static readonly System.Collections.Generic.Dictionary<Material, Material[]> vitaPairOf = new System.Collections.Generic.Dictionary<Material, Material[]>();
+        static Material vitaVariantsTemplate;
+
+        // New automap geometry (dungeon or interior rebuilt): forget the old variants. Not destroyed here: renderers of the old geometry
+        // may still draw this frame; the transition's UnloadUnusedAssets frees them with it, as it freed the per-renderer clones.
+        public static void VitaResetShared()
+        {
+            vitaVariants.Clear();
+            vitaPairOf.Clear();
+        }
+
+        static Material VitaShared(Material curMaterial, Material automapMaterial, Vector3 playerAdvancedPos, bool grayscale)
+        {
+            if (automapMaterial != vitaVariantsTemplate)
+            {
+                VitaResetShared();
+                vitaVariantsTemplate = automapMaterial;
+            }
+            Material[] pair;
+            if (curMaterial == null || !vitaVariants.TryGetValue(curMaterial, out pair))
+            {
+                pair = new Material[] { VitaMakeVariant(curMaterial, automapMaterial, playerAdvancedPos, false),
+                    VitaMakeVariant(curMaterial, automapMaterial, playerAdvancedPos, true) };
+                if (curMaterial != null)
+                {
+                    vitaVariants[curMaterial] = pair;
+                    vitaPairOf[pair[0]] = pair;
+                    vitaPairOf[pair[1]] = pair;
+                }
+            }
+            return pair[grayscale ? 1 : 0];
+        }
+
+        // The same properties UpdateMaterialsOfMeshRenderer copies into each clone
+        static Material VitaMakeVariant(Material curMaterial, Material automapMaterial, Vector3 playerAdvancedPos, bool grayscale)
+        {
+            bool vitaPalette = curMaterial != null && curMaterial.HasProperty(VitaPalette.PaletteTex);
+            Material newMaterial = Instantiate(vitaPalette ? VitaPaletteTemplate(automapMaterial) : automapMaterial);
+            newMaterial.name = "AutomapBelowSclicePlane injected for: " + (curMaterial != null ? curMaterial.name : "(none)") + (grayscale ? " (grey)" : "");
+            if (curMaterial != null)
+            {
+                if (curMaterial.HasProperty(Uniforms.MainTex))
+                    newMaterial.SetTexture(Uniforms.MainTex, curMaterial.GetTexture(Uniforms.MainTex));
+                if (vitaPalette)
+                    newMaterial.SetTexture(VitaPalette.PaletteTex, curMaterial.GetTexture(VitaPalette.PaletteTex));
+                if (curMaterial.HasProperty(Uniforms.BumpMap))
+                    newMaterial.SetTexture(Uniforms.BumpMap, curMaterial.GetTexture(Uniforms.BumpMap));
+                if (curMaterial.HasProperty(Uniforms.EmissionMap))
+                    newMaterial.SetTexture(Uniforms.EmissionMap, curMaterial.GetTexture(Uniforms.EmissionMap));
+                if (curMaterial.HasProperty(Uniforms.EmissionColor))
+                    newMaterial.SetColor(Uniforms.EmissionColor, curMaterial.GetColor(Uniforms.EmissionColor));
+            }
+            newMaterial.SetVector("_PlayerPosition", new Vector4(playerAdvancedPos.x, playerAdvancedPos.y + Camera.main.transform.localPosition.y, playerAdvancedPos.z, 0.0f));
+            if (grayscale)
+                newMaterial.EnableKeyword("RENDER_IN_GRAYSCALE");
+            else
+                newMaterial.DisableKeyword("RENDER_IN_GRAYSCALE");
+            return newMaterial;
+        }
+
+        // Automap.cs: mark a renderer visited (colour) or not (grey) by swapping to the other shared variant. False when a slot isn't one of
+        // ours (VitaSharedOff, or geometry built before a reset): the caller then toggles the keyword as upstream does.
+        public static bool VitaSetGrayscale(MeshRenderer renderer, bool grayscale)
+        {
+            if (VitaSharedOff)
+                return false;
+            Material[] mats = renderer.sharedMaterials;
+            Material[] pair;
+            for (int i = 0; i < mats.Length; i++)
+            {
+                if (mats[i] == null || !vitaPairOf.TryGetValue(mats[i], out pair))
+                    return false;
+                mats[i] = pair[grayscale ? 1 : 0];
+            }
+            renderer.sharedMaterials = mats;
+            return true;
+        }
+
+        // Automap.cs: the visited state as upstream reads it from materials[0] (sharedMaterial: .materials would clone the shared variants)
+        public static bool VitaIsGrayscale(MeshRenderer renderer)
+        {
+            Material m = renderer.sharedMaterial;
+            return m != null && m.IsKeywordEnabled("RENDER_IN_GRAYSCALE");
         }
 #endif
     }

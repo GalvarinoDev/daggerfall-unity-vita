@@ -31,6 +31,7 @@ DungeonShadowDistance=20.0
 InteriorShadowDistance=30.0
 ExteriorShadowDistance=90.0
 EnableTextureArrays=True
+EnableObjectCulling=True
 RandomDungeonTextures=0
 VitaTextureLimit=0
 VitaCulling=True
@@ -74,6 +75,7 @@ VitaHarvestableCrops=False
 VitaFireLevel=100
 VitaFireTone=0
 VitaTorchReach=6
+VitaFarThin=4
 
 [Effects]
 AntialiasingMethod=0
@@ -172,7 +174,7 @@ EnableSpellShadows=True
 InvertMouseVertical=False
 MouseLookSmoothingFactor=0.5
 MouseLookSensitivity=2.0
-JoystickLookSensitivity=1.0
+JoystickLookSensitivity=2.0
 JoystickCursorSensitivity=1.0
 JoystickMovementThreshold=0.9
 JoystickDeadzone=0.1
@@ -216,7 +218,8 @@ TerrainDistance=1
 TerrainHeightmapPixelError=5
 SmallerDungeons=False
 CustomBooksImport=True
-AssetCacheThreshold = 25
+AssetCacheThreshold=25
+DungeonsPoolSizeTarget=3
 
 [Enhancements]
 LypyL_GameConsole=True

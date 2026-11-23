@@ -92,7 +92,11 @@ namespace DaggerfallWorkshop.Game
             buildingDict.Clear();
 
             // Get block data pre-populated with map building data.
+#if UNITY_PSP2
+            blocks = RMBLayout.VitaGetFullLocationBuildingData(location);     // the town is built from these: whole blocks
+#else
             blocks = RMBLayout.GetLocationBuildingData(location);
+#endif
 
             // Construct building directory
             int width = location.Exterior.ExteriorData.Width;

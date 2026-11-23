@@ -1445,8 +1445,14 @@ namespace DaggerfallWorkshop.Game
         /// <summary>
         /// creates the map layout in the exterior layout texture
         /// </summary>  
+#if UNITY_PSP2
+        public static bool VitaApplyPerBlock;   // test harness A/B (bot word "mapapplyold"): upstream's upload per block
+#endif
         private void CreateExteriorLayoutTexture(bool showAll = false, bool removeGroundFlats = true, bool createNameplates = true)
         {
+#if UNITY_PSP2
+            long vitaLayoutT0 = System.Diagnostics.Stopwatch.GetTimestamp();   // TEMPORARY probe 2026-11-21 (VITAMAPLAYOUT)
+#endif
             if (exteriorLayoutTexture != null)
             {
                 UnityEngine.Object.Destroy(exteriorLayoutTexture);
@@ -1582,8 +1588,21 @@ namespace DaggerfallWorkshop.Game
                 //    //exteriorLayoutTexture.SetPixel(xPosBuilding, yPosBuilding, Color.yellow);
                 //}
 
+#if !UNITY_PSP2
                 exteriorLayoutTexture.Apply();
+#else
+                if (VitaApplyPerBlock)
+                    exteriorLayoutTexture.Apply();
+#endif
             }
+#if UNITY_PSP2
+            // One upload for the whole layout, not one 1 MB upload per block (64 in Daggerfall), and no CPU copy kept: nothing reads
+            // the texture back, and every rebuild makes a new one
+            if (!VitaApplyPerBlock)
+                exteriorLayoutTexture.Apply(false, true);
+            if (StreamingWorld.VitaPromoteLog)   // TEMPORARY probe 2026-11-21 (VITAMAPLAYOUT)
+                Debug.LogFormat("VITAMAPLAYOUT {0} blocks {1:F1} ms", exteriorLayout.Length, (System.Diagnostics.Stopwatch.GetTimestamp() - vitaLayoutT0) * 1000.0 / System.Diagnostics.Stopwatch.Frequency);
+#endif
 
             if (createNameplates)
             {

@@ -52,9 +52,11 @@ public static class VitaDetModels
             Load();
         // Later packs first: the same "later file wins" order as the .bin index
         // Packs win over .bin files whatever their order; only a build missing some .pak files mixes the two
+#if VITA_MODS
         for (int i = packs.Count - 1; i >= 0; i--)
             if (packs[i].Contains(id))
                 return VitaModelPack.TryRead(packs[i], id, out modelData);
+#endif
         Entry e;
         if (!models.TryGetValue(id, out e))
         {
@@ -161,7 +163,10 @@ public static class VitaDetModels
         MapsFile.Climates c = (MapsFile.Climates)gps.CurrentClimateIndex;
         bool winter = DaggerfallUnity.Instance.WorldTime.Now.SeasonValue == DaggerfallDateTime.Seasons.Winter
             && c != MapsFile.Climates.Desert && c != MapsFile.Climates.Desert2 && c != MapsFile.Climates.Subtropical
-            && !ClimateSwaps.VitaSnowless((int)c);
+#if VITA_MODS
+            && !ClimateSwaps.VitaSnowless((int)c)
+#endif
+            ;
         int i = slot + 2 + TableKey(slot, c, gps.CurrentRegionName) * 4 + (winter ? 2 : 0);
         if (climateSlots[i] >= 0 && OnVita(climateSlots[i]))
         {

@@ -33,6 +33,7 @@ Shader "Daggerfall/Vita/BillboardBatchNoShadowsPalette" {
 		#pragma surface surf Lambert alphatest:_Cutoff vertex:vert noambient
 		#pragma multi_compile __ VITA_TOWN_LIGHTS
 		#pragma multi_compile __ VITA_NEAR_TREES
+		#pragma multi_compile __ VITA_FILL_2   // VitaLights: slots 2-3 empty, VitaFillVertexLights does half the work
 
 		half4 _Color;
 		sampler2D _MainTex;
@@ -44,6 +45,8 @@ Shader "Daggerfall/Vita/BillboardBatchNoShadowsPalette" {
 		float3 _UpVector;
 		// VitaNearTrees: billboards inside this world xz rect (xmin, zmin, xmax, zmax) collapse to a point, the 3D trees stand there
 		float4 _VitaNearTreeRect;
+		// VitaLights: billboards smaller than VitaFarThin pixels on screen collapse to a point (distance x this > height in metres; 0 = off)
+		float _VitaFarThin;
 
 		// One UV: the emission mask shares the atlas layout, and the Vita atlases have no normal map (o.Normal from a flat default bump
 		// map cost a texture read plus tangent-space lighting per pixel for the same result; trees were ~19 ms of the exterior frame)
@@ -70,6 +73,7 @@ Shader "Daggerfall/Vita/BillboardBatchNoShadowsPalette" {
 			float2 inside = step(_VitaNearTreeRect.xy, origin.xz) * step(origin.xz, _VitaNearTreeRect.zw);
 			v.tangent.xy *= 1.0 - inside.x * inside.y;
 			#endif
+			v.tangent.xy *= step(distance(mul(unity_ObjectToWorld, v.vertex).xyz, _WorldSpaceCameraPos) * _VitaFarThin, v.tangent.y);
 			// Offset vertices based on corners scaled by size
 			v.vertex.xyz += rightVector * (v.tangent.z - 0.5) * v.tangent.x;
 			v.vertex.xyz += _UpVector * (v.tangent.w - 0.5) * v.tangent.y;

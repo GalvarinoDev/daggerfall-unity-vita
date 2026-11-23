@@ -158,7 +158,12 @@ namespace DaggerfallWorkshop.Utility
 #if UNITY_PSP2 && !UNITY_EDITOR
             // Baked block (VitaBlockBake): the same objects, from the PC bake instead of ARCH3D reads and merging
             if (VitaBlockBake.TryBuild(ref blockData, layoutX, layoutY, go))
+            {
+#if VITA_MODS
+                VitaChimneys.Spawn(ref blockData, go.transform);
+#endif
                 return go;
+            }
 #endif
 
             // Setup combiner
@@ -176,6 +181,9 @@ namespace DaggerfallWorkshop.Utility
             modelsNode.transform.parent = go.transform;
             AddModels(dfUnity, layoutX, layoutY, ref blockData, out modelDoors, out modelBuildings, combiner, modelsNode.transform);
 #if UNITY_PSP2
+#endif
+#if UNITY_PSP2 && VITA_MODS && !UNITY_EDITOR
+            VitaChimneys.Spawn(ref blockData, modelsNode.transform);
 #endif
             AddProps(dfUnity, ref blockData, out propDoors, combiner, modelsNode.transform);
 #if UNITY_PSP2
@@ -336,6 +344,60 @@ namespace DaggerfallWorkshop.Utility
             }
         }
 
+#if UNITY_PSP2
+        // In play, a farm or town block's standalone billboards (animals, NPCs: ~2.4 ms each) cost 25-50 ms in the block's last step.
+        // While a list is set here, AddMiscBlockFlats queues them instead, and the stepped builders make them over the next frames
+        // with VitaCreateDeferredFlats, the block back at the world origin as for the other steps. TRIAL 2026-11-21 (revert candidate).
+        public struct VitaDeferredFlat
+        {
+            public DFBlock.RmbBlockFlatObjectRecord obj;
+            public Vector3 position;
+        }
+        public static List<VitaDeferredFlat> VitaDeferFlats;
+        public static bool VitaFlatDeferOff;   // test harness A/B: all in the block's last step, as before
+
+        // One block step per frame across every stepped block builder: a WoD farm location's two blocks ran each step in the same frame
+        // (step 2 40 + 8 ms, wodspawn frames ~71 ms). Callers wait with `do yield return null; while (!VitaBlockStepFree());`.
+        // TRIAL 2026-11-21 (revert candidate).
+        public static bool VitaStepGateOff;    // test harness A/B: no gate
+        static int vitaBlockStepFrame = -1;
+        public static bool VitaBlockStepFree()
+        {
+            if (!VitaStepGateOff && Time.frameCount == vitaBlockStepFrame)
+                return false;
+            vitaBlockStepFrame = Time.frameCount;
+            return true;
+        }
+
+        /// <summary>Makes queued flats from index i until budgetMs is spent (at least one); returns the next index.</summary>
+        public static int VitaCreateDeferredFlats(List<VitaDeferredFlat> list, int i, Transform flatsParent, int mapId, int locationIndex, float budgetMs)
+        {
+            long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
+            long limit = (long)(budgetMs * System.Diagnostics.Stopwatch.Frequency / 1000);
+            do
+            {
+                // AddMiscBlockFlats' standalone billboard branch
+                DFBlock.RmbBlockFlatObjectRecord obj = list[i].obj;
+                GameObject go = GameObjectHelper.CreateDaggerfallBillboardGameObject(obj.TextureArchive, obj.TextureRecord, flatsParent);
+                go.transform.position = list[i].position;
+                AlignBillboardToBase(go);
+                if (obj.TextureArchive == TextureReader.AnimalsTextureArchive)
+                    GameObjectHelper.AddAnimalAudioSource(go, obj.TextureRecord);
+                if (obj.FactionID != 0)
+                {
+                    Billboard dfBillboard = go.GetComponent<Billboard>();
+                    if (dfBillboard != null)
+                        dfBillboard.SetRMBPeopleData(obj.FactionID, obj.Flags, obj.Position);
+                    StaticNPC npc = go.AddComponent<StaticNPC>();
+                    npc.SetLayoutData(obj, mapId, locationIndex);
+                    QuestMachine.Instance.SetupIndividualStaticNPC(go, obj.FactionID);
+                }
+                i++;
+            } while (i < list.Count && System.Diagnostics.Stopwatch.GetTimestamp() - t0 < limit);
+            return i;
+        }
+#endif
+
         /// <summary>
         /// Add misc block flats.
         /// Batching is conditionally supported.
@@ -353,12 +415,19 @@ namespace DaggerfallWorkshop.Utility
             if (!dfUnity.IsReady)
                 return;
 
+#if UNITY_PSP2 && !UNITY_EDITOR
+            long vmImport = 0, vmBatch = 0, vmGo = 0, vmCrop = 0, vmCreate = 0, vmAudio = 0; int vmFlats = 0, vmGos = 0, vmCrops = 0;   // TEMPORARY probe 2026-11-21 (VITAMISCLAPS)
+#endif
             // Add block flats
             foreach (DFBlock.RmbBlockFlatObjectRecord obj in blockData.RmbBlock.MiscFlatObjectRecords)
             {
                 // Ignore lights as they are handled by AddLights()
                 if (obj.TextureArchive == TextureReader.LightsTextureArchive)
                     continue;
+#if UNITY_PSP2 && !UNITY_EDITOR
+                long vm0 = System.Diagnostics.Stopwatch.GetTimestamp();
+                vmFlats++;
+#endif
 
                 // Calculate position
                 Vector3 billboardPosition = new Vector3(
@@ -368,6 +437,8 @@ namespace DaggerfallWorkshop.Utility
                 
                 GameObject go = MeshReplacement.ImportCustomFlatGameobject(obj.TextureArchive, obj.TextureRecord, billboardPosition, flatsParent);
 #if UNITY_PSP2 && !UNITY_EDITOR
+                long vm1 = System.Diagnostics.Stopwatch.GetTimestamp();
+                vmImport += vm1 - vm0;
                 // Plain flats go into the block's flat batches, no billboard object (VitaFlatBatch.BuildCityBlock)
                 if (go == null && VitaFlatBatch.IsWinterCrop(obj.TextureArchive))
                 {
@@ -378,19 +449,42 @@ namespace DaggerfallWorkshop.Utility
                     AlignBillboardToBase(go);
                 }
                 if (go == null && obj.FactionID == 0 && VitaFlatBatch.AddCityFlat(obj.TextureArchive, obj.TextureRecord, billboardPosition))
+                {
+                    vmBatch += System.Diagnostics.Stopwatch.GetTimestamp() - vm1;
                     continue;
+                }
+                vmGos++;
+#endif
+#if UNITY_PSP2
+                if (go == null && VitaDeferFlats != null)
+                {
+                    VitaDeferFlats.Add(new VitaDeferredFlat { obj = obj, position = billboardPosition });
+                    continue;
+                }
 #endif
                 if (go == null)
                 {
                     // Add standalone billboard gameobject
+#if UNITY_PSP2 && !UNITY_EDITOR
+                    long vg0 = System.Diagnostics.Stopwatch.GetTimestamp();
+#endif
                     go = GameObjectHelper.CreateDaggerfallBillboardGameObject(obj.TextureArchive, obj.TextureRecord, flatsParent);
                     go.transform.position = billboardPosition;
                     AlignBillboardToBase(go);
+#if UNITY_PSP2 && !UNITY_EDITOR
+                    vmCreate += System.Diagnostics.Stopwatch.GetTimestamp() - vg0;
+#endif
                 }
 
+#if UNITY_PSP2 && !UNITY_EDITOR
+                long va0 = System.Diagnostics.Stopwatch.GetTimestamp();
+#endif
                 // Add animal sound
                 if (obj.TextureArchive == TextureReader.AnimalsTextureArchive)
                     GameObjectHelper.AddAnimalAudioSource(go, obj.TextureRecord);
+#if UNITY_PSP2 && !UNITY_EDITOR
+                vmAudio += System.Diagnostics.Stopwatch.GetTimestamp() - va0;
+#endif
 
                 // If flat record has a non-zero faction id, then it's an exterior NPC
                 if (obj.FactionID != 0)
@@ -406,14 +500,28 @@ namespace DaggerfallWorkshop.Utility
 
                     QuestMachine.Instance.SetupIndividualStaticNPC(go, obj.FactionID);
                 }
+#if UNITY_PSP2 && !UNITY_EDITOR
+                vmGo += System.Diagnostics.Stopwatch.GetTimestamp() - vm1;
+#endif
             }
 #if UNITY_PSP2 && !UNITY_EDITOR
 
+            long vc0 = System.Diagnostics.Stopwatch.GetTimestamp();
             foreach (DFBlock.RmbBlock3dObjectRecord obj in blockData.RmbBlock.Misc3dObjectRecords)
             {
                 if (VitaFlatBatch.IsCropField(obj.ModelIdNum))
+                {
+                    vmCrops++;
                     VitaFlatBatch.AddCropField(obj.ModelIdNum, new Vector3(obj.XPos, -obj.YPos + propsOffsetY, obj.ZPos + BlocksFile.RMBDimension) * MeshReader.GlobalScale,
                         blockData.Name, flatsParent.parent, flatsParent);
+                }
+            }
+            vmCrop = System.Diagnostics.Stopwatch.GetTimestamp() - vc0;
+            if (StreamingWorld.VitaPromoteLog)
+            {
+                double vf = 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+                Debug.LogFormat("VITAMISCLAPS {0}: import {1:F1} ({2} flats), batched {3:F1}, objects {4:F1} ({5}: create {8:F1}, audio {9:F1}), crops {6:F1} ({7})",
+                    blockData.Name, vmImport * vf, vmFlats, vmBatch * vf, vmGo * vf, vmGos, vmCrop * vf, vmCrops, vmCreate * vf, vmAudio * vf);
             }
 #endif
         }
@@ -671,16 +779,26 @@ namespace DaggerfallWorkshop.Utility
         {
             int mapId = location.MapTableData.MapId;
             DFBlock[] blocksArray = locationCache.FirstOrDefault(l => l.Key == mapId).Value;
+#if UNITY_PSP2
+            if (blocksArray != null && !vitaWantFull)
+                return blocksArray;
+#else
             if (blocksArray != null)
                 return blocksArray;
+#endif
 #if UNITY_PSP2
             // No location here (a wilderness map pixel asks too, through TalkManager): nothing to read, and clearing below would throw
             // away the town just left, so walking back into its pixel re-read every block on one frame (Daenia 1.5 s).
             if (location.Exterior.ExteriorData.Width == 0 || location.Exterior.ExteriorData.Height == 0)
                 return new DFBlock[0];
 
-            // Vita: keep only the current location. Each cached city is ~10-20 MB of parsed blocks (live C# data at castle visits grew
-            locationCache.Clear();
+            // Vita: whole-block entries were ~10-20 MB a city, so only the current location was kept. Slim entries (VitaSlim) are
+            // ~0.1 MB a town, so keep upstream's 12 again: with one, a quest site lookup elsewhere evicted the current town and the
+            // next door decoded all of it again
+            if (VitaSlimOff)
+                locationCache.Clear();
+            else
+                locationCache.RemoveAll(l => l.Key == mapId);
 #endif
 
             List<BuildingPoolItem> namedBuildingPool = new List<BuildingPoolItem>();
@@ -789,11 +907,70 @@ namespace DaggerfallWorkshop.Utility
 #if !UNITY_EDITOR // Cache blocks for this location if not in editor
             if (locationCache.Count == maxLocationCacheSize)
                 locationCache.RemoveAt(0);
+#if UNITY_PSP2
+            locationCache.Add(new KeyValuePair<int, DFBlock[]>(mapId, VitaSlimOff ? blocksArray : VitaSlim(blocksArray)));
+#else
             locationCache.Add(new KeyValuePair<int, DFBlock[]>(mapId, blocksArray));
+#endif
 #endif
 
             return blocksArray;
         }
+
+#if UNITY_PSP2
+        // Vita: the cached town held every block whole (interiors, loose objects): ~5.6 MB and ~45k GC-scanned objects in Daggerfall
+        // city, and the first door decoded the whole town to fill it (~1 s). The cache now keeps only what its readers use: the building
+        // list, automap image, building positions/models and each building's NPC list. Readers that need more ask for full blocks
+        // (town build, quest site markers) or decode their one block (DaggerfallInterior).
+        public static bool VitaSlimOff;     // test harness A/B: cache full blocks, as before
+        static bool vitaWantFull;
+
+        /// <summary>Full blocks of a location, as GetLocationBuildingData returns them on a cache miss.</summary>
+        public static DFBlock[] VitaGetFullLocationBuildingData(DFLocation location)
+        {
+            if (VitaSlimOff)
+                return GetLocationBuildingData(location);
+            vitaWantFull = true;
+            try
+            {
+                return GetLocationBuildingData(location);
+            }
+            finally
+            {
+                vitaWantFull = false;
+            }
+        }
+
+        static DFBlock[] VitaSlim(DFBlock[] full)
+        {
+            DFBlock[] slim = new DFBlock[full.Length];
+            for (int b = 0; b < full.Length; b++)
+            {
+                DFBlock block = full[b];        // struct copy: FldHeader (building list, automap) is shared, it is never written
+                DFBlock.RmbSubRecord[] subs = block.RmbBlock.SubRecords;
+                if (subs != null)
+                {
+                    DFBlock.RmbSubRecord[] slimSubs = new DFBlock.RmbSubRecord[subs.Length];
+                    for (int i = 0; i < subs.Length; i++)
+                    {
+                        slimSubs[i].XPos = subs[i].XPos;
+                        slimSubs[i].ZPos = subs[i].ZPos;
+                        slimSubs[i].YRotation = subs[i].YRotation;
+                        slimSubs[i].Exterior.Header = subs[i].Exterior.Header;
+                        slimSubs[i].Exterior.Block3dObjectRecords = subs[i].Exterior.Block3dObjectRecords;     // [0] is the building model
+                        slimSubs[i].Interior.Header = subs[i].Interior.Header;
+                        slimSubs[i].Interior.BlockPeopleRecords = subs[i].Interior.BlockPeopleRecords;         // TalkManager's questor list
+                    }
+                    block.RmbBlock.SubRecords = slimSubs;
+                }
+                block.RmbBlock.Misc3dObjectRecords = null;
+                block.RmbBlock.MiscFlatObjectRecords = null;
+                block.RdbBlock = new DFBlock.RdbBlockDesc();
+                slim[b] = block;
+            }
+            return slim;
+        }
+#endif
 
         /// <summary>
         /// Draws and consume building from pool.
@@ -933,6 +1110,10 @@ namespace DaggerfallWorkshop.Utility
                     Vector3 modelScale = GetModelScaleVector(obj);
                     Matrix4x4 modelMatrix = subRecordMatrix * Matrix4x4.TRS(modelPosition, Quaternion.Euler(modelRotation), modelScale);
 
+#if UNITY_PSP2 && VITA_MODS
+                    if (VitaChimneys.Is(obj.ModelIdNum))
+                        continue;   // smoke from VitaChimneys.Spawn (no model data; DFU would log "Could not load model")
+#endif
 #if UNITY_PSP2
 #endif
                     // Get model data

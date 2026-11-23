@@ -699,6 +699,22 @@ namespace DaggerfallWorkshop.Game
             ApplyWeapon();
         }
 
+#if UNITY_PSP2
+        /// <summary>Vita quick menu's "Swap hands" and a Square hold: what the SwitchHand key does</summary>
+        public void VitaToggleHand()
+        {
+            if (!isAttacking)
+                ToggleHand();
+        }
+
+        /// <summary>Vita: a Square tap (DaggerfallHUD), as the ReadyWeapon key</summary>
+        public void VitaToggleSheath()
+        {
+            if (!isAttacking)
+                ToggleSheath();
+        }
+
+#endif
         void ToggleHand()
         {
             if (usingRightHand && holdingShield)

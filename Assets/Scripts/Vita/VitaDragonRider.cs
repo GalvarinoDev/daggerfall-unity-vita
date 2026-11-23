@@ -8,7 +8,7 @@
 // "False") is read at that point: changing it applies from the next launch. Alternate skin (SquidKamer's) left out: its 16 NPOT
 // frames would be ~10 MB uncompressed and the mod's default is off. Pad controls: DragonRider.cs "Vita:" lines + InputManager (Square sinks while levitating).
 
-#if UNITY_PSP2
+#if UNITY_PSP2 && VITA_DRAGONRIDER     // the mod's code ships only in the VPK
 using UnityEngine;
 using DaggerfallWorkshop;
 using DaggerfallWorkshop.Game;

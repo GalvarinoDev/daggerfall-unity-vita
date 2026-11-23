@@ -6,7 +6,7 @@
 // scene loads, so the setup wizard's Options page applies it without a restart. Off = upstream's DefaultTerrainTexturing and
 // no path data loaded. Cost when on: 1 MB main (road + track maps, read from VitaMods/basicroads.pak), CPU only for terrain tiles a path crosses.
 
-#if UNITY_PSP2
+#if UNITY_PSP2 && VITA_MODS     // the mod's code (BasicRoads/) ships only in the VPK
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using DaggerfallWorkshop;

@@ -240,7 +240,21 @@ namespace DaggerfallWorkshop.Game.UserInterface
         {
             // Start with all the atlases in the spell icons streaming assets path
             string sourcePath = Path.Combine(Application.streamingAssetsPath, sourceFolderName);
+#if UNITY_PSP2
+            // Packs baked on the PC ship without their PNG (only the .txt and the bake), so find them by their metadata too.
+            // No pack ships since upstream's test pack was dropped (2026-11-16), so the folder may be missing.
+            bool vitaFolder = Directory.Exists(sourcePath);
+            List<string> vitaPaths = vitaFolder ? new List<string>(Directory.GetFiles(sourcePath, "*.png")) : new List<string>();
+            foreach (string metadata in vitaFolder ? Directory.GetFiles(sourcePath, "*.txt") : new string[0])
+            {
+                string png = Path.ChangeExtension(metadata, ".png");
+                if (!vitaPaths.Contains(png))
+                    vitaPaths.Add(png);
+            }
+            string[] atlasPaths = vitaPaths.ToArray();
+#else
             string[] atlasPaths = Directory.GetFiles(sourcePath, "*.png");
+#endif
             if (atlasPaths != null && atlasPaths.Length != 0)
             {
                 // Read each atlas found and its metadata

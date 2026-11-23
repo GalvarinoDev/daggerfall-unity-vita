@@ -515,7 +515,8 @@ namespace DaggerfallWorkshop.Game.UserInterface
                 case 'Ö': return 153; case 'Ü': return 154; case 'á': return 160; case 'í': return 161; case 'ó': return 162;
                 case 'ú': return 163; case 'ñ': return 164; case 'Ñ': return 165; case 'ª': return 166; case '¿': return 168;
                 case '¡': return 173; case 'œ': return 176; case 'Œ': return 177; case 'Ó': return 178; case 'Ú': return 179;
-                case 'Á': return 181; case 'Â': return 182; case 'À': return 183; case 'Ê': return 210; case 'È': return 212;
+                case 'Á': return 181; case 'Â': return 182; case 'À': return 183; case 'ã': return 184; case 'õ': return 185;
+                case 'Ã': return 186; case 'Õ': return 187; case 'Ô': return 188; case 'Ê': return 210; case 'È': return 212;
                 case 'Í': return 214; case 'Î': return 215; case 'ß': return 225; case '°': return 248; case 'º': return (byte)'o';
                 case '\u00a0': return (byte)' ';
                 case '\u2013': case '\u2014': return (byte)'-';
