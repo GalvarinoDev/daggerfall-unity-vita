@@ -243,6 +243,11 @@ namespace DaggerfallWorkshop.Game.Items
         /// </summary>
         /// <param name="item">Item to find equipment slot.</param>
         /// <returns>EquipSlot.</returns>
+#if UNITY_PSP2
+        /// <summary>Vita quick menu: set while it equips a one-handed weapon to a chosen hand (None = Daggerfall's choice)</summary>
+        public EquipSlots VitaForceHand = EquipSlots.None;
+
+#endif
         public EquipSlots GetEquipSlot(DaggerfallUnityItem item)
         {
             // Check for a custom item defining an equip slot, and return if so, else if None then continue
@@ -434,6 +439,11 @@ namespace DaggerfallWorkshop.Game.Items
 
         EquipSlots GetWeaponSlot(DaggerfallUnityItem item)
         {
+#if UNITY_PSP2
+            // Vita quick menu: the hand the player picked, for weapons that fit either hand
+            if (VitaForceHand != EquipSlots.None && GetItemHands(item) == ItemHands.Either)
+                return VitaForceHand;
+#endif
             // If a 2H weapon is currently equipped then next weapon will always replace it in right hand
             DaggerfallUnityItem rightHandItem = equipTable[(int)EquipSlots.RightHand];
             if (rightHandItem != null && GetItemHands(rightHandItem) == ItemHands.Both && GetItemHands(item) != ItemHands.LeftOnly)

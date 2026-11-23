@@ -74,12 +74,26 @@ public static class VitaBlockBake
 
     static uint Objects(uint h, DFBlock.RmbBlock3dObjectRecord[] objects)
     {
+#if VITA_MODS
+        // Chimney smoke (VitaChimneys) isn't part of the baked block: leaving it out keeps blocks.pak matching packs with or without it
+        int count = objects == null ? -1 : objects.Length;
+        if (objects != null)
+            foreach (DFBlock.RmbBlock3dObjectRecord obj in objects)
+                if (VitaChimneys.Is(obj.ModelIdNum))
+                    count--;
+        h = Mix(h, count);
+#else
         h = Mix(h, objects == null ? -1 : objects.Length);
+#endif
         if (objects == null)
             return h;
         FloatBits bits = new FloatBits();
         foreach (DFBlock.RmbBlock3dObjectRecord obj in objects)
         {
+#if VITA_MODS
+            if (VitaChimneys.Is(obj.ModelIdNum))
+                continue;
+#endif
             h = Mix(h, (int)obj.ModelIdNum);
             h = Mix(h, obj.XPos);
             h = Mix(h, obj.YPos);
@@ -149,8 +163,167 @@ public static class VitaBlockBake
     public static void Prefetch(ref DFBlock blockData)
     {
         int[] entry;
+        long probeT0 = System.Diagnostics.Stopwatch.GetTimestamp();     // TEMPORARY 2026-11-20 probe
+        bool probeTown = false;
         if (DaggerfallUnity.Instance.Option_CombineRMB && NeedsRuntimePath(ref blockData) == null && Index().TryGetValue(Key(blockData.Name, Hash(ref blockData)), out entry))
-            Read(entry[0], entry[1], entry[2]);
+        {
+            if (!(probeTown = TownInflate(entry)))
+                Read(entry[0], entry[1], entry[2]);
+        }
+        else
+            bufferOffset = -1;  // PrefetchedTextures: nothing prefetched for this block
+        // TEMPORARY 2026-11-20 probe (bot word "leadlog"): slow prefetches, and whether the worker had the record
+        double probeMs = (System.Diagnostics.Stopwatch.GetTimestamp() - probeT0) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+        if (ProbeLog && probeMs >= 15)
+            Debug.LogFormat("VITAPREFETCH {0}: {1:F1} ms, from worker {2}", blockData.Name, probeMs, probeTown);
+    }
+    public static bool ProbeLog;    // TEMPORARY 2026-11-20 probe switch
+
+    // In-play town builds: the card read of a block's record stalled its frame 92-145 ms now and then (records are small: the card was
+    // busy elsewhere). A dedicated worker thread reads the town's deflated records into memory from its setup step on, in block order; StreamingWorld
+    // waits (yields) until a block's record is in, and Prefetch then only inflates on the main thread. TownReadOff = test harness A/B.
+    public static bool TownReadOff;
+    sealed class TownJob
+    {
+        public int[] offsets, starts, lengths;     // per block: file offset (-1 = not baked), place in bytes, deflated length
+        public byte[] bytes;
+        public volatile int read;                  // blocks done so far, in order
+        public volatile bool failed;
+    }
+    static TownJob town;
+    static volatile bool townBusy;
+    static FileStream townFile;                     // the worker's own handle (app0:)
+    static byte[] townBytes = new byte[0];          // reused across towns: the IL2CPP heap never shrinks
+
+    public static void BeginTown(DFBlock[] blocks)
+    {
+        // A read still running keeps its job: its blocks find their records in it (a block not in it reads the card in Prefetch)
+        if (TownReadOff || townBusy || !DaggerfallUnity.Instance.Option_CombineRMB || Index().Count == 0)
+            return;
+        TownJob job = new TownJob();
+        job.offsets = new int[blocks.Length];
+        job.starts = new int[blocks.Length];
+        job.lengths = new int[blocks.Length];
+        int total = 0;
+        for (int i = 0; i < blocks.Length; i++)
+        {
+            int[] entry;
+            job.offsets[i] = -1;
+            if (NeedsRuntimePath(ref blocks[i]) == null && index.TryGetValue(Key(blocks[i].Name, Hash(ref blocks[i])), out entry))
+            {
+                job.offsets[i] = entry[0];
+                job.starts[i] = total;
+                job.lengths[i] = entry[1];
+                total += entry[1];
+            }
+        }
+        if (townBytes.Length < total)
+            townBytes = new byte[total];
+        job.bytes = townBytes;
+        town = job;
+        townBusy = true;
+        // One long-lived thread waiting on a monitor: a ThreadPool work item froze the game (all threads idle, pthread_cond errors in the
+        // TTY) on the first test route, while a dedicated worker like this one ran whole 2018.2 routes before
+        lock (townLock)
+        {
+            townQueued = job;
+            System.Threading.Monitor.Pulse(townLock);
+        }
+        if (townThread == null)
+        {
+            townThread = new System.Threading.Thread(TownThreadLoop);
+            townThread.IsBackground = true;
+            townThread.Start();
+        }
+    }
+
+    static readonly object townLock = new object();
+    static TownJob townQueued;
+    static System.Threading.Thread townThread;
+
+    static void TownThreadLoop()
+    {
+        while (true)
+        {
+            TownJob job;
+            lock (townLock)
+            {
+                while (townQueued == null)
+                    System.Threading.Monitor.Wait(townLock);
+                job = townQueued;
+                townQueued = null;
+            }
+            TownWork(job);
+        }
+    }
+
+    static void TownWork(TownJob job)
+    {
+        try
+        {
+            if (townFile == null)
+                townFile = new FileStream(PackPath, FileMode.Open, FileAccess.Read, FileShare.Read, 1);
+            for (int i = 0; i < job.offsets.Length; i++)
+            {
+                if (job.offsets[i] >= 0)
+                {
+                    townFile.Seek(job.offsets[i], SeekOrigin.Begin);
+                    ReadAll(townFile, job.bytes, job.starts[i], job.lengths[i]);
+                }
+                job.read = i + 1;
+            }
+        }
+        catch (Exception)
+        {
+            job.failed = true;
+        }
+        finally
+        {
+            townBusy = false;
+        }
+    }
+
+    // True while block blockIndex's record is still being read by the worker (StreamingWorld yields meanwhile)
+    public static bool TownPending(int blockIndex)
+    {
+        TownJob job = town;
+        return job != null && !job.failed && blockIndex < job.offsets.Length && job.offsets[blockIndex] >= 0 && job.read <= blockIndex;
+    }
+
+    public static void EndTown()
+    {
+        town = null;
+    }
+
+    static bool TownInflate(int[] entry)
+    {
+        TownJob job = town;
+        if (job == null || job.failed)
+            return false;
+        int done = job.read;
+        for (int i = 0; i < done; i++)
+        {
+            if (job.offsets[i] == entry[0])
+            {
+                Inflate(job.bytes, job.starts[i], entry[1], entry[2], entry[0]);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // The prefetched record's submesh textures as archive, record pairs (none when the last Prefetch found no record): StreamingWorld makes
+    // their materials a few at a time on frames of their own, or the first block after a travel built them all in its mesh step (120 ms)
+    public static void PrefetchedTextures(List<int> to)
+    {
+        if (bufferOffset < 0)
+            return;
+        int count = BitConverter.ToInt32(buffer, 4);
+        for (int i = 0; i < count; i++)
+        {
+            to.Add(BitConverter.ToInt32(buffer, 8 + 16 * i));
+            to.Add(BitConverter.ToInt32(buffer, 12 + 16 * i));
+        }
     }
 
     public static bool TryBuild(ref DFBlock blockData, int layoutX, int layoutY, GameObject go)
@@ -170,6 +343,9 @@ public static class VitaBlockBake
             return false;
         }
 
+        long vt0 = System.Diagnostics.Stopwatch.GetTimestamp();   // TEMPORARY probe 2026-11-21 (VITABAKELAPS, bot word "promotelog")
+        double vtRepl = 0, vtModels = 0;
+        int vtReplN = 0, vtModelsN = 0;
         if (bufferOffset == entry[0])
             pos = 0;    // Prefetch read it on an earlier frame
         else
@@ -215,12 +391,18 @@ public static class VitaBlockBake
                 Vector3 position = Vec3();
                 Quaternion rotation = new Quaternion(Float(), Float(), Float(), Float());
                 Vector3 scale = Vec3();
+                long vr0 = System.Diagnostics.Stopwatch.GetTimestamp();   // TEMPORARY probe 2026-11-21 (VITABAKELAPS)
                 if (!MeshReplacement.ImportCustomGameobject(modelID, modelsNode.transform, Matrix4x4.TRS(position, rotation, scale)))
                     Debug.LogFormat("VITANATIVE miss block {0}: replacement model {1} not available", blockData.Name, modelID);
+                vtRepl += (System.Diagnostics.Stopwatch.GetTimestamp() - vr0) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+                vtReplN++;
                 continue;
             }
             // RMBLayout.AddStandaloneModel
+            long vm0 = System.Diagnostics.Stopwatch.GetTimestamp();   // TEMPORARY probe 2026-11-21 (VITABAKELAPS)
             GameObject model = GameObjectHelper.CreateDaggerfallMeshGameObject(modelID, modelsNode.transform, dfUnity.Option_SetStaticFlags);
+            vtModels += (System.Diagnostics.Stopwatch.GetTimestamp() - vm0) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+            vtModelsN++;
             model.transform.position = Vec3();
             model.transform.rotation = new Quaternion(Float(), Float(), Float(), Float());
             model.transform.localScale = Vec3();
@@ -247,8 +429,17 @@ public static class VitaBlockBake
         {
             ModelCombiner combiner = new ModelCombiner();
             combiner.VitaSetCombined(combined);
+            long vc0 = System.Diagnostics.Stopwatch.GetTimestamp();   // TEMPORARY probe 2026-11-21 (VITABAKELAPS)
             GameObjectHelper.CreateCombinedMeshGameObject(combiner, "CombinedModels", modelsNode.transform, dfUnity.Option_SetStaticFlags);
+            if (DaggerfallWorkshop.StreamingWorld.VitaPromoteLog)
+                Debug.LogFormat("VITABAKELAPS {0}: combined {1:F1} ms ({2} vertices, {9} indices), materials {3:F1} ms ({4} new of {5}), arrays {6:F1} (vertices {10:F1}, +normals {11:F1}, +uv {12:F1}), tris {7:F1} (copy {13:F1}), bounds {8:F1}", blockData.Name,
+                    (System.Diagnostics.Stopwatch.GetTimestamp() - vc0) * 1000.0 / System.Diagnostics.Stopwatch.Frequency, vertexCount,
+                    MeshReader.VitaLastMaterialMs, MeshReader.VitaLastNewMaterials, combined.SubMeshes.Length,
+                    MeshReader.VitaLapArrays, MeshReader.VitaLapTris, MeshReader.VitaLapBounds, combined.Indices.Length, MeshReader.VitaLapVerts, MeshReader.VitaLapNormals, MeshReader.VitaLapUV, MeshReader.VitaLapCopy);
         }
+        if (DaggerfallWorkshop.StreamingWorld.VitaPromoteLog)
+            Debug.LogFormat("VITABAKELAPS {0}: total {1:F1} ms, replacements {2:F1} ({3}), models {4:F1} ({5})", blockData.Name,
+                (System.Diagnostics.Stopwatch.GetTimestamp() - vt0) * 1000.0 / System.Diagnostics.Stopwatch.Frequency, vtRepl, vtReplN, vtModels, vtModelsN);
         return true;
     }
 
@@ -307,20 +498,49 @@ public static class VitaBlockBake
             combined.SubMeshes[i].StartIndex = Int();
             combined.SubMeshes[i].PrimitiveCount = Int();
         }
+        // Copied in bulk (the same little-endian floats and ints the loop of Float()/Int() read: 0.3-0.8 s a city in per-value reads)
         combined.Vertices = new Vector3[vertexCount];
         combined.Normals = new Vector3[vertexCount];
         combined.UVs = new Vector2[vertexCount];
-        for (int i = 0; i < vertexCount; i++)
-            combined.Vertices[i] = Vec3();
-        for (int i = 0; i < vertexCount; i++)
-            combined.Normals[i] = Vec3();
-        for (int i = 0; i < vertexCount; i++)
-            combined.UVs[i] = new Vector2(Float(), Float());
+        CopyOut(combined.Vertices, vertexCount * 12);
+        CopyOut(combined.Normals, vertexCount * 12);
+        CopyOut(combined.UVs, vertexCount * 8);
         // Apply() makes one vertex per index; the baker welds identical ones inside each submesh (same triangles)
         combined.Indices = new int[Int()];
-        for (int i = 0; i < combined.Indices.Length; i++)
-            combined.Indices[i] = Int();
+        CopyOut(combined.Indices, combined.Indices.Length * 4);
         return combined;
+    }
+
+    static unsafe void CopyOut(Vector3[] to, int bytes)
+    {
+        if (bytes == 0)
+            return;
+        if (pos + bytes > buffer.Length)
+            throw new IOException("VitaBlockBake: record too short");
+        fixed (byte* src = &buffer[pos])
+        fixed (Vector3* dst = to)
+            Buffer.MemoryCopy(src, dst, bytes, bytes);
+        pos += bytes;
+    }
+
+    static unsafe void CopyOut(Vector2[] to, int bytes)
+    {
+        if (bytes == 0)
+            return;
+        if (pos + bytes > buffer.Length)
+            throw new IOException("VitaBlockBake: record too short");
+        fixed (byte* src = &buffer[pos])
+        fixed (Vector2* dst = to)
+            Buffer.MemoryCopy(src, dst, bytes, bytes);
+        pos += bytes;
+    }
+
+    static void CopyOut(int[] to, int bytes)
+    {
+        if (pos + bytes > buffer.Length)
+            throw new IOException("VitaBlockBake: record too short");
+        Buffer.BlockCopy(buffer, pos, to, 0, bytes);
+        pos += bytes;
     }
 
     // Why DFU's own path must build this block, or null. Same decisions as AddModels/AddProps make per model.
@@ -389,18 +609,25 @@ public static class VitaBlockBake
         if (buffer.Length < length)
             buffer = new byte[length];
         file.Seek(offset, SeekOrigin.Begin);
-        ReadAll(file, deflated, deflatedLength);
+        ReadAll(file, deflated, 0, deflatedLength);
+        Inflate(deflated, 0, deflatedLength, length, offset);
+    }
+
+    static void Inflate(byte[] from, int start, int deflatedLength, int length, int offset)
+    {
+        if (buffer.Length < length)
+            buffer = new byte[length];
         bufferOffset = -1;
-        using (DeflateStream inflate = new DeflateStream(new MemoryStream(deflated, 0, deflatedLength), CompressionMode.Decompress))
-            ReadAll(inflate, buffer, length);
+        using (DeflateStream inflate = new DeflateStream(new MemoryStream(from, start, deflatedLength), CompressionMode.Decompress))
+            ReadAll(inflate, buffer, 0, length);
         bufferOffset = offset;
         pos = 0;
     }
 
-    static void ReadAll(Stream stream, byte[] to, int length)
+    static void ReadAll(Stream stream, byte[] to, int start, int length)
     {
         int done = 0, n;
-        while (done < length && (n = stream.Read(to, done, length - done)) > 0)
+        while (done < length && (n = stream.Read(to, start + done, length - done)) > 0)
             done += n;
         if (done != length)
             throw new IOException("VitaBlockBake: short read");

@@ -44,6 +44,20 @@ public static class VitaTextureInfo
         return true;
     }
 
+    /// <summary>One record's raw TEXTURE size and scale (what MaterialReader's per-record material stores), or false when not in the table.</summary>
+    public static bool RecordSizeScale(int archive, int record, out Vector2 size, out Vector2 scale)
+    {
+        size = scale = Vector2.zero;
+        if (table == null)
+            Load();
+        short[] r;
+        if (!table.TryGetValue(archive, out r) || record < 0 || record * 5 + 4 >= r.Length)
+            return false;
+        size = new Vector2(r[record * 5], r[record * 5 + 1]);
+        scale = new Vector2(r[record * 5 + 2], r[record * 5 + 3]);
+        return true;
+    }
+
     static void Load()
     {
         table = new Dictionary<int, short[]>();

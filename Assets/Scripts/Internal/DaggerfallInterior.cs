@@ -151,20 +151,74 @@ namespace DaggerfallWorkshop
 
             AssignBlockData(door);
 
+#if UNITY_PSP2
+            System.Collections.IEnumerator steps = VitaLayoutSteps(buildingData);
+            while (steps.MoveNext()) { }
+#else
             // Layout interior data
             AddModels(buildingData);
             AddFlats(buildingData);
             AddPeople(buildingData);
             AddActionDoors();
             AddSpawnPoints();
-#if UNITY_PSP2
-            // Vita: plain flats merged per material, one draw each, as in dungeons (VitaFlatBatch.cs)
-            VitaFlatBatch.Build(gameObject);
 #endif
 
             return true;
         }
 
+#if UNITY_PSP2
+        /// <summary>
+        /// DoLayout in steps: DoLayout runs them all at once, PlayerEnterExit's faded building entry one per frame while the screen is black.
+        /// </summary>
+        public System.Collections.IEnumerator VitaDoLayout(Transform doorOwner, StaticDoor door, ClimateBases climateBase, PlayerGPS.DiscoveredBuilding buildingData)
+        {
+            if (dfUnity == null)
+                dfUnity = DaggerfallUnity.Instance;
+            this.climateBase = climateBase;
+            this.entryDoor = door;
+            this.doorOwner = doorOwner;
+            AssignBlockData(door);
+            System.Collections.IEnumerator steps = VitaLayoutSteps(buildingData);
+            while (steps.MoveNext())
+                yield return null;
+        }
+
+        public static float VitaModelsBudgetMs = 120f;     // model/flat loop slice per frame (bot word modelsplitoff = one frame each)
+
+        System.Collections.IEnumerator VitaLayoutSteps(PlayerGPS.DiscoveredBuilding buildingData)
+        {
+            System.Collections.IEnumerator models = VitaAddModels(buildingData, false, VitaModelsBudgetMs);
+            while (models.MoveNext())
+                yield return null;
+            yield return null;
+            System.Collections.IEnumerator flats = VitaAddFlats(buildingData, VitaModelsBudgetMs);
+            while (flats.MoveNext())
+                yield return null;
+            yield return null;
+            AddPeople(buildingData);
+            AddActionDoors();
+            AddSpawnPoints();
+            yield return null;
+            // Vita: plain flats merged per material, one draw each, as in dungeons (VitaFlatBatch.cs)
+            VitaFlatBatch.Build(gameObject);
+            yield return null;  // the entry's own finish (enable + events) gets a frame of its own
+        }
+#endif
+
+#if UNITY_PSP2
+        // DoLayoutAutomap below with the model loop sliced per frame (Automap.VitaPrebuildInterior, behind the door's black screen)
+        public System.Collections.IEnumerator VitaDoLayoutAutomap(StaticDoor door, ClimateBases climateBase, float budgetMs)
+        {
+            if (dfUnity == null)
+                dfUnity = DaggerfallUnity.Instance;
+            this.climateBase = climateBase;
+            this.entryDoor = door;
+            this.doorOwner = null;
+            AssignBlockData(door);
+            return VitaAddModels(mapBD, true, budgetMs);
+        }
+
+#endif
         /// <summary>
         /// Layout interior for automap based on data in exterior door and optional location for climate settings.
         /// </summary>
@@ -384,7 +438,25 @@ namespace DaggerfallWorkshop
             {
                 if (blocks[index].Index == door.blockIndex)
                 {
+#if UNITY_PSP2
+                    // The location cache keeps building lists only (RMBLayout.VitaSlim): decode this one block for its interior, with the
+                    // building data the location assigned
                     this.blockData = blocks[index];
+                    if (!RMBLayout.VitaSlimOff)
+                    {
+                        ContentReader reader = DaggerfallUnity.Instance.ContentReader;
+                        int width = location.Exterior.ExteriorData.Width;
+                        string blockName = reader.BlockFileReader.CheckName(reader.MapFileReader.GetRmbBlockName(location, index % width, index / width));
+                        DFBlock full;
+                        if (reader.GetBlock(blockName, out full))
+                        {
+                            full.RmbBlock.FldHeader.BuildingDataList = blocks[index].RmbBlock.FldHeader.BuildingDataList;
+                            this.blockData = full;
+                        }
+                    }
+#else
+                    this.blockData = blocks[index];
+#endif
                     foundBlock = true;
                 }
             }
@@ -401,6 +473,160 @@ namespace DaggerfallWorkshop
         /// <summary>
         /// Add interior models.
         /// </summary>
+#if UNITY_PSP2
+        private void AddModels(PlayerGPS.DiscoveredBuilding buildingData, bool isAutomapRun = false)
+        {
+            System.Collections.IEnumerator steps = VitaAddModels(buildingData, isAutomapRun, float.MaxValue);
+            while (steps.MoveNext()) { }
+        }
+
+        // Upstream's AddModels (in #else below) with yields: a new frame once a slice of the model loop has taken budgetMs, and one
+        // for the combined mesh + its collider. A big building's models were one 1.6 s frame behind the door's black screen.
+        // VitaLayoutSteps runs it with a budget; everything else drains it at once (AddModels).
+        System.Collections.IEnumerator VitaAddModels(PlayerGPS.DiscoveredBuilding buildingData, bool isAutomapRun, float budgetMs)
+        {
+            System.Diagnostics.Stopwatch slice = System.Diagnostics.Stopwatch.StartNew();
+            List<StaticDoor> doors = new List<StaticDoor>();
+            GameObject node = new GameObject("Models");
+            GameObject doorsNode = new GameObject("Doors");
+            node.transform.parent = this.transform;
+            doorsNode.transform.parent = this.transform;
+
+            // Iterate through models in this subrecord
+            combiner.NewCombiner();
+            foreach (DFBlock.RmbBlock3dObjectRecord obj in recordData.Interior.Block3dObjectRecords)
+            {
+                bool stopCombine = false;
+
+                // Filter out bad interior models
+                if (IsBadInteriorModel(obj.ModelIdNum))
+                    continue;
+
+                // Get model data
+                ModelData modelData;
+                // Vita: a mod model whose mod is off (Old Masters' paintings while Cities/Villages are on) has no data: skip it, as
+                // RMBLayout does outside, instead of a prop reading modelData.Vertices (null)
+                if (!dfUnity.MeshReader.GetModelData(obj.ModelIdNum, out modelData))
+                    continue;
+
+                // Get model position by type (3 seems to indicate props/clutter)
+                // Also stop these from being combined as some may carry a loot container
+                Vector3 modelPosition;
+                if (obj.ObjectType == propModelType)
+                {
+                    // Props axis needs to be transformed to lowest Y point
+                    Vector3 bottom = modelData.Vertices[0];
+                    for (int i = 0; i < modelData.Vertices.Length; i++)
+                    {
+                        if (modelData.Vertices[i].y < bottom.y)
+                            bottom = modelData.Vertices[i];
+                    }
+                    modelPosition = new Vector3(obj.XPos, obj.YPos, obj.ZPos) * MeshReader.GlobalScale;
+                    modelPosition += new Vector3(0, -bottom.y, 0);
+                    stopCombine = true;
+                }
+                else
+                {
+                    modelPosition = new Vector3(obj.XPos, -obj.YPos, obj.ZPos) * MeshReader.GlobalScale;
+                }
+
+                // Stop special objects or those with actions from being combined
+                if (obj.ModelIdNum == ladderModelId || PlayerActivate.HasCustomActivation(obj.ModelIdNum))
+                    stopCombine = true;
+
+                // Get model transform
+                Vector3 modelRotation = new Vector3(-obj.XRotation / BlocksFile.RotationDivisor, -obj.YRotation / BlocksFile.RotationDivisor, -obj.ZRotation / BlocksFile.RotationDivisor);
+                Vector3 modelScale = RMBLayout.GetModelScaleVector(obj);
+                Matrix4x4 modelMatrix = Matrix4x4.TRS(modelPosition, Quaternion.Euler(modelRotation), modelScale);
+
+                // Does this Daggerfall model have any static doors?
+                bool disableClassicDoors = false;
+                StaticDoor[] staticDoors = null;
+                if (modelData.Doors != null)
+                    staticDoors = GameObjectHelper.GetStaticDoors(ref modelData, entryDoor.blockIndex, entryDoor.recordIndex, modelMatrix);
+
+                // Inject custom GameObject if available
+                GameObject modelGO = MeshReplacement.ImportCustomGameobject(obj.ModelIdNum, node.transform, modelMatrix);
+
+                // Otherwise use Daggerfall mesh - combine or add
+                if (!modelGO)
+                {
+                    if (dfUnity.Option_CombineRMB && !stopCombine)
+                    {
+                        combiner.Add(ref modelData, modelMatrix);
+                    }
+                    else
+                    {
+                        // Add individual GameObject
+                        modelGO = GameObjectHelper.CreateDaggerfallMeshGameObject(obj.ModelIdNum, node.transform, dfUnity.Option_SetStaticFlags);
+                        modelGO.transform.position = modelMatrix.GetColumn(3);
+                        modelGO.transform.rotation = modelMatrix.rotation;
+                        modelGO.transform.localScale = modelMatrix.lossyScale;
+
+                        // Update climate
+                        DaggerfallMesh dfMesh = modelGO.GetComponent<DaggerfallMesh>();
+                        dfMesh.SetClimate(climateBase, climateSeason, WindowStyle.Disabled);
+                    }
+                }
+                else
+                {
+                    // For a custom model initialise any custom doors
+                    List<StaticDoor> customStaticDoors = CustomDoor.InitDoorsInterior(modelGO, staticDoors, entryDoor.blockIndex, entryDoor.recordIndex, modelMatrix, out disableClassicDoors);
+                    doors.AddRange(customStaticDoors);
+                }
+
+                // Add any DF model static doors unless suppressed
+                if (modelData.Doors != null && !disableClassicDoors)
+                    doors.AddRange(staticDoors);
+
+
+                if ((modelGO != null) && (isAutomapRun))
+                    modelGO.AddComponent<AutomapModel>();
+
+                // Make ladder collider convex and ladder functionality, if set up as propModelType
+                if (obj.ModelIdNum == ladderModelId && obj.ObjectType == propModelType)
+                {
+                    var meshCollider = modelGO.GetComponent<MeshCollider>();
+                    if (meshCollider) meshCollider.convex = true;
+                    modelGO.AddComponent<DaggerfallLadder>();
+                }
+
+                // Optionally add action objects to specific furniture items (e.g. loot containers), except when laying out map (buildingType=AllValid)
+                if (obj.ObjectType == propModelType && buildingData.buildingType != DFLocation.BuildingTypes.AllValid)
+                    AddFurnitureAction(obj, modelGO, buildingData);
+
+                if (slice.ElapsedMilliseconds >= budgetMs)
+                {
+                    yield return null;
+                    slice.Reset();
+                    slice.Start();
+                }
+            }
+
+            if (budgetMs < float.MaxValue)
+                yield return null;
+            // Add combined GameObject
+            if (dfUnity.Option_CombineRMB)
+            {
+                if (combiner.VertexCount > 0)
+                {
+                    combiner.Apply();
+                    GameObject modelGO = GameObjectHelper.CreateCombinedMeshGameObject(combiner, "CombinedModels", node.transform, dfUnity.Option_SetStaticFlags);
+
+                    if ((modelGO != null) && (isAutomapRun))
+                        modelGO.AddComponent<AutomapModel>();
+
+                    // Update climate
+                    DaggerfallMesh dfMesh = modelGO.GetComponent<DaggerfallMesh>();
+                    dfMesh.SetClimate(climateBase, climateSeason, WindowStyle.Disabled);
+                }
+            }
+
+            // Add static doors component
+            DaggerfallStaticDoors c = this.gameObject.AddComponent<DaggerfallStaticDoors>();
+            c.Doors = doors.ToArray();
+        }
+#else
         private void AddModels(PlayerGPS.DiscoveredBuilding buildingData, bool isAutomapRun = false)
         {
             List<StaticDoor> doors = new List<StaticDoor>();
@@ -421,14 +647,7 @@ namespace DaggerfallWorkshop
 
                 // Get model data
                 ModelData modelData;
-#if UNITY_PSP2
-                // Vita: a mod model whose mod is off (Old Masters' paintings while Cities/Villages are on) has no data: skip it, as
-                // RMBLayout does outside, instead of a prop reading modelData.Vertices (null)
-                if (!dfUnity.MeshReader.GetModelData(obj.ModelIdNum, out modelData))
-                    continue;
-#else
                 dfUnity.MeshReader.GetModelData(obj.ModelIdNum, out modelData);
-#endif
 
                 // Get model position by type (3 seems to indicate props/clutter)
                 // Also stop these from being combined as some may carry a loot container
@@ -538,6 +757,7 @@ namespace DaggerfallWorkshop
             DaggerfallStaticDoors c = this.gameObject.AddComponent<DaggerfallStaticDoors>();
             c.Doors = doors.ToArray();
         }
+#endif
 
         /// <summary>
         /// Identify specific bad interior models.
@@ -860,6 +1080,87 @@ namespace DaggerfallWorkshop
         /// <summary>
         /// Add interior flats.
         /// </summary>
+#if UNITY_PSP2
+        private void AddFlats(PlayerGPS.DiscoveredBuilding buildingData)
+        {
+            System.Collections.IEnumerator steps = VitaAddFlats(buildingData, float.MaxValue);
+            while (steps.MoveNext()) { }
+        }
+
+        // Upstream's AddFlats (in #else below), a new frame once a slice has taken budgetMs (big buildings: one 0.9 s frame)
+        System.Collections.IEnumerator VitaAddFlats(PlayerGPS.DiscoveredBuilding buildingData, float budgetMs)
+        {
+            System.Diagnostics.Stopwatch slice = System.Diagnostics.Stopwatch.StartNew();
+            GameObject node = new GameObject("Interior Flats");
+            node.transform.parent = this.transform;
+
+            // Add block flats
+            markers.Clear();
+            foreach (DFBlock.RmbBlockFlatObjectRecord obj in recordData.Interior.BlockFlatObjectRecords)
+            {
+                // Calculate position
+                Vector3 billboardPosition = new Vector3(obj.XPos, -obj.YPos, obj.ZPos) * MeshReader.GlobalScale;
+
+                // Import custom 3d gameobject instead of flat
+                if (MeshReplacement.ImportCustomFlatGameobject(obj.TextureArchive, obj.TextureRecord, billboardPosition, node.transform) != null)
+                    continue;
+
+                // Spawn billboard gameobject
+                GameObject go = GameObjectHelper.CreateDaggerfallBillboardGameObject(obj.TextureArchive, obj.TextureRecord, node.transform);
+
+                // Set position
+                Billboard dfBillboard = go.GetComponent<Billboard>();
+                go.transform.position = billboardPosition;
+                go.transform.position += new Vector3(0, dfBillboard.Summary.Size.y / 2, 0);
+
+                // Add editor markers to list
+                if (obj.TextureArchive == TextureReader.EditorFlatsTextureArchive)
+                {
+                    InteriorEditorMarker marker = new InteriorEditorMarker();
+                    marker.type = (InteriorMarkerTypes)obj.TextureRecord;
+                    marker.gameObject = go;
+                    markers.Add(marker);
+
+                    // Add loot containers for treasure markers for TG, DB & taverns (uses pile of clothes icon)
+                    if (marker.type == InteriorMarkerTypes.Treasure &&
+                        (buildingData.buildingType == DFLocation.BuildingTypes.Tavern ||
+                         buildingData.factionID == ThievesGuild.FactionId ||
+                         buildingData.factionID == DarkBrotherhood.FactionId))
+                    {
+                        // Create unique LoadID for save system, using 9 lsb and the sign bit from each coord pos int
+                        ulong loadID = ((ulong) buildingData.buildingKey) << 30 |
+                                        (uint)(obj.XPos << 1 & posMask) << 20 |
+                                        (uint)(obj.YPos << 1 & posMask) << 10 |
+                                        (uint)(obj.ZPos << 1 & posMask);
+
+                        DaggerfallLoot loot = GameObjectHelper.CreateLootContainer(
+                            LootContainerTypes.RandomTreasure,
+                            InventoryContainerImages.Chest,
+                            billboardPosition,
+                            node.transform,
+                            DaggerfallLootDataTables.clothingArchive,
+                            0, loadID);
+
+                        if (!LootTables.GenerateLoot(loot, (int) GameManager.Instance.PlayerGPS.CurrentLocationType))
+                            DaggerfallUnity.LogMessage(string.Format("DaggerfallInterior: Location type {0} is out of range or unknown.", GameManager.Instance.PlayerGPS.CurrentLocationType), true);
+                    }
+                }
+
+                // Add point lights
+                if (obj.TextureArchive == TextureReader.LightsTextureArchive && !DaggerfallUnity.Settings.AmbientLitInteriors)
+                {
+                    AddLight(obj, go.transform);
+                }
+
+                if (slice.ElapsedMilliseconds >= budgetMs)
+                {
+                    yield return null;
+                    slice.Reset();
+                    slice.Start();
+                }
+            }
+        }
+#else
         private void AddFlats(PlayerGPS.DiscoveredBuilding buildingData)
         {
             GameObject node = new GameObject("Interior Flats");
@@ -924,6 +1225,7 @@ namespace DaggerfallWorkshop
                 }
             }
         }
+#endif
 
         /// <summary>
         /// This data appears to be spawn/waypoint data for placing interior enemies.

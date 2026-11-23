@@ -179,6 +179,9 @@ namespace DaggerfallWorkshop
             // Mesh and local material are ours: free them or every batch leaks both (native memory) on each scene/block unload
             if (billboardMesh != null) DestroyImmediate(billboardMesh);
             if (atlasMaterial != null) DestroyImmediate(atlasMaterial);
+            if (vitaCellMeshes != null)
+                foreach (Mesh m in vitaCellMeshes)
+                    if (m != null) DestroyImmediate(m);
 #endif
         }
 
@@ -192,6 +195,14 @@ namespace DaggerfallWorkshop
 
         void Update()
         {
+#if UNITY_PSP2
+            if (vitaCellsRefill)
+            {
+                vitaCellsRefill = false;
+                if (vitaCellMode)
+                    VitaCellsFill(!VitaPushSpreadOff);
+            }
+#endif
             // Stop coroutine if frames per second drops to 0
             if (FramesPerSecond == 0 && lastFramesPerSecond > 0)
                 StopCoroutine(AnimateBillboards());
@@ -272,15 +283,39 @@ namespace DaggerfallWorkshop
             Assert.AreEqual(expected: (byte)0, actual: isUnmanagedMemoryAllocated);
 
 #if UNITY_PSP2
+            // Buffers of a destroyed batch when there are some: terrains are rebuilt after teleports, and each new batch grew its lists
+            // from empty (wild3: 230 KB per nature batch + 454 KB per tree batch of item list growth alone, per tile)
+            vitaPooled = VitaPoolNext;
+            if (vitaPooled && vitaFreeBuffers.Count > 0)
+            {
+                VitaBuffers b = vitaFreeBuffers.Pop();
+                billboardData = b.items;
+                billboardData.Clear();
+                // Length 0 like fresh arrays (only the storage is kept): code that reads a batch's lengths before its first Apply must see an
+                // empty batch (wild4: lengths left from the old batch, 2 NullReferenceExceptions in in-play town builds)
+                meshVertices = b.vertices.VitaReuse(0);
+                meshNormals = b.normals.VitaReuse(0);
+                meshIndices = b.indices.VitaReuse(0);
+                meshTangents = b.tangents.VitaReuse(0);
+                meshUVs = b.uvs.VitaReuse(0);
+            }
+            else
+            {
             billboardData = new NativeList<BillboardItem>(64, Allocator.Persistent);   // grows on Add (VitaJobsShim); 16250 x 56 B = 0.9 MB per batch otherwise, even when nearly empty
-#else
-            billboardData = new NativeList<BillboardItem>(initialCapacity: maxBillboardCount, Allocator.Persistent);
-#endif
             meshVertices = new NativeArray<float3>(0, Allocator.Persistent);
             meshNormals = new NativeArray<float3>(0, Allocator.Persistent);
             meshIndices = new NativeArray<ushort>(0, Allocator.Persistent);
             meshTangents = new NativeArray<float4>(0, Allocator.Persistent);
             meshUVs = new NativeArray<float2>(0, Allocator.Persistent);
+            }
+#else
+            billboardData = new NativeList<BillboardItem>(initialCapacity: maxBillboardCount, Allocator.Persistent);
+            meshVertices = new NativeArray<float3>(0, Allocator.Persistent);
+            meshNormals = new NativeArray<float3>(0, Allocator.Persistent);
+            meshIndices = new NativeArray<ushort>(0, Allocator.Persistent);
+            meshTangents = new NativeArray<float4>(0, Allocator.Persistent);
+            meshUVs = new NativeArray<float2>(0, Allocator.Persistent);
+#endif
             meshAABB = new NativeArray<Bounds>(1, Allocator.Persistent);
 
             isUnmanagedMemoryAllocated = 1;
@@ -294,6 +329,12 @@ namespace DaggerfallWorkshop
 
             Assert.AreEqual(expected: (byte)1, actual: isUnmanagedMemoryAllocated);
 
+#if UNITY_PSP2
+            // Jobs are complete here (OnDestroy): the next new batch takes these buffers over
+            if (vitaPooled && !VitaPoolClosed && vitaFreeBuffers.Count < VitaFreeBuffersMax && !VitaBufferPoolOff)
+                vitaFreeBuffers.Push(new VitaBuffers { items = billboardData, vertices = meshVertices, normals = meshNormals, indices = meshIndices,
+                    tangents = meshTangents, uvs = meshUVs });
+#endif
             billboardData.Dispose();
             meshVertices.Dispose();
             meshNormals.Dispose();
@@ -783,7 +824,7 @@ namespace DaggerfallWorkshop
             // Vita: the stand-in arrays are managed, so a new set per rebuild (the count changes with every layout) was ~1 MB of garbage
             // per batch and GCs while walking. Reuse the storage; every job below writes all items of its array.
             meshVertices = meshVertices.VitaReuse(numVertices);
-            meshNormals = meshNormals.VitaReuse(numVertices);
+            meshNormals = meshNormals.VitaReuse(0);     // every vertex gets the same normal: pushed from VitaNormalsList, none kept per batch
             meshIndices = meshIndices.VitaReuse(numIndices);
             meshTangents = meshTangents.VitaReuse(numVertices);
             meshUVs = meshUVs.VitaReuse(numVertices);
@@ -838,8 +879,13 @@ namespace DaggerfallWorkshop
             ___schedule.Begin();
             ResizeMeshBuffers();
             int numBillboards = billboardData.Length;
+#if UNITY_PSP2
+            NativeArray<float3> origins = VitaScratch<float3>.Get(numBillboards);
+            NativeArray<float2> sizes = VitaScratch<float2>.Get(numBillboards);
+#else
             NativeArray<float3> origins = new NativeArray<float3>(numBillboards, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
             NativeArray<float2> sizes = new NativeArray<float2>(numBillboards, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+#endif
 
             JobHandle getCustomBatchDataJobHandle = new GetCustomMaterialBatchDataJob
             {
@@ -944,9 +990,16 @@ namespace DaggerfallWorkshop
             ___schedule.Begin();
             ResizeMeshBuffers();
             int numBillboards = billboardData.Length;
+#if UNITY_PSP2
+            // Vita: pooled scratch (36 B per billboard was new garbage on every Apply: ~345 KB per terrain tile's nature batch)
+            NativeArray<float3> origins = VitaScratch<float3>.Get(numBillboards);
+            NativeArray<float2> sizes = VitaScratch<float2>.Get(numBillboards);
+            NativeArray<Rect> uvrects = VitaScratch<Rect>.Get(numBillboards);
+#else
             NativeArray<float3> origins = new NativeArray<float3>(numBillboards, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
             NativeArray<float2> sizes = new NativeArray<float2>(numBillboards, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
             NativeArray<Rect> uvrects = new NativeArray<Rect>(numBillboards, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+#endif
 
             GetBatchDataJob getBatchDataJob = new GetBatchDataJob
             {
@@ -1077,9 +1130,17 @@ namespace DaggerfallWorkshop
                 ___vertexBuffer.Begin();
 #if UNITY_PSP2
                 billboardMesh.Clear();
+                // A big batch goes into cell meshes instead (VitaCellsFill): the batch's own mesh stays empty
+                vitaCellMode = VitaCellsWanted();
+                if (meshRenderer != null)
+                    meshRenderer.enabled = !vitaCellMode;
+                if (vitaCellMode)
+                    VitaCellsFill(isActiveAndEnabled && !VitaPushSpreadOff);
+                else
+                    VitaCellsHide();
                 // Octagons around the sprites' opaque pixels instead of quads where possible (VitaBillboardTrim sets the whole mesh)
-                int[] vitaTrimRecords = VitaTrimRecords();
-                bool vitaTrimmed = vitaTrimRecords != null && VitaBillboardTrim.Set(billboardMesh, currentArchive, vitaTrimRecords, meshVertices, meshTangents, meshUVs);
+                int[] vitaTrimRecords = vitaCellMode ? null : VitaTrimRecords();
+                bool vitaTrimmed = vitaCellMode || vitaTrimRecords != null && VitaBillboardTrim.Set(billboardMesh, currentArchive, vitaTrimRecords, meshVertices, meshTangents, meshUVs);
                 // A terrain tile's ~21k-vertex nature batch took ~80 ms here in one frame (the four list copies + sets): in play, one
                 // channel per frame with the triangles last, so the batch draws nothing until it is whole
                 bool vitaSpread = !vitaTrimmed && isActiveAndEnabled && !VitaPushSpreadOff;
@@ -1087,7 +1148,7 @@ namespace DaggerfallWorkshop
                 {
                     if (vitaPush != null)
                         StopCoroutine(vitaPush);
-                    vitaPush = StartCoroutine(VitaPushSpread());
+                    vitaPush = StartCoroutine(StreamingWorld.VitaCoTimed("bbpush", VitaPushSpread()));   // TEMPORARY probe wrapper 2026-11-21
                 }
                 else if (!vitaTrimmed)
                     VitaPushChannels();
@@ -1122,12 +1183,46 @@ namespace DaggerfallWorkshop
 
 #if UNITY_PSP2
         public static bool VitaPushSpreadOff;   // test harness A/B
+
+        // Buffer sets of destroyed batches (see AllocateUnmanagedMemory). Up to one per batch of a full 4x4 terrain grid (nature + trees);
+        // what the pool holds stays allocated while the world is small (dungeons), but the garbage it replaces had grown the GC heap anyway.
+        sealed class VitaBuffers
+        {
+            public NativeList<BillboardItem> items;
+            public NativeArray<float3> vertices, normals;
+            public NativeArray<ushort> indices;
+            public NativeArray<float4> tangents;
+            public NativeArray<float2> uvs;
+        }
+        const int VitaFreeBuffersMax = 32;
+        static readonly System.Collections.Generic.Stack<VitaBuffers> vitaFreeBuffers = new System.Collections.Generic.Stack<VitaBuffers>();
+        public static bool VitaBufferPoolOff;   // test harness A/B
+        // Only terrain nature batches (StreamingWorld's, VitaNearTrees') use the pool: they come and go together and are about the same size.
+        // A city block batch given a forest tile's buffers kept ~1-2 MB each (GC heap 98 -> 126 MB in the big cities).
+        public static bool VitaPoolNext;        // set by the creator around AddComponent (Awake allocates)
+        bool vitaPooled;
+        // Closed while the exterior is cleared for a dungeon (VitaClearWorld): the destroyed terrains' buffers would sit unused inside it
+        static bool VitaPoolClosed;
+        public static void VitaPoolClose() { VitaPoolClosed = true; vitaFreeBuffers.Clear(); }
+        public static void VitaPoolOpen() { VitaPoolClosed = false; }
         Coroutine vitaPush;
+
+        // NormalsJob writes one constant normal, so batches keep no normal array (half of the 3.3 MB of float3[] at Daggerfall noon).
+        // vitaNormals only ever holds that value, so it is trimmed or padded to the vertex count.
+        static readonly Vector3 vitaNormal = new Vector3(0, 0.707106781187f, 0.707106781187f);
+        static System.Collections.Generic.List<Vector3> VitaNormalsList(int count)
+        {
+            if (vitaNormals.Count > count)
+                vitaNormals.RemoveRange(count, vitaNormals.Count - count);
+            while (vitaNormals.Count < count)
+                vitaNormals.Add(vitaNormal);
+            return vitaNormals;
+        }
 
         void VitaPushChannels()
         {
             billboardMesh.SetVertices(meshVertices.ToList(vitaVertices));
-            billboardMesh.SetNormals(meshNormals.ToList(vitaNormals));
+            billboardMesh.SetNormals(VitaNormalsList(meshVertices.Length));
             billboardMesh.SetTangents(meshTangents.ToList(vitaTangents));
             billboardMesh.SetUVs(0, meshUVs.ToList(vitaUVs));
         }
@@ -1137,7 +1232,7 @@ namespace DaggerfallWorkshop
         {
             billboardMesh.SetVertices(meshVertices.ToList(vitaVertices));
             yield return null;
-            billboardMesh.SetNormals(meshNormals.ToList(vitaNormals));
+            billboardMesh.SetNormals(VitaNormalsList(meshVertices.Length));
             yield return null;
             billboardMesh.SetTangents(meshTangents.ToList(vitaTangents));
             yield return null;
@@ -1157,6 +1252,14 @@ namespace DaggerfallWorkshop
             vitaPush = null;
             if (!redo)
                 return;
+            if (vitaCellMode)
+            {
+                // Called from OnDisable, often while the batch's object is being deactivated (the exterior switched off at a door while
+                // the batch still filled in play): new cell objects can't be parented then ("Cannot change GameObject hierarchy while
+                // activating or deactivating the parent", seen in a Sentinel tavern), so the fill waits for the next Update
+                vitaCellsRefill = true;
+                return;
+            }
             billboardMesh.Clear();
             VitaPushChannels();
             billboardMesh.SetTriangles(meshIndices.ToList(vitaTriangles), 0, false);
@@ -1166,8 +1269,8 @@ namespace DaggerfallWorkshop
         // Each billboard's record for VitaBillboardTrim, or null when the batch must keep quads (custom material, animated, too big)
         int[] VitaTrimRecords()
         {
-            if (customMaterial != null || currentArchive < 0 || billboardData.Length > VitaBillboardTrim.MaxBillboards)
-                return null;
+            if (VitaBillboardTrim.Off || customMaterial != null || currentArchive < 0 || billboardData.Length > VitaBillboardTrim.MaxBillboards)
+                return null;     // Off checked first: the records array was made per Apply only for Set to refuse it
             int[] records = new int[billboardData.Length];
             for (int i = 0; i < records.Length; i++)
             {
@@ -1176,6 +1279,171 @@ namespace DaggerfallWorkshop
                 records[i] = billboardData[i].record;
             }
             return records;
+        }
+
+        // Cells: a terrain tile's nature batch is one mesh of up to ~16k billboards over 819 m, and Unity culls whole renderers, so the
+        // GPU shaded every vertex of it while half the tile was out of view (Woodlands heading 90: 25.9 -> 30.9 FPS with only the
+        // in-view billboards). Big batches are split into VitaCells x VitaCells child meshes by billboard position instead; same quads,
+        // same material, so the same pixels.
+        public static int VitaCells = 4;            // per side (8 lost up to 10 FPS to draw calls in some views); under 2 = off (test harness A/B: set it, then VitaRepush every batch)
+        const int vitaCellMinBillboards = 1024;
+        const int vitaCellsPerFrame = 4;            // spread fill in play, as VitaPushSpread
+        bool vitaCellMode;
+        bool vitaCellsRefill;     // a cell fill cut off by OnDisable, redone by Update
+        MeshFilter[] vitaCellFilters;
+        MeshRenderer[] vitaCellRenderers;
+        Mesh[] vitaCellMeshes;
+        int[] vitaCellOf, vitaCellOrder, vitaCellStart;
+
+        /// <summary>Test harness: refill the mesh(es) from the last Apply's data, e.g. after changing VitaCells.</summary>
+        public void VitaRepush()
+        {
+            if (billboardMesh != null && isUnmanagedMemoryAllocated == 1 && meshVertices.Length == billboardData.Length * vertsPerQuad)
+                PushNewMeshData();
+        }
+
+        bool VitaCellsWanted()
+        {
+            if (VitaCells < 2 || customMaterial != null || billboardData.Length < vitaCellMinBillboards || meshVertices.Length != billboardData.Length * vertsPerQuad)
+                return false;
+            for (int i = 0; i < billboardData.Length; i++)
+                if (billboardData[i].totalFrames > 1)
+                    return false;   // AnimateUVJob rewrites the batch mesh's UVs
+            return true;
+        }
+
+        void VitaCellsHide()
+        {
+            if (vitaCellRenderers != null)
+                foreach (MeshRenderer r in vitaCellRenderers)
+                    if (r != null) r.enabled = false;
+        }
+
+        void VitaCellsFill(bool spread)
+        {
+            if (vitaPush != null)
+                StopCoroutine(vitaPush);
+            vitaPush = null;
+            if (meshRenderer == null)
+                meshRenderer = GetComponent<MeshRenderer>();
+            int side = VitaCells, cells = side * side, count = billboardData.Length;
+            if (vitaCellFilters == null || vitaCellFilters.Length != cells)
+            {
+                if (vitaCellFilters != null)
+                    for (int k = 0; k < vitaCellFilters.Length; k++)
+                    {
+                        if (vitaCellMeshes[k] != null) DestroyImmediate(vitaCellMeshes[k]);
+                        if (vitaCellFilters[k] != null) DestroyImmediate(vitaCellFilters[k].gameObject);
+                    }
+                vitaCellFilters = new MeshFilter[cells];
+                vitaCellRenderers = new MeshRenderer[cells];
+                vitaCellMeshes = new Mesh[cells];
+                vitaCellStart = new int[cells + 1];
+            }
+            // Billboards sorted by cell (counting sort on the pivot's x/z in the batch bounds)
+            if (vitaCellOf == null || vitaCellOf.Length < count)
+            {
+                vitaCellOf = new int[count];
+                vitaCellOrder = new int[count];
+            }
+            Bounds all = meshAABB[0];
+            float sx = side / Mathf.Max(all.size.x, 1e-3f), sz = side / Mathf.Max(all.size.z, 1e-3f);
+            System.Array.Clear(vitaCellStart, 0, cells + 1);
+            for (int i = 0; i < count; i++)
+            {
+                float3 p = meshVertices[i * vertsPerQuad];
+                int cx = Mathf.Clamp((int)((p.x - all.min.x) * sx), 0, side - 1);
+                int cz = Mathf.Clamp((int)((p.z - all.min.z) * sz), 0, side - 1);
+                vitaCellOf[i] = cz * side + cx;
+                vitaCellStart[vitaCellOf[i] + 1]++;
+            }
+            for (int k = 0; k < cells; k++)
+                vitaCellStart[k + 1] += vitaCellStart[k];
+            int[] next = new int[cells];
+            System.Array.Copy(vitaCellStart, next, cells);
+            for (int i = 0; i < count; i++)
+                vitaCellOrder[next[vitaCellOf[i]]++] = i;
+            VitaCellsHide();    // nothing drawn until every cell is filled, as the spread fill of the batch mesh
+            if (spread)
+                vitaPush = StartCoroutine(StreamingWorld.VitaCoTimed("bbcells", VitaCellsSpread()));   // TEMPORARY probe wrapper 2026-11-21
+            else
+            {
+                for (int k = 0; k < cells; k++)
+                    VitaCellFill(k);
+                VitaCellsShow();
+            }
+        }
+
+        IEnumerator VitaCellsSpread()
+        {
+            for (int k = 0; k < vitaCellFilters.Length; k++)
+            {
+                VitaCellFill(k);
+                if ((k + 1) % vitaCellsPerFrame == 0)
+                    yield return null;
+            }
+            VitaCellsShow();
+            vitaPush = null;
+        }
+
+        void VitaCellsShow()
+        {
+            for (int k = 0; k < vitaCellRenderers.Length; k++)
+                if (vitaCellRenderers[k] != null)
+                    vitaCellRenderers[k].enabled = vitaCellStart[k + 1] > vitaCellStart[k];
+        }
+
+        void VitaCellFill(int k)
+        {
+            int first = vitaCellStart[k], n = vitaCellStart[k + 1] - first;
+            if (n == 0 && vitaCellMeshes[k] == null)
+                return;
+            if (vitaCellMeshes[k] == null)
+            {
+                GameObject go = new GameObject("Cell " + k);
+                go.layer = gameObject.layer;
+                go.transform.SetParent(transform, false);
+                vitaCellFilters[k] = go.AddComponent<MeshFilter>();
+                vitaCellRenderers[k] = go.AddComponent<MeshRenderer>();
+                vitaCellRenderers[k].enabled = false;
+                vitaCellMeshes[k] = new Mesh();
+                vitaCellMeshes[k].name = "BillboardBatchCell";
+                vitaCellFilters[k].sharedMesh = vitaCellMeshes[k];
+            }
+            MeshRenderer r = vitaCellRenderers[k];
+            r.sharedMaterial = meshRenderer.sharedMaterial;
+            r.shadowCastingMode = meshRenderer.shadowCastingMode;
+            r.receiveShadows = meshRenderer.receiveShadows;
+            r.lightProbeUsage = meshRenderer.lightProbeUsage;
+            r.reflectionProbeUsage = meshRenderer.reflectionProbeUsage;
+            vitaVertices.Clear(); vitaNormals.Clear(); vitaTangents.Clear(); vitaUVs.Clear(); vitaTriangles.Clear();
+            Bounds bounds = new Bounds();
+            for (int j = 0; j < n; j++)
+            {
+                int b = vitaCellOrder[first + j], v = b * vertsPerQuad, o = j * vertsPerQuad;
+                for (int c = 0; c < vertsPerQuad; c++)
+                {
+                    vitaVertices.Add(meshVertices[v + c]);
+                    vitaNormals.Add(vitaNormal);
+                    vitaTangents.Add(meshTangents[v + c]);
+                    vitaUVs.Add(meshUVs[v + c]);
+                }
+                // Same corner order as Indices16Job
+                vitaTriangles.Add(o); vitaTriangles.Add(o + 1); vitaTriangles.Add(o + 2);
+                vitaTriangles.Add(o + 3); vitaTriangles.Add(o + 2); vitaTriangles.Add(o + 1);
+                // Same box per billboard as BoundsJob
+                float4 t = meshTangents[v];
+                Bounds bb = new Bounds(meshVertices[v], new Vector3(t.x, t.y, 0));
+                if (j == 0) bounds = bb; else bounds.Encapsulate(bb);
+            }
+            Mesh mesh = vitaCellMeshes[k];
+            mesh.Clear();
+            mesh.SetVertices(vitaVertices);
+            mesh.SetNormals(vitaNormals);
+            mesh.SetTangents(vitaTangents);
+            mesh.SetUVs(0, vitaUVs);
+            mesh.SetTriangles(vitaTriangles, 0, false);
+            mesh.bounds = bounds;
         }
 
 #endif
@@ -1529,11 +1797,38 @@ namespace DaggerfallWorkshop
             [ReadOnly] [DeallocateOnJobCompletion] NativeArray<T> array;
 #if UNITY_PSP2
             public DeallocateArrayJob(NativeArray<T> array) { this.array = array; }
+            // Runs after the jobs that read the array (same queue order): its storage goes back to the scratch pool
+            void IJob.Execute() { VitaScratch<T>.Release(array); }
 #else
             public DeallocateArrayJob(NativeArray<T> array) => this.array = array;
-#endif
             void IJob.Execute() { }
+#endif
         }
+
+#if UNITY_PSP2
+        // Temp arrays of Apply, reused once their DeallocateArrayJob has run (a few per type: only the main thread applies batches)
+        static class VitaScratch<T> where T : struct
+        {
+            static readonly System.Collections.Generic.Stack<NativeArray<T>> free = new System.Collections.Generic.Stack<NativeArray<T>>();
+
+            public static NativeArray<T> Get(int length)
+            {
+                while (free.Count > 0)
+                {
+                    NativeArray<T> a = free.Pop();
+                    if (a.VitaArray != null && a.VitaArray.Length >= length)
+                        return a.VitaReuse(length);
+                }
+                return new NativeArray<T>(0, Allocator.TempJob).VitaReuse(length);
+            }
+
+            public static void Release(NativeArray<T> array)
+            {
+                if (array.VitaArray != null && free.Count < 4)
+                    free.Push(array);
+            }
+        }
+#endif
 
         #endregion
 

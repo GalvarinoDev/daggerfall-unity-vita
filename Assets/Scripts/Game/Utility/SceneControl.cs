@@ -53,7 +53,12 @@ namespace DaggerfallWorkshop.Game.Utility
             }
 
             // Check arena2 path is validated OK, otherwise start game setup
+#if UNITY_PSP2
+            // A memory relaunch (VitaRelaunch) goes straight back into the game: no setup screen, no title music
+            if (!DaggerfallUnity.Instance.IsPathValidated || (!global::VitaRelaunch.Pending && (DaggerfallUnity.Settings.ShowOptionsAtStart || Input.anyKey)))
+#else
             if (!DaggerfallUnity.Instance.IsPathValidated || DaggerfallUnity.Settings.ShowOptionsAtStart || Input.anyKey)
+#endif
             {
                 // Enable sky for test models
                 if (defaultSky != null)

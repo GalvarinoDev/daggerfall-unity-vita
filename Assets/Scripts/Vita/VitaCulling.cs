@@ -4,8 +4,9 @@
 // are switched off: a block's Flats/Lights/Action Doors when its footprint is over a block away, an enemy when it is over 1 block
 // away (enemies cull by their own position, so a chaser from a far block stays active). Models stay, with their colliders.
 // Idea from Vwing's DFU Android port, its CulledGameObjectManager (github.com/Vwing/daggerfall-unity-android, MIT).
-// Only objects switched off here are switched back on (quests hide foes too). Nothing is culled in the first seconds of a dungeon:
-// serializable objects register for saving in Start, which only runs while active.
+// Only objects switched off here are switched back on (quests hide foes too). Nothing is culled in the first frames of a dungeon:
+// serializable objects register for saving in Start, which only runs while active (Unity calls it before the first Update, so a few
+// frames are enough; a 2 s wait left the first ~5 s after a spread castle load unculled, at 7-15 FPS).
 // city 15.1 -> 21.9 fps at 300 m). Only renderers, so colliders, scripts and NPCs stay; terrain and trees keep the long view.
 // Dungeon models: a block's model renderers (Models, Action Models and the Vita batches) are switched off when its footprint is over
 // Town flats beyond the range also get their billboard script switched off (no facing/animation restart work). Both from Vwing's port.
@@ -23,13 +24,15 @@ public class VitaCulling : MonoBehaviour
     public static float EnemyRange = RDBLayout.RDBSide;
     const float hysteresis = 4f;
     const int checkFrames = 10;
-    const float startDelay = 2f;
+    const int startFrames = 3;
     static readonly string[] blockGroups = { "Flats", "Lights", "Action Doors" };
     static readonly string[] modelGroups = { "Models", "Action Models", "VitaModelBatch", "VitaFlatBatch" };
     public static float ModelRange = RDBLayout.RDBSide;
 
     DaggerfallDungeon dungeon;
-    float dungeonSince, enemiesListed, lastLog;
+    float enemiesListed, lastLog;
+    int dungeonFrame;
+    bool firstPass;
     DaggerfallEnemy[] enemies = new DaggerfallEnemy[0];
     readonly HashSet<GameObject> culled = new HashSet<GameObject>();
     readonly Dictionary<Transform, List<Renderer>> culledModels = new Dictionary<Transform, List<Renderer>>();   // only what was switched off
@@ -111,40 +114,73 @@ public class VitaCulling : MonoBehaviour
     {
         GameObject go = new GameObject("VitaCulling");
         DontDestroyOnLoad(go);
-        go.AddComponent<VitaCulling>();
+        instance = go.AddComponent<VitaCulling>();
         StreamingWorld.OnUpdateLocationGameObject += AddTown;     // static and lives for the whole run, like this object
     }
 
     // Block models (also VitaCityMerge's) and flats of a town; editor-marker flats stay hidden, so they are never touched
+    static VitaCulling instance;
+    public static bool AddTownStagedOff;    // test harness A/B (bot word "addtownstagedoff"): a town's renderers in one frame in play, as before
+
     static void AddTown(GameObject location, bool allowYield)
     {
+        // In play the whole town in one frame was ~115 ms; over frames instead, ~4 ms each. Until it is listed, its pre-culled renderers
+        // stay hidden until UnPreCull shows them and the rest stay drawn, as they are while the town is being built
+        if (allowYield && !VitaLoadingWindow.Showing && !AddTownStagedOff && instance)
+        {
+            instance.StartCoroutine(StreamingWorld.VitaCoTimed("culltown", AddTownStaged(location)));   // TEMPORARY probe wrapper 2026-11-21
+            return;
+        }
         var list = new List<TownRenderer>();
         foreach (MeshRenderer renderer in location.GetComponentsInChildren<MeshRenderer>(true))
+            AddTownRenderer(location, renderer, list);
+        towns[location] = list.ToArray();
+    }
+
+    static System.Collections.IEnumerator AddTownStaged(GameObject location)
+    {
+        MeshRenderer[] renderers = location.GetComponentsInChildren<MeshRenderer>(true);
+        var list = new List<TownRenderer>();
+        long frameStart = System.Diagnostics.Stopwatch.GetTimestamp();
+        for (int i = 0; i < renderers.Length; i++)
         {
-            Billboard billboard = renderer.GetComponent<Billboard>();
-            if (!IsTownRenderer(renderer, billboard))
-                continue;
-            TownRenderer town;
-            town.renderer = renderer;
-            town.billboard = billboard;
-            PreCulled pre;
-            if (preCulled.TryGetValue(renderer, out pre) && pre.block)
+            if ((System.Diagnostics.Stopwatch.GetTimestamp() - frameStart) * 1000 >= 4 * System.Diagnostics.Stopwatch.Frequency)
             {
-                // Hidden since it was made: CullTowns shows it when the player comes near
-                town.bounds = pre.bounds;
-                town.bounds.center += pre.block.position - location.transform.position;
-                town.culled = true;
-                preCulled.Remove(renderer);
+                yield return null;
+                if (!location)
+                    yield break;
+                frameStart = System.Diagnostics.Stopwatch.GetTimestamp();
             }
-            else
-            {
-                town.bounds = renderer.bounds;
-                town.bounds.center -= location.transform.position;
-                town.culled = false;
-            }
-            list.Add(town);
+            if (renderers[i])
+                AddTownRenderer(location, renderers[i], list);
         }
         towns[location] = list.ToArray();
+    }
+
+    static void AddTownRenderer(GameObject location, MeshRenderer renderer, List<TownRenderer> list)
+    {
+        Billboard billboard = renderer.GetComponent<Billboard>();
+        if (!IsTownRenderer(renderer, billboard))
+            return;
+        TownRenderer town;
+        town.renderer = renderer;
+        town.billboard = billboard;
+        PreCulled pre;
+        if (preCulled.TryGetValue(renderer, out pre) && pre.block)
+        {
+            // Hidden since it was made: CullTowns shows it when the player comes near
+            town.bounds = pre.bounds;
+            town.bounds.center += pre.block.position - location.transform.position;
+            town.culled = true;
+            preCulled.Remove(renderer);
+        }
+        else
+        {
+            town.bounds = renderer.bounds;
+            town.bounds.center -= location.transform.position;
+            town.culled = false;
+        }
+        list.Add(town);
     }
 
     // Returns how many renderers are culled
@@ -197,10 +233,13 @@ public class VitaCulling : MonoBehaviour
 
     void Update()
     {
-        if (Time.frameCount % checkFrames != 0 || !GameManager.HasInstance)
+        if (!GameManager.HasInstance)
             return;
+        // Every checkFrames frames, but a new dungeon is noticed and first culled on any frame: at the ~10 FPS right after a castle
+        // load, waiting for the 10-frame tick twice left everything live for ~2 s
+        bool tick = Time.frameCount % checkFrames == 0;
         PlayerEnterExit playerEnterExit = GameManager.Instance.PlayerEnterExit;
-        if (playerEnterExit && !playerEnterExit.IsPlayerInside)
+        if (tick && playerEnterExit && !playerEnterExit.IsPlayerInside)
         {
             // range 0 (setting off) switches back on what was culled
             if (preCulled.Count > 0)
@@ -220,11 +259,13 @@ public class VitaCulling : MonoBehaviour
         {
             UncullAll();
             dungeon = current;
-            dungeonSince = now;
+            dungeonFrame = Time.frameCount;
             enemiesListed = -100;
+            firstPass = true;
         }
-        if (!dungeon || now - dungeonSince < startDelay)
+        if (!dungeon || Time.frameCount - dungeonFrame < startFrames || !(tick || firstPass))
             return;
+        firstPass = false;
 
         Vector3 player = GameManager.Instance.PlayerObject.transform.position;
         int groups = 0, culledGroups = 0, culledBlocks = 0;

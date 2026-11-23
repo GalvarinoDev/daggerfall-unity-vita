@@ -1,5 +1,7 @@
 # Daggerfall Unity Vita
 
+English | [Deutsch](README.de.md) | [Español](README.es.md) | [Français](README.fr.md) | [Italiano](README.it.md) | [Português](README.pt.md) | [中文](README.zh.md)
+
 <p align="center"><img src="./.github/images/intro.png"></p>
 
 This is a port of [Daggerfall Unity](https://github.com/Interkarma/daggerfall-unity), the open source recreation of The Elder Scrolls II: Daggerfall, for the *PS Vita*.
@@ -9,6 +11,21 @@ The port runs on the Vita's own Unity player, so nothing is emulated. I backport
 This is an alpha, so expect bugs. Back up your saves before updating.
 
 ## Changelog
+
+### v.0.4.0-alpha
+
+- New controls. Hold L for a quick menu of your weapons, spells and items, and hold D-pad Down for an action ring with Talk, Info, Grab, Steal, Rest and the maps. D-pad Left and Right hold four hotkeys. See [Controls](#controls). The manual on the LiveArea has the new layout too.
+- Dragon Rider's buttons changed to match: R shoots a bolt, and tapping L gives a wingbeat of speed. See [Dragon Rider controls](#dragon-rider-controls).
+- Portuguese (Brazil) VPK (`DFU-pt.vpk`), translated by Equipe Adaga.
+- Faster with mods on: 49 to 56 FPS on average over the same 46 stops, and the loading screens add up to 85 s instead of 150 s. See [Performance](#performance).
+- Merged 50 changes from upstream Daggerfall Unity.
+- Fixed a freeze when the same spells were cast over and over with many effects active.
+- Dragon Rider: loading a save made in flight puts you back at the same height above the ground.
+- Trees too far away to see are no longer drawn, which speeds up forests.
+- Look sensitivity is higher by default. Change it in the pause menu.
+
+<details>
+<summary>Older versions</summary>
 
 ### v.0.3.2-alpha
 
@@ -21,9 +38,6 @@ Chinese, two new mods, a new D-pad layout and some fixes.
 - D-pad Right opens the travel map, holding it opens the automap, and Down crouches or stands up. Tapping the rear touch pad still crouches too.
 - At the closest travel map zoom, the cursor picks the place it points at, not one a few rows below.
 - With Dynamic Skies on, the pale box around the moons is gone, and distant hills at the horizon are drawn in front of a rising moon again.
-
-<details>
-<summary>Older versions</summary>
 
 ### v.0.3.1-alpha
 
@@ -69,7 +83,7 @@ Please report bugs in this port here, not to the Daggerfall Unity team.
 
 You need a Vita running HENkaku or Enso with [VitaShell](https://github.com/TheOfficialFloW/VitaShell/releases) installed, and about 2 GB free on `ux0:` for the install. The game and its data take about 1.4 GB once you delete the VPK.
 
-- Download one VPK from the [Releases](https://github.com/GalvarinoDev/daggerfall-unity-vita/releases) page: `DFU-en.vpk` (English), `DFU-fr.vpk` (French), `DFU-de.vpk` (German), `DFU-it.vpk` (Italian), `DFU-es.vpk` (Spanish) or `DFU-zh.vpk` (Chinese). Install it with VitaShell. All six install as the same app, so switching languages keeps your saves and settings.
+- Download one VPK from the [Releases](https://github.com/GalvarinoDev/daggerfall-unity-vita/releases) page: `DFU-en.vpk` (English), `DFU-fr.vpk` (French), `DFU-de.vpk` (German), `DFU-it.vpk` (Italian), `DFU-es.vpk` (Spanish), `DFU-pt.vpk` (Portuguese) or `DFU-zh.vpk` (Chinese). Install it with VitaShell. All seven install as the same app, so switching languages keeps your saves and settings.
 - Install DOS Daggerfall on your PC. On Steam, the folder you need is `DF/DAGGER/ARENA2` inside the game's install folder.
 - Copy the whole `ARENA2` folder to your Vita, so that you end up with:
 
@@ -87,15 +101,33 @@ The game keeps saves and settings in `ux0:data/DaggerfallUnity/UserData`.
 
 <p align="center"><img src="./.github/images/controls.png"></p>
 <p align="center"><img src="./.github/images/menus.png"></p>
+<p align="center"><img src="./.github/images/rings.png"></p>
 
-A new game starts with the HUD hidden, so tap Select to bring it up. In a text box, Triangle reopens the system keyboard.
+A new game starts with the HUD hidden. Hold Select to pick a HUD style, move left or right to choose one, then let go. In a text box, Triangle reopens the system keyboard.
+
+### Quick menu (hold L)
+
+Hold L to open a ring of your weapons, spells and items. Point the right stick at a slice, and press R to switch between Weapons, Spells and Items. If a page holds more than eight things, D-pad Up and Down show the rest. Let go of L to close it.
+
+- Weapons: Cross puts the weapon in your right hand and Square in your left. Pressing the same button again takes it off. The Swap Hands slice swaps them.
+- Spells: Cross casts the spell. Square makes it your L spell, so a quick tap of L casts it from then on. The Spellbook slice opens the spellbook.
+- Items: Cross uses a potion or magic item. Square on a magic item puts its power on L.
+- Hotkeys: on any page, tap D-pad Left or Right to put the slice on hotkey 1 or 2, or hold it for hotkey 3 or 4. In play, the same taps and holds use them: spells are cast, weapons drawn and potions drunk.
+
+By default the game pauses while the ring is open. You can change that to real time or slow motion with Quick Menu in the pause menu.
+
+### Action ring (hold D-pad Down)
+
+Hold D-pad Down for a second ring with Talk, Info, Grab, Steal, Rest, the Travel Map and the Automap. Point the right stick at one and let go of Down to choose it. A quick tap of Down still crouches or stands up.
 
 ### Dragon Rider controls
 
+These only apply if you turn on the Dragon Rider mod (it's off by default). Without it, the buttons work as shown above.
+
 - Activate your dragon in Steal or Grab mode to mount it, or in Talk mode to tell it to follow, wait or take a gem. You can also mount and dismount from the transport menu (hold Circle).
+- R shoots a bolt of your dragon's element. Tap L for a wingbeat of speed, and keep tapping to keep it going. Holding L still opens the quick menu.
 - Triangle climbs and Cross dives.
-- Hold Square to switch between hovering and flying. Tap Square to ready your weapon.
-- L shoots a bolt of your dragon's element, and holding R boosts.
+- Tap D-pad Down to switch between hovering and flying.
 - Flick the left stick hard to one side to dodge. Flick it twice for a barrel roll.
 
 ## Mods
@@ -166,18 +198,20 @@ The defaults match the look of Daggerfall Unity on PC.
 <details>
 <summary>Frame rates and load times</summary>
 
-I measured these on one PCH-1000 with 0.3.0, with a bot visiting the same 46 stops at running speed: a dungeon, the wilderness, and Daggerfall, Wayrest and Sentinel (streets at noon and at night, taverns, shops and palaces).
+I measured these on one PCH-1000 with 0.4.0, with a bot visiting the same 46 stops at running speed: a dungeon, the wilderness, and Daggerfall, Wayrest and Sentinel (streets at noon and at night, taverns, shops and palaces). Each stop's number is the better of two runs.
 
 | | No mods | All mods |
 |---|---|---|
-| Average | 58 FPS | 48 FPS |
-| Taverns, shops, dungeon | 57-60 FPS | 59-60 FPS |
-| City streets | 47-60 FPS | 33-52 FPS |
-| Wilderness | 44-60 FPS | 44-47 FPS |
-| All loading screens added up | 106 s | 151 s |
-| Longest single load | 14 s | 19 s |
+| Average | 59 FPS | 56 FPS |
+| Taverns, shops, palaces, dungeon | 60 FPS | 60 FPS |
+| City streets | 52-60 FPS | 31-60 FPS |
+| Wilderness | 46-60 FPS | 51-60 FPS |
+| All loading screens added up | 81 s | 85 s |
+| Longest single load | 11 s | 11 s |
 
-Neither run crashed. The default speed setting raises the CPU to 444 MHz and the GPU clock, and limits screen brightness. You can change this with CPU/GPU speed in the pause menu.
+For comparison, 0.3.2 averaged 58 FPS without mods and 49 FPS with all of them, and its loading screens added up to 100 s and 150 s.
+
+None of the runs crashed. The default speed setting raises the CPU to 444 MHz and the GPU clock, and limits screen brightness. You can change this with CPU/GPU speed in the pause menu.
 
 </details>
 
@@ -234,6 +268,7 @@ Vita-only changes to upstream's files sit behind `#if UNITY_PSP2` with upstream'
 - French: [Daneel53](https://www.nexusmods.com/daggerfallunity/users/6838829) ([GitHub](https://github.com/Daneel53)) and Pango, [French Daggerfall](https://www.nexusmods.com/daggerfallunity/mods/456)
 - German: [Deepfighter](https://github.com/deepfighter) and Numenorean, [Daggerfall Deutsch](https://www.nexusmods.com/daggerfallunity/mods/826)
 - Italian: [XSpettro101X](https://www.nexusmods.com/profile/XSpettro101X?gameId=2927), with images and movies by [Rotary00](https://www.nexusmods.com/profile/Rotary00), [Traduzione Italiana](https://www.nexusmods.com/daggerfallunity/mods/1182)
+- Portuguese (Brazil): Equipe Adaga (Geavy, NecroBardo and Darkuby), uploaded by [Antony827](https://www.nexusmods.com/profile/Antony827?gameId=2927), [Tradução de Daggerfall Unity](https://www.nexusmods.com/daggerfallunity/mods/565)
 - Spanish: [raulpuro](https://forums.dfworkshop.net/memberlist.php?mode=viewprofile&u=1633), with some lines from [NarrodRecandriall](https://github.com/Narrod-Dev)'s [Spanish translation](https://www.nexusmods.com/daggerfallunity/mods/1251)
 
 I'm open to adding more languages if the translators approve. If you made a Daggerfall Unity translation and would like it on the Vita, open an issue here or message me on the Lysandus' Tomb: DFU Fan Server Discord.
@@ -248,6 +283,7 @@ These authors let their mods come to the Vita. Each mod's own page is linked und
 
 - [AJ](https://github.com/AJ170) and the PS Vita Forever server.
 - [Vwing](https://github.com/Vwing) for ideas from their Android port of Daggerfall Unity.
+- [Kenney](https://www.kenney.nl) for the [Input Prompts](https://kenney.nl/assets/input-prompts) pack (CC0). The button icons in the quick menu are based on it.
 - [shoui520](https://github.com/shoui520) for [vita-agent-use](https://github.com/shoui520/vita-agent-use). I used it to install test builds on my Vita and run an auto-walk bot through them overnight, since the game is about the size of the UK and I can't visit every place myself. That caught a lot of crashes and slow spots.
 
 ## License

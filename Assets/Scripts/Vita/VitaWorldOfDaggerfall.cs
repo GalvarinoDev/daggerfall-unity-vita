@@ -7,7 +7,7 @@
 // (VitaNative/wodinst.bin, wodprefabs.bin; VitaWodData). settings.ini [Video] VitaWorldOfDaggerfall (off unless "True" until it has
 // passed a hardware run), read at start: applies from the next launch.
 
-#if UNITY_PSP2
+#if UNITY_PSP2 && VITA_MODS     // the mod's code ships only in the VPK
 using UnityEngine;
 using DaggerfallWorkshop;
 using DaggerfallWorkshop.Game;

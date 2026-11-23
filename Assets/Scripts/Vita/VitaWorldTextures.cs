@@ -83,6 +83,53 @@ public static class VitaWorldTextures
             DaggerfallUnity.Instance.MaterialReader.MainFilterMode == FilterMode.Point;
     }
 
+    // TEMPORARY 2026-11-20 probe: the calling thread's own counters (SceKernelThreadInfo, 128 bytes): run time since creation (us, +96),
+    // preempted by interrupts (+104) / by other threads (+108), gave up the CPU itself = waited (+112), CPU changes (+116). Main thread only.
+    static readonly byte[] probeInfo = new byte[128];
+    public static int ProbeThreadResult;
+    public static void ProbeThread(out long runUs, out int intr, out int preempt, out int release, out int cpu)
+    {
+        runUs = 0; intr = preempt = release = cpu = 0;
+#if UNITY_PSP2 && !UNITY_EDITOR
+        probeInfo[0] = 128; probeInfo[1] = probeInfo[2] = probeInfo[3] = 0;
+        ProbeThreadResult = sceKernelGetThreadInfo(0, probeInfo);
+        if (ProbeThreadResult < 0)
+            return;
+        runUs = System.BitConverter.ToInt64(probeInfo, 96);
+        intr = System.BitConverter.ToInt32(probeInfo, 104);
+        preempt = System.BitConverter.ToInt32(probeInfo, 108);
+        release = System.BitConverter.ToInt32(probeInfo, 112);
+        cpu = System.BitConverter.ToInt32(probeInfo, 116);
+#endif
+    }
+    // runClocks only grows when the thread is switched out, so it misses the running slice. The idle clocks read from the running
+    // main thread are settled (the idle thread is switched out): SceKernelSystemInfo, 72 bytes, cpuInfo[i] at 8 + 16 i (idle us, u64).
+    static readonly byte[] probeSys = new byte[72];
+    public static System.Func<long, long, string> ProbeSlowHook;    // test harness thread timeline for a window (Stopwatch timestamps)
+    public static void ProbeIdle(out int mainCpu, out long mainCpuIdleUs, out long allIdleUs)
+    {
+        mainCpu = -1; mainCpuIdleUs = allIdleUs = 0;
+#if UNITY_PSP2 && !UNITY_EDITOR
+        probeInfo[0] = 128; probeInfo[1] = probeInfo[2] = probeInfo[3] = 0;
+        if (sceKernelGetThreadInfo(0, probeInfo) >= 0)
+            mainCpu = System.BitConverter.ToInt32(probeInfo, 76);
+        probeSys[0] = 72; probeSys[1] = probeSys[2] = probeSys[3] = 0;
+        if (sceKernelGetSystemInfo(probeSys) < 0)
+            return;
+        for (int i = 0; i < 4; i++)
+        {
+            long idle = System.BitConverter.ToInt64(probeSys, 8 + 16 * i);
+            allIdleUs += idle;
+            if (i == mainCpu)
+                mainCpuIdleUs = idle;
+        }
+#endif
+    }
+#if UNITY_PSP2 && !UNITY_EDITOR
+    [DllImport("__Internal")] static extern int sceKernelGetThreadInfo(int threadId, byte[] info);
+    [DllImport("__Internal")] static extern int sceKernelGetSystemInfo(byte[] info);
+#endif
+
     /// <summary>The baked texture for settings into results (albedo, palettes, record info). False if the pack doesn't have it.</summary>
     public static bool TryLoad(GetTextureSettings settings, int emission, bool mipMaps, bool stayReadable, ref GetTextureResults results)
     {

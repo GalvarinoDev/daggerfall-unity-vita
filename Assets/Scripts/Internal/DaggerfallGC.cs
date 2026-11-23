@@ -29,6 +29,9 @@ namespace DaggerfallWorkshop
 
         public static void ForcedUnloadUnusedAssets()
         {
+#if UNITY_PSP2
+            VitaMemory.KeepShaders();
+#endif
             Resources.UnloadUnusedAssets();
             uuaTimer = Time.realtimeSinceStartup + uuaThrottleDelay;
         }

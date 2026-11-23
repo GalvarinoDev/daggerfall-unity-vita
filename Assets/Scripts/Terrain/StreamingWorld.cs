@@ -129,6 +129,40 @@ namespace DaggerfallWorkshop
         /// Vita loading window: true until terrain and locations are built and the player is repositioned.
         /// </summary>
         public bool VitaIsBuilding { get { return init || terrainUpdateRunning || updateLocations || autoRepositionMethod != RepositionMethods.None || vitaLocationsBuilding > 0; } }
+        public bool VitaRepositioning { get { return autoRepositionMethod != RepositionMethods.None; } }
+
+        /// <summary>
+        /// Travel Options speed limit: metres of terrain with its heights in, from the player along a direction (x east, z north),
+        /// across up to 3 tiles. 0 if the player's own tile isn't ready.
+        /// </summary>
+        public float VitaBuiltAhead(float dirX, float dirZ)
+        {
+            float len = Mathf.Sqrt(dirX * dirX + dirZ * dirZ);
+            if (len < 1e-4f || LocalPlayerGPS == null)
+                return 0;
+            dirX /= len;
+            dirZ /= len;
+            const double dim = MapsFile.WorldMapTerrainDim;
+            double x = LocalPlayerGPS.WorldX, z = LocalPlayerGPS.WorldZ, total = 0;
+            for (int step = 0; step < 3; step++)
+            {
+                DFPosition pixel = MapsFile.WorldCoordToMapPixel((int)x, (int)z);
+                int key = TerrainHelper.MakeTerrainKey(pixel.X, pixel.Y);
+                int index;
+                if (!terrainIndexDict.TryGetValue(key, out index) || !terrainArray[index].active || terrainArray[index].updateData)
+                    break;
+                // Distance to where the ray leaves this tile
+                double lx = x - Math.Floor(x / dim) * dim, lz = z - Math.Floor(z / dim) * dim, exit = double.MaxValue;
+                if (dirX > 0) exit = Math.Min(exit, (dim - lx) / dirX);
+                if (dirX < 0) exit = Math.Min(exit, lx / -dirX);
+                if (dirZ > 0) exit = Math.Min(exit, (dim - lz) / dirZ);
+                if (dirZ < 0) exit = Math.Min(exit, lz / -dirZ);
+                total += exit;
+                x += dirX * (exit + 1);
+                z += dirZ * (exit + 1);
+            }
+            return (float)(total * MeshReader.GlobalScale);
+        }
         // VITALOADWAIT line
         public string VitaBuildState { get { return string.Format("init {0} terrains {1} locations {2} reposition {3} building {4} initBuild {5}",
             init, terrainUpdateRunning, updateLocations, autoRepositionMethod, vitaLocationsBuilding, vitaInitBuild); } }
@@ -160,6 +194,77 @@ namespace DaggerfallWorkshop
         // Neighbour locations build one block per frame after UpdateLocations returns: without counting them the loading window closed
         // while a town was still being placed
         int vitaLocationsBuilding;
+        // A built town's decoded blocks (mostly mod replacement blocks) stayed cached until the next level change. Doors, the automap
+        // and talk read the slim location cache now (RMBLayout.VitaSlim), so drop them once every location build has finished.
+        bool vitaDropBlocks;
+
+        public static bool VitaPromoteLog;     // TEMPORARY probe switch 2026-11-19, back 2026-11-21 (bot word "promotelog"): VITACO + VITALOC
+
+        // TEMPORARY probe 2026-11-19: time per named in-play world coroutine per frame; a frame whose total reached 80 ms is logged on the
+        // next frame's first step (outside every timed span). A nested coroutine's later steps are not counted (they run on their own).
+        static readonly Dictionary<string, double> vitaCoMs = new Dictionary<string, double>();
+        public static readonly Dictionary<string, double> VitaCoTotals = new Dictionary<string, double>();   // TEMPORARY probe 2026-11-21: ms per slot since the bot cleared it
+        static int vitaCoFrame = -1;
+        static int vitaCoGc;
+        static string vitaLocStep = "start";
+        static int vitaLocN;
+        static void VitaLoc(string step)
+        {
+            if (step != vitaLocStep)
+            {
+                vitaLocStep = step;
+                vitaLocN = 0;
+            }
+        }
+
+        public static IEnumerator VitaCoTimed(string name, IEnumerator inner)
+        {
+            if (name == "location")
+                VitaLoc("start");
+            while (true)
+            {
+                long t0 = VitaPromoteLog ? System.Diagnostics.Stopwatch.GetTimestamp() : 0;
+                string locFrom = vitaLocStep; int locN = vitaLocN;
+                bool more = inner.MoveNext();
+                long t1 = System.Diagnostics.Stopwatch.GetTimestamp();
+                if (name == "location")
+                {
+                    if (vitaLocStep == locFrom)
+                        vitaLocN++;
+                    double lms = (t1 - t0) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+                    if (VitaPromoteLog && lms >= 50)
+                        Debug.LogFormat("VITALOC {0:F0} ms: {1}#{2} -> {3}", lms, locFrom, locN, vitaLocStep);
+                }
+                if (VitaPromoteLog && !VitaLoadingWindow.Showing)
+                {
+                    double ms = (t1 - t0) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+                    if (Time.frameCount != vitaCoFrame)
+                    {
+                        double sum = 0;
+                        foreach (double v in vitaCoMs.Values)
+                            sum += v;
+                        if (sum >= 30)   // TEMPORARY probe: 60 -> 30 ms 2026-11-21 (town walk 45 ms coroutine frames)
+                        {
+                            var sb = new System.Text.StringBuilder();
+                            foreach (var kv in vitaCoMs)
+                                sb.Append(' ').Append(kv.Key).Append(' ').Append(kv.Value.ToString("F0"));
+                            Debug.LogFormat("VITACO frame {0}: {1:F0} ms:{2}, gcs {3}", vitaCoFrame, sum, sb, System.GC.CollectionCount(0) - vitaCoGc);
+                        }
+                        vitaCoMs.Clear();
+                        vitaCoFrame = Time.frameCount;
+                        vitaCoGc = System.GC.CollectionCount(0);
+                    }
+                    double had;
+                    vitaCoMs.TryGetValue(name, out had);
+                    vitaCoMs[name] = had + ms;
+                    VitaCoTotals.TryGetValue(name, out had);
+                    VitaCoTotals[name] = had + ms;
+                }
+                if (!more)
+                    yield break;
+                yield return inner.Current;
+            }
+        }
 
         IEnumerator VitaCountLocation(IEnumerator routine)
         {
@@ -184,7 +289,7 @@ namespace DaggerfallWorkshop
             {
                 // Crossed the middle of the tile: the two tiles behind are swapped for the two ahead (player tile unchanged)
                 UpdateWorld();
-                StartCoroutine(UpdateTerrains());
+                StartCoroutine(VitaCoTimed("terrains", UpdateTerrains()));   // TEMPORARY probe wrapper 2026-11-21
                 updateLocations = true;
             }
         }
@@ -231,6 +336,7 @@ namespace DaggerfallWorkshop
             CleanupUntrackedObjects();
             ClearStreamingWorld();
             RMBLayout.ClearLocationCache();     // the city's parsed blocks (re-read on demand)
+            DaggerfallBillboardBatch.VitaPoolClose();   // the terrains destroyed below keep no buffers while inside
             for (int i = 0; i < terrainArray.Length; i++)
             {
                 if (terrainArray[i].terrainObject != null)
@@ -293,12 +399,14 @@ namespace DaggerfallWorkshop
             yield return null;
             yield return null;
             VitaClearWorld();
+            DaggerfallBillboardBatch.VitaPoolOpen();    // a new exterior follows: keep the old terrains' batch buffers (pooled in their OnDestroy, end of frame)
             for (int i = 0; i < 3; i++)
                 yield return null;  // GXM frees wait until the GPU has finished its frames
             DaggerfallUnity.Instance.MaterialReader.VitaClearCacheExceptTilesets();
             DaggerfallUnity.Instance.MeshReader.ClearCache();
             DaggerfallUnity.Instance.ContentReader.VitaDiscardBlocks();
             DaggerfallConnect.Utility.FileProxy.VitaClearLevelCache();
+            VitaMemory.KeepShaders();
             yield return Resources.UnloadUnusedAssets();
             GC.Collect();
             TeleportToMapPixel(mapPixelX, mapPixelY, Vector3.zero, autoReposition);
@@ -457,6 +565,14 @@ namespace DaggerfallWorkshop
 #if UNITY_PSP2
             VitaUpdateLoadingWindow();
             VitaCheckGrid();
+            if (vitaDropBlocks && !VitaIsBuilding && !RMBLayout.VitaSlimOff)
+            {
+                vitaDropBlocks = false;
+                dfUnity.ContentReader.VitaDiscardBlocks();
+                DaggerfallWorkshop.Utility.AssetInjection.WorldDataReplacement.VitaClearPackBlocks();
+            }
+            if (vitaInitFrames)
+                return;     // VitaInitWorldFrames is building the world, one step per frame
 #endif
 
             // Handle moving to new map pixel or first-time init
@@ -470,6 +586,11 @@ namespace DaggerfallWorkshop
                 MapPixelX = curMapPixel.X;
                 MapPixelY = curMapPixel.Y;
 #if UNITY_PSP2
+                if (init && VitaLoadingWindow.Showing && !VitaInitFramesOff)
+                {
+                    StartCoroutine(VitaInitWorldFrames());
+                    return;
+                }
                 // logs nothing, so log it once per message
                 try
                 {
@@ -495,6 +616,18 @@ namespace DaggerfallWorkshop
 #endif
                 init = false;
             }
+
+#if UNITY_PSP2
+            // A building exit (Offset) only needs the player's own tile, which is already built. Upstream waits for every terrain update
+            // and location build first; with terrain that isn't flat under a town (World of Daggerfall) the exit door can sit metres under
+            // the ground, and the player fell for the whole wait (a 2x2 swap or staged town build: up to 50 m, through the world)
+            if (autoRepositionMethod == RepositionMethods.Offset && VitaPlayerTileBuilt())
+            {
+                RepositionPlayer(MapPixelX, MapPixelY, autoRepositionOffset);
+                autoRepositionMethod = RepositionMethods.None;
+            }
+            VitaKeepAboveGround();
+#endif
 
             // Exit if terrain data still updating
             // Raise location update flag any time terrain updates
@@ -881,6 +1014,10 @@ namespace DaggerfallWorkshop
         // Fully init central terrain so player can be dropped into world as soon as possible
         private void InitPlayerTerrain()
         {
+#if UNITY_PSP2
+            IEnumerator steps = VitaInitPlayerTerrain();
+            while (steps.MoveNext()) { }
+#else
             if (!init)
                 return;
 
@@ -902,24 +1039,100 @@ namespace DaggerfallWorkshop
             DaggerfallUnity.LogMessage(string.Format("Time to init player terrain: {0}ms", stopwatch.ElapsedMilliseconds), true);
 #endif
 
+            StartCoroutine(UpdateLocation(playerTerrainIndex, false));
+            terrainArray[playerTerrainIndex].updateLocation = false;
+#endif
+        }
+
 #if UNITY_PSP2
+        // InitPlayerTerrain's steps with a yield between them: InitPlayerTerrain runs them all at once, VitaInitWorldFrames one per frame
+        IEnumerator VitaInitPlayerTerrain()
+        {
+            if (!init)
+                yield break;
+
+#if SHOW_LAYOUT_TIMES
+            System.Diagnostics.Stopwatch stopwatch = System.Diagnostics.Stopwatch.StartNew();
+#endif
+
+            CollectLooseObjects();
+            int playerTerrainIndex = terrainIndexDict[TerrainHelper.MakeTerrainKey(MapPixelX, MapPixelY)];
+
+            UpdateTerrainData(terrainArray[playerTerrainIndex]);
+            terrainArray[playerTerrainIndex].updateData = false;
+            yield return null;
+
+            UpdateTerrainNature(terrainArray[playerTerrainIndex]);
+            terrainArray[playerTerrainIndex].updateNature = false;
+            yield return null;
+
+#if SHOW_LAYOUT_TIMES
+            stopwatch.Stop();
+            DaggerfallUnity.LogMessage(string.Format("Time to init player terrain: {0}ms", stopwatch.ElapsedMilliseconds), true);
+#endif
+
             // The player's own location was built in this one frame: a city froze the loading window for 16-21 s. Each block
             // now gets its own frame, counted in VitaIsBuilding, and the auto-reposition waits for it. VitaInitSpreadOff = test harness A/B.
             if (VitaInitSpreadOff)
                 StartCoroutine(UpdateLocation(playerTerrainIndex, false));
             else
                 StartCoroutine(VitaCountLocation(UpdateLocation(playerTerrainIndex, false, true)));
-#else
-            StartCoroutine(UpdateLocation(playerTerrainIndex, false));
-#endif
             terrainArray[playerTerrainIndex].updateLocation = false;
-#if UNITY_PSP2
             // The location is in looseObjectsList once the coroutine's first step returns. Upstream sets this in UpdateLocations a frame or
             // two later; on Vita the neighbour terrains are staggered first (~40 s in a city), and a save load restores its enemies before
             // that, parenting them to the location destroyed by the respawn (NullReferenceException: "Loading..." forever)
             currentPlayerLocationObject = GetPlayerLocationObject();
-#endif
         }
+
+        // World init behind the loading window (fast travel, dungeon exit, save load). Upstream does it in one frame: tile placement, the
+        // player's tile (data, nature, first location step) and the first neighbour tile, 3.4-5.7 s on hardware and 5-10 s with the rest
+        // of that frame. Same steps here, one per frame. init stays set until the end, so whatever waits on IsInit/VitaIsBuilding still waits,
+        // and the loading window holds timeScale at 0, so the player can't fall meanwhile.
+        bool vitaInitFrames;
+        public static bool VitaInitFramesOff;   // test harness A/B: the whole init in one frame, as before
+
+        IEnumerator VitaInitWorldFrames()
+        {
+            vitaInitFrames = true;
+            int gen = vitaWorldGen;
+            try
+            {
+                UpdateWorld();
+                yield return null;
+                if (gen != vitaWorldGen)
+                    yield break;    // the world was cleared again: Update starts its own init
+                IEnumerator steps = VitaInitPlayerTerrain();
+                while (true)
+                {
+                    bool more;
+                    try { more = steps.MoveNext(); }
+                    catch (Exception e)
+                    {
+                        if (e.Message != vitaLastInitError)
+                            Debug.Log("VITAWORLD init failed: " + e);
+                        vitaLastInitError = e.Message;
+                        throw;      // init stays set, so Update starts it over next frame (upstream retries the same way)
+                    }
+                    if (!more)
+                        break;
+                    yield return null;
+                    if (gen != vitaWorldGen)
+                        yield break;
+                }
+                yield return null;
+                if (gen != vitaWorldGen)
+                    yield break;
+                StartCoroutine(VitaCoTimed("terrains", UpdateTerrains()));   // TEMPORARY probe wrapper 2026-11-21
+                updateLocations = true;
+                vitaInitBuild = true;
+                init = false;
+            }
+            finally
+            {
+                vitaInitFrames = false;
+            }
+        }
+#endif
 
 #if UNITY_PSP2
         bool vitaSliceTerrainJobs;
@@ -937,6 +1150,10 @@ namespace DaggerfallWorkshop
             // Vita: Update() clears init right after starting this coroutine, so remember it for the end of the update
             bool wasInit = init;
             int vitaGen = vitaWorldGen;
+            // An update started behind the loading window (a dungeon exit's second pass after the reposition) is part of the load: build
+            // it as one. Sliced, its tiles skipped the card cache and ran a few ms a frame behind the loading screen (+26 s once). An update
+            // started in play stays sliced even if a dungeon's loading window opens meanwhile (its tiles aren't needed inside: +12 s once).
+            bool vitaLoadUpdate = VitaLoadingWindow.Showing;
 #endif
 
 #if SHOW_LAYOUT_TIMES
@@ -956,10 +1173,12 @@ namespace DaggerfallWorkshop
                     if (terrainArray[i].updateData)
                     {
 #if UNITY_PSP2
-                        vitaSliceTerrainJobs = !wasInit;
+                        vitaSliceTerrainJobs = !wasInit && !vitaLoadUpdate;
+                        if (vitaLoadUpdate)
+                            VitaMemory.LoadCollect();   // built in one go each: collect between tiles, or their temporaries grow the heap (+5-10 MB peak)
                         // Vita: on init too, build the neighbours one at a time (player tile is already built by InitPlayerTerrain),
                         // so one frame never holds all 9 tiles' temporaries (exterior init memory peak). Load screen waits on VitaIsBuilding.
-                        yield return StartCoroutine(UpdateTerrainDataCoroutine(terrainArray[i]));
+                        yield return StartCoroutine(VitaCoTimed("data", UpdateTerrainDataCoroutine(terrainArray[i])));
                         if (vitaGen != vitaWorldGen)
                             yield break;    // the world was cleared: the new world's update owns the flags now
                         VitaMemory.Step("terrain " + i + " data");
@@ -976,7 +1195,7 @@ namespace DaggerfallWorkshop
 #if UNITY_PSP2
                         if (vitaSliceTerrainJobs && dfUnity.TerrainNature.GetType() == typeof(DefaultTerrainNature))
                         {
-                            yield return StartCoroutine(VitaUpdateTerrainNatureSliced(terrainArray[i]));
+                            yield return StartCoroutine(VitaCoTimed("nature", VitaUpdateTerrainNatureSliced(terrainArray[i])));
                             if (vitaGen != vitaWorldGen)
                                 yield break;
                         }
@@ -1041,7 +1260,7 @@ namespace DaggerfallWorkshop
             {
                 if (terrainArray[i].active && terrainArray[i].hasLocation)
 #if UNITY_PSP2
-                    StartCoroutine(VitaCountLocation(UpdateLocation(i, true)));
+                    StartCoroutine(VitaCountLocation(VitaCoTimed("location", UpdateLocation(i, true))));
 #else
                     StartCoroutine(UpdateLocation(i, true));
 #endif
@@ -1065,6 +1284,12 @@ namespace DaggerfallWorkshop
         // the same GetBlock, so block replacements still apply. VitaBlockPredecodeOff = test harness A/B.
         public static bool VitaBlockPredecodeOff;
         public static bool VitaColliderDeferOff;
+        // In-play town blocks built over three frames (test switch: bot word "townstepsoff" = one frame per block, as before)
+        public static bool VitaTownStepsOff;
+        public static bool VitaNullYieldOff;    // test harness A/B (bot word "nullyieldoff"): in-play town steps yield WaitForEndOfFrame, as before
+        // In-play town blocks: their materials made before the block (test switch: bot word "matwarmoff")
+        public static bool VitaMaterialWarmOff;
+        static readonly List<int> vitaWarmTextures = new List<int>();
         public static bool VitaPreCullOff;
         public static bool VitaInitSpreadOff;   // test harness A/B: the player's location in one frame at init, as upstream      // test harness A/B of VitaCulling.PreCullBlock
         bool vitaKeepingBlocks;
@@ -1121,6 +1346,7 @@ namespace DaggerfallWorkshop
                 terrainArray[index].updateLocation = false;
 #if UNITY_PSP2
                 VitaMemory.Step("location " + index + " start");
+                vitaDropBlocks = true;
 #endif
 
                 // Create location object
@@ -1145,6 +1371,12 @@ namespace DaggerfallWorkshop
                     // In play a town's setup ran in one frame (Wayrest: 1168 ms); split it over a few frames. The location is already in
                     // looseObjectsList, as upstream has it by the end of this step.
                     bool vitaSpread = allowYield && !VitaLoadingWindow.Showing;
+                    // In play every step yields null: a WaitForEndOfFrame yielded from a step that resumed after null runs the next step at the
+                    // end of the same frame, so a block's last step + climate (65-71 ms) and its colliders (~103 ms) shared one 168-174 ms frame
+                    object vitaStepYield = vitaSpread && !VitaNullYieldOff ? null : new WaitForEndOfFrame();
+                    VitaLoc("setup");   // TEMPORARY probe 2026-11-20
+                    if (vitaSpread && !VitaColliderDeferOff)
+                        VitaBlockBake.BeginTown(blocks);    // the block records read by a worker while the setup runs
                     if (vitaSpread)
                         yield return null;
 #endif
@@ -1167,6 +1399,7 @@ namespace DaggerfallWorkshop
                     animalsBillboardBatch.hideFlags = defaultHideFlags;
                     //miscBillboardBatch.hideFlags = defaultHideFlags;
 #if UNITY_PSP2
+                    VitaLoc("batches");   // TEMPORARY probe 2026-11-20
                     if (vitaSpread)
                         yield return null;
 #endif
@@ -1183,6 +1416,11 @@ namespace DaggerfallWorkshop
                     // Create CityNavigation component
                     CityNavigation cityNavigation = dfLocation.gameObject.AddComponent<CityNavigation>();
                     cityNavigation.FormatNavigation(location.RegionName, location.Name, width, height);
+#if UNITY_PSP2
+                    VitaLoc("nav");   // TEMPORARY probe 2026-11-20
+                    if (vitaSpread && !VitaNullYieldOff)
+                        yield return null;
+#endif
 
                     // Create PopulationManager component for locations with wandering NPCs
                     if (location.MapTableData.LocationType == DFRegion.LocationTypes.TownCity ||
@@ -1198,6 +1436,9 @@ namespace DaggerfallWorkshop
 
 #if UNITY_PSP2
                     VitaMemory.Step("location " + index + " setup " + location.Name + " " + width + "x" + height);
+                    VitaLoc("pop");   // TEMPORARY probe 2026-11-20
+                    if (vitaSpread && !VitaNullYieldOff)
+                        yield return null;
 #endif
                     // Perform layout and yield after each block is placed
                     int blockIndex = 0;
@@ -1217,12 +1458,52 @@ namespace DaggerfallWorkshop
 #if UNITY_PSP2
                             if (vitaSpread && !VitaColliderDeferOff)
                             {
+                                while (VitaBlockBake.TownPending(blockIndex))
+                                    yield return null;
                                 VitaBlockBake.Prefetch(ref blocks[blockIndex]);
-                                yield return new WaitForEndOfFrame();
+                                VitaLoc("prefetch");   // TEMPORARY probe 2026-11-20
+                                yield return vitaStepYield;
+                                if (!VitaMaterialWarmOff)
+                                {
+                                    // its materials before its base step, ~8 ms of them per frame
+                                    vitaWarmTextures.Clear();
+                                    VitaBlockBake.PrefetchedTextures(vitaWarmTextures);
+                                    long vitaWarm = System.Diagnostics.Stopwatch.GetTimestamp();
+                                    for (int t = 0; t + 1 < vitaWarmTextures.Count; t += 2)
+                                    {
+                                        CachedMaterial vitaMaterial;
+                                        dfUnity.MaterialReader.GetCachedMaterial(vitaWarmTextures[t], vitaWarmTextures[t + 1], 0, out vitaMaterial);
+                                        if ((System.Diagnostics.Stopwatch.GetTimestamp() - vitaWarm) * 1000 >= 8 * System.Diagnostics.Stopwatch.Frequency)
+                                        {
+                                            VitaLoc("warm");   // TEMPORARY probe 2026-11-20
+                                            yield return vitaStepYield;
+                                            vitaWarm = System.Diagnostics.Stopwatch.GetTimestamp();
+                                        }
+                                    }
+                                }
                             }
                             GameObjectHelper.VitaDeferColliders = vitaSpread && !VitaColliderDeferOff;
-#endif
+                            GameObject go = null;
+                            if (vitaSpread && !VitaTownStepsOff && !VitaLoadingWindow.Showing)
+                            {
+                                // in play: the block over three frames (GameObjectHelper.VitaCreateRMBBlockStepped)
+                                GameObject[] vitaStepped = new GameObject[1];
+                                IEnumerator vitaSteps = GameObjectHelper.VitaCreateRMBBlockStepped(vitaStepped, locationObject.transform, blockOrigin,
+                                    blocks[blockIndex], x, y, location.MapTableData.MapId, location.LocationIndex, dfUnity.Option_CityBlockPrefab,
+                                    natureBillboardBatch, lightsBillboardBatch, animalsBillboardBatch, dfLocation.Summary.Nature,
+                                    dfUnity.WorldTime.Now.SeasonValue == DaggerfallDateTime.Seasons.Winter ? ClimateSeason.Winter : ClimateSeason.Summer);
+                                VitaLoc("rmb");   // TEMPORARY probe 2026-11-20
+                                while (vitaSteps.MoveNext())
+                                    yield return vitaSteps.Current;
+                                go = vitaStepped[0];
+                                if (!go)
+                                    yield break;
+                            }
+                            else
+                                go = GameObjectHelper.CreateRMBBlockGameObject(
+#else
                             GameObject go = GameObjectHelper.CreateRMBBlockGameObject(
+#endif
                                 blocks[blockIndex],
                                 x,
                                 y,
@@ -1261,8 +1542,9 @@ namespace DaggerfallWorkshop
 
                             // Optionally yield after placing block
 #if UNITY_PSP2
+                            VitaLoc("blockend");   // TEMPORARY probe 2026-11-20
                             if (allowYield || vitaFramePerBlock)
-                                yield return new WaitForEndOfFrame();
+                                yield return vitaStepYield;
 #else
                             if (allowYield)
                                 yield return new WaitForEndOfFrame();
@@ -1272,11 +1554,15 @@ namespace DaggerfallWorkshop
                             {
                                 // Its own frame: the block before this one's colliders
                                 GameObjectHelper.VitaAddDeferredColliders();
-                                yield return new WaitForEndOfFrame();
+                                VitaLoc("colliders");   // TEMPORARY probe 2026-11-20
+                                yield return vitaStepYield;
                             }
 #endif
                         }
                     }
+#if UNITY_PSP2
+                    VitaBlockBake.EndTown();
+#endif
                     // Only apply climate settings after entire location updated if not spanning multiple frames.
                     if (!allowYield)
                         dfLocation.ApplyClimateSettings();
@@ -1287,6 +1573,13 @@ namespace DaggerfallWorkshop
                     animalsBillboardBatch.Apply();
                     //miscBillboardBatch.Apply();
 #if UNITY_PSP2
+                    VitaLoc("applied");   // TEMPORARY probe 2026-11-20
+                    if (vitaSpread && !VitaNullYieldOff)
+                    {
+                        yield return null;
+                        if (!locationObject)
+                            yield break;
+                    }
                     VitaMemory.Step("location " + index + " batches applied");
                     if (DaggerfallUnity.Settings.VitaStaticBatching)
                         VitaStaticBatch(locationObject);
@@ -1295,6 +1588,14 @@ namespace DaggerfallWorkshop
                     else
                     {
                         dfLocation.VitaApplyTimeAndSpace();     // the texture atlas takes the season/windows the town shows
+                        VitaLoc("timespace");   // TEMPORARY probe 2026-11-20
+                        if (vitaSpread && !VitaNullYieldOff)
+                        {
+                            yield return null;
+                            if (!locationObject)
+                                yield break;
+                        }
+                        VitaLoc("atlas");   // TEMPORARY probe 2026-11-20
                         if (allowYield && !VitaLoadingWindow.Showing)   // in play: over frames, on an object that outlives the town
                             yield return DaggerfallUnity.Instance.StartCoroutine(VitaAtlas.BuildCityStaged(locationObject));
                         else
@@ -1303,6 +1604,13 @@ namespace DaggerfallWorkshop
                     // The town's leftover billboards (animated lights, decorations, animals) merged per material across the whole town
                     if (locationObject)
                         VitaFlatBatch.BuildTown(locationObject);
+                    VitaLoc("flattown");   // TEMPORARY probe 2026-11-20
+                    if (vitaSpread && !VitaNullYieldOff)
+                    {
+                        yield return null;
+                        if (!locationObject)
+                            yield break;
+                    }
 #endif
 
 #if UNITY_PSP2
@@ -1654,7 +1962,14 @@ namespace DaggerfallWorkshop
             billboardBatchObject.hideFlags = defaultHideFlags;
             billboardBatchObject.transform.parent = terrainObject.transform;
             billboardBatchObject.transform.localPosition = Vector3.zero;
+#if UNITY_PSP2
+            DaggerfallBillboardBatch.VitaPoolOpen();
+            DaggerfallBillboardBatch.VitaPoolNext = true;
             billboardBatchObject.AddComponent<DaggerfallBillboardBatch>();
+            DaggerfallBillboardBatch.VitaPoolNext = false;
+#else
+            billboardBatchObject.AddComponent<DaggerfallBillboardBatch>();
+#endif
         }
 
         // Create new location game object
@@ -1774,9 +2089,54 @@ namespace DaggerfallWorkshop
                 if (vitaGen != vitaWorldGen)
                     yield break;
                 dfTerrain.UpdateClimateMaterial(init);
-                dfTerrain.PromoteTerrainData();
+                VitaSpreadPromote = true;       // promote handlers may spread their work over frames (VitaPromoteBusy)
+                long vitaP0 = System.Diagnostics.Stopwatch.GetTimestamp();   // TEMPORARY 2026-11-20 probe
+                try { dfTerrain.PromoteTerrainData(); }
+                finally { VitaSpreadPromote = false; }
+                VitaTileShownFrame = Time.frameCount;
+                double vitaPromoteMs = (System.Diagnostics.Stopwatch.GetTimestamp() - vitaP0) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+                double vitaApplyMs = 0;
+                string vitaStrips = "";
+                if (dfTerrain.VitaHeightsPending)
+                {
+                    for (int k = 0; k < DaggerfallTerrain.VitaHeightStrips; k++)
+                    {
+                        yield return null;
+                        if (vitaGen != vitaWorldGen)
+                            yield break;
+                        long vitaS0 = System.Diagnostics.Stopwatch.GetTimestamp();
+                        dfTerrain.VitaSetHeightStrip(k, DaggerfallTerrain.VitaHeightStrips);
+                        vitaStrips += string.Format(" {0:F1}", (System.Diagnostics.Stopwatch.GetTimestamp() - vitaS0) * 1000.0 / System.Diagnostics.Stopwatch.Frequency);
+                    }
+                    dfTerrain.VitaHeightsPending = false;
+                }
+                if (!VitaDelayLodOff)
+                {
+                    // PromoteTerrainData set the heights without Unity's LOD/patch update (SetHeightsDelayLOD): do that on a frame of its own,
+                    // before the tile is shown
+                    yield return null;
+                    if (vitaGen != vitaWorldGen)
+                        yield break;
+                    long vitaA0 = System.Diagnostics.Stopwatch.GetTimestamp();
+                    dfTerrain.GetComponent<Terrain>().ApplyDelayedHeightmapModification();
+                    vitaApplyMs = (System.Diagnostics.Stopwatch.GetTimestamp() - vitaA0) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+                }
+                if (MaterialReader.VitaProbeLog)   // TEMPORARY 2026-11-20 probe (bot word "leadlog")
+                    Debug.LogFormat("VITAPROMOTE2 {0},{1}: promote {2:F1} ms, height strips{4}, delayed LOD apply {3:F1} ms", dfTerrain.MapPixelX, dfTerrain.MapPixelY, vitaPromoteMs, vitaApplyMs, vitaStrips);
+                long vitaV0 = System.Diagnostics.Stopwatch.GetTimestamp();   // TEMPORARY probe 2026-11-21 (VITASHOW, bot word "promotelog")
                 terrainDesc.terrainObject.SetActive(true);
+                VitaTileShownFrame = Time.frameCount;
+                if (VitaPromoteLog)
+                    Debug.LogFormat("VITASHOW {0},{1}: promote {2:F1} ms, height strips{3}, LOD apply {4:F1} ms, SetActive {5:F1} ms", dfTerrain.MapPixelX, dfTerrain.MapPixelY,
+                        vitaPromoteMs, vitaStrips, vitaApplyMs, (System.Diagnostics.Stopwatch.GetTimestamp() - vitaV0) * 1000.0 / System.Diagnostics.Stopwatch.Frequency);
                 terrainDesc.terrainObject.name = TerrainHelper.GetTerrainName(dfTerrain.MapPixelX, dfTerrain.MapPixelY);
+                // Nature layout reads what the handlers leave (location rects, blended heights): wait for them first
+                while (VitaPromoteBusy != null && VitaPromoteBusy(dfTerrain))
+                {
+                    yield return null;
+                    if (vitaGen != vitaWorldGen)
+                        yield break;
+                }
                 yield break;
             }
 #else
@@ -1843,6 +2203,12 @@ namespace DaggerfallWorkshop
             }
             terrainDesc.billboardBatchObject.SetActive(true);
         }
+
+        // Vita: set while a tile built in play is promoted; a handler that spreads its work over frames reports it through VitaPromoteBusy
+        public static bool VitaSpreadPromote;
+        public static Func<DaggerfallTerrain, bool> VitaPromoteBusy;
+        public static int VitaTileShownFrame = -1;  // frame an in-play promote set heights or switched its tile on (VitaFarTerrain rebuilds on the next one)
+        public static bool VitaDelayLodOff;     // 2026-11-20 test harness A/B: SetHeights in one step on in-play promotes, as before
 #endif
 
         // Gets terrain at map pixel coordinates, or null if not found
@@ -1888,6 +2254,39 @@ namespace DaggerfallWorkshop
 
             return terrainArray[terrainIndexDict[key]].terrainObject.transform;
         }
+
+#if UNITY_PSP2
+        // Safety net for any way into the ground outdoors that the reposition doesn't cover (an outdoor save loaded after the terrain
+        // changed, e.g. World of Daggerfall Terrain switched in the Mods window). Outside, nothing walkable is ever under the terrain:
+        // 2018.2 terrains have no holes and water is above the ground. Feet more than 0.5 m under it: back on top in the same frame.
+        void VitaKeepAboveGround()
+        {
+            if (autoRepositionMethod != RepositionMethods.None || GameManager.Instance.PlayerEnterExit.IsPlayerInside ||
+                GameManager.Instance.PlayerEnterExit.IsRespawning || !VitaPlayerTileBuilt())
+                return;
+            Terrain terrain = terrainArray[terrainIndexDict[TerrainHelper.MakeTerrainKey(MapPixelX, MapPixelY)]].terrainObject.GetComponent<Terrain>();
+            CharacterController controller = GameManager.Instance.PlayerController;
+            if (!terrain || !controller)
+                return;
+            Transform player = LocalPlayerGPS.transform;
+            Vector3 pos = player.position;
+            float ground = terrain.SampleHeight(pos) + terrain.transform.position.y;
+            float feet = pos.y - controller.height / 2f;
+            if (feet > ground - 0.5f)
+                return;
+            player.position = new Vector3(pos.x, ground + controller.height / 2f + 0.15f, pos.z);
+            GameManager.Instance.AcrobatMotor.ClearFallingDamage();
+            Debug.LogFormat("VITAGROUND lifted the player {0:F1} m back onto the terrain at {1}", ground - feet, pos);
+        }
+
+        bool VitaPlayerTileBuilt()
+        {
+            int index;
+            if (!terrainIndexDict.TryGetValue(TerrainHelper.MakeTerrainKey(MapPixelX, MapPixelY), out index))
+                return false;
+            return terrainArray[index].active && !terrainArray[index].updateData && terrainArray[index].terrainObject;
+        }
+#endif
 
         // Repositions player in world after a teleport.
         // If position.y is less than terrain height then player will be raised to sit on terrain.

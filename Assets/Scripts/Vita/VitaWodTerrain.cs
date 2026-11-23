@@ -11,6 +11,11 @@
 //  - the transition noise is weighted by saturate(((h - 100) / 5000) / 5) on a 0-1 height, which is always 0;
 //  - the TilemapComputer kernel only fills a cache other mods can ask for (none of ours do).
 // Location weights only visit locations a sample can reach (fade <= 64 * 9 units, radial edge <= half diagonal + 7.5): same result.
+// One change from the mod (2026-11-16, trial, revert candidate: TownAlt = false): a location's plateau takes the altitude and port
+// maps' values at the location's centre instead of the values under each sample. Read per sample they tilt the ground under a town
+// the game places at one height, so buildings floated or sank (Daggerfall city, a port: portLerp 0.54-0.61 across the town = 15 m).
+// What other locations' weights still leave (up to 0.4 m) goes too: the tile's own location footprint is set to the height the game
+// places the location at (terrain at 0.55, 0.55) and blended back over FlatBand samples; the tile's edge rows stay the mod's (seams).
 
 #if UNITY_PSP2
 using System;
@@ -57,7 +62,7 @@ public class VitaWodTerrainSampler : TerrainSampler
         BeachElevation = 103.9f;
     }
 
-    public override int Version { get { return 7; } }
+    public override int Version { get { return 8; } }   // 8: TownAlt (saved outdoor positions repositioned)
 
     public override bool IsLocationTerrainBlended() { return true; }
 
@@ -72,8 +77,85 @@ public class VitaWodTerrainSampler : TerrainSampler
     {
         mapPixel.maxHeight = MaxTerrainHeight;
         VitaWodTerrain tile = new VitaWodTerrain();
-        JobHandle begin = new BeginJob { tile = tile, mpx = mapPixel.mapPixelX, mpy = mapPixel.mapPixelY }.Schedule();
-        return new SampleJob { tile = tile, data = mapPixel.heightmapData }.Schedule(HeightmapDimension * HeightmapDimension, 64, begin);
+        int mpx = mapPixel.mapPixelX, mpy = mapPixel.mapPixelY, count = HeightmapDimension * HeightmapDimension;
+        if (CacheOff || VitaJobsShim.Deferred)
+        {
+            JobHandle begin = new BeginJob { tile = tile, mpx = mpx, mpy = mpy }.Schedule();
+            return new SampleJob { tile = tile, data = mapPixel.heightmapData }.Schedule(count, 64, begin);
+        }
+        // Loads (behind the loading window): the card cache. In play tiles are pumped over frames as before (a card write would be a hitch)
+        tile.Begin(mpx, mpy);
+        string path = CachePath(mpx, mpy, tile.InputHash());
+        float[] heights = mapPixel.heightmapData.VitaArray;
+        bool cached = ReadCache(path, heights, count);
+        if (cached && !CacheCheck)
+            return default(JobHandle);
+        float[] cachedCopy = cached ? (float[])heights.Clone() : null;
+        new SampleJob { tile = tile, data = mapPixel.heightmapData }.Schedule(count, 64).Complete();
+        if (cached)
+        {
+            int differ = 0;
+            for (int i = 0; i < count; i++)
+                if (heights[i] != cachedCopy[i])
+                    differ++;
+            Debug.LogFormat("VITAWODCACHE check {0},{1}: {2} of {3} differ", mpx, mpy, differ, count);
+        }
+        else
+            WriteCache(path, heights, count);
+        return default(JobHandle);
+    }
+
+    // Card cache of finished tiles: a tile took 1.1-1.8 s on hardware, twice per world load (player tile + neighbour). The samples depend
+    // on the map pixel, the shipped maps and this code (Version: bump it with any height change, saved positions depend on it too) and
+    // on what Begin gathers (locations incl. mod ones, roads, the flat town rect): a hash of those is in the file name, so a changed mod
+    // set misses instead of reading stale heights.
+    // UserData/VitaCache/wod<Version>/<mpx / 8>_<mpy / 8>/<mpx>_<mpy>_<hash>.bin: raw floats, folders of at most 64 tiles (exFAT slows past ~100).
+    // ponytail: no size cap (66 KB per tile computed during a load; 1,000 tiles = 66 MB) and old hashes stay; add a sweep if cards fill up.
+    public static bool CacheOff;      // test harness A/B (bot word "wodcacheoff")
+    public static bool CacheCheck;    // test harness: compute cached tiles anyway and compare (bot word "wodcachecheck")
+
+    string CachePath(int mpx, int mpy, uint hash)
+    {
+        return Path.Combine(DaggerfallUnityApplication.PersistentDataPath, string.Format("VitaCache/wod{0}/{1}_{2}/{3}_{4}_{5:x8}.bin",
+            Version, mpx / 8, mpy / 8, mpx, mpy, hash));
+    }
+
+    static bool ReadCache(string path, float[] heights, int count)
+    {
+        IntPtr memory, data;
+        int length;
+        bool read = VitaAtlasCache.ReadFile(path, out memory, out data, out length);
+        try
+        {
+            if (!read || length != count * 4)
+                return false;
+            System.Runtime.InteropServices.Marshal.Copy(data, heights, 0, count);
+            return true;
+        }
+        finally
+        {
+            if (memory != IntPtr.Zero)
+                System.Runtime.InteropServices.Marshal.FreeHGlobal(memory);
+        }
+    }
+
+    static void WriteCache(string path, float[] heights, int count)
+    {
+        string temp = path + ".tmp";
+        try
+        {
+            var bytes = new byte[count * 4];
+            Buffer.BlockCopy(heights, 0, bytes, 0, bytes.Length);
+            Directory.CreateDirectory(Path.GetDirectoryName(path));
+            File.WriteAllBytes(temp, bytes);
+            if (File.Exists(path))
+                File.Delete(path);
+            File.Move(temp, path);
+        }
+        catch (Exception e)
+        {
+            Debug.LogWarningFormat("VitaWodTerrain: caching {0}: {1}", path, e.Message);
+        }
     }
 
     struct BeginJob : IJob
@@ -129,6 +211,13 @@ public sealed class VitaWodTerrain
     // location rects in tile units (mod: GetLocationRect expanded by 1), per map pixel; width 0 = no location
     static readonly Dictionary<int, Rect> rects = new Dictionary<int, Rect>();
     internal readonly List<Rect> near = new List<Rect>();
+    // TownAlt: altitude map value and port weight at each near location's centre (same order as near), cached per map pixel
+    internal static bool TownAlt = true;
+    static readonly Dictionary<int, Vector2> alts = new Dictionary<int, Vector2>();
+    internal readonly List<Vector2> nearAlt = new List<Vector2>();
+    // TownAlt: this tile's location footprint in samples (x0 > x1 = none) and its height
+    const float FlatBand = 4f;
+    float flatX0 = 1f, flatX1 = 0f, flatY0, flatY1, flatHeight;
     readonly float[] roadBits = new float[9 * 8];
 
     // Approximations (chosen in the offline harness against heights dumped from PC DFU's GPU: max error 3.4 m, mean 0.32 m over
@@ -140,7 +229,7 @@ public sealed class VitaWodTerrain
     internal static int CS = 4, CoarseMask = 29;   // 1 locations, 2 roads, 4 colour, 8 Jordan modulators, 16 dunes
     internal static int CellOctUse = 9, JordOctUse = 8, BumpOctUse = 6;
     internal static int CellSplit = 0, JordSplit = 7;   // octaves below these come from the coarse grid (0 = none)
-    const int CF = 17;
+    const int CF = 19;
     int cn;
     float[] coarse = new float[0];
     bool[] coarseDone = new bool[0];
@@ -154,7 +243,8 @@ public sealed class VitaWodTerrain
         {
             using (BinaryReader r = new BinaryReader(File.OpenRead(path)))
             {
-                if (r.ReadInt32() != 0x54444f57 || r.ReadInt32() != 1)
+                int version;
+                if (r.ReadInt32() != 0x54444f57 || ((version = r.ReadInt32()) != 1 && version != 2))
                     throw new IOException("wodterrain.bin: wrong format");
                 mapW = r.ReadInt32();
                 mapH = r.ReadInt32();
@@ -170,6 +260,19 @@ public sealed class VitaWodTerrain
                     noise[i] = srgb[n[i]];
                 BuildGrads();
                 planeStart = r.BaseStream.Position;
+                if (version == 2)
+                {
+                    // the planes again as LZ4 blocks of BlockRows rows (vita/tools/lz4ownpacks.py), kept in memory (~1.5 MB)
+                    r.BaseStream.Position = planeStart + 5L * mapW * mapH;
+                    if (r.ReadInt32() != BlockRows || r.ReadInt32() != 5 * (mapH / BlockRows))
+                        throw new IOException("wodterrain.bin: wrong block layout");
+                    planeLzOff = new int[5 * (mapH / BlockRows) + 1];
+                    for (int i = 0; i < planeLzOff.Length; i++)
+                        planeLzOff[i] = r.ReadInt32();
+                    planeLz = r.ReadBytes(planeLzOff[planeLzOff.Length - 1]);
+                    if (planeLz.Length != planeLzOff[planeLzOff.Length - 1])
+                        throw new IOException("wodterrain.bin: short read");
+                }
             }
             return true;
         }
@@ -203,6 +306,42 @@ public sealed class VitaWodTerrain
         GatherRoads(mpx, mpy);
         LoadWindow(tpx, tpy);
         Prepare();
+        flatX0 = 1f;
+        flatX1 = 0f;
+        Rect own;
+        if (TownAlt && rects.TryGetValue(mpx + mpy * MapsFile.MaxMapPixelX, out own) && own.width != 0)
+        {
+            // rects hold GetLocationRect in tile units grown by 1; samples are 128 per 129 tile units
+            flatX0 = (own.xMin + 1f - tpx) * (128f / 129f);
+            flatX1 = (own.xMax - 1f - tpx) * (128f / 129f);
+            flatY0 = (own.yMin + 1f - tpy) * (128f / 129f);
+            flatY1 = (own.yMax - 1f - tpy) * (128f / 129f);
+            // StreamingWorld places the location at the terrain at 0.55, 0.55 (sample 70.4): bilinear of the mod's 4 samples there
+            const float at = 0.55f * 128f;
+            int i = (int)at;
+            float f = at - i;
+            flatHeight = Lerp(Lerp(ModSample(i, i), ModSample(i + 1, i), f), Lerp(ModSample(i, i + 1), ModSample(i + 1, i + 1), f), f);
+        }
+    }
+
+    // FNV-1a over everything Begin gathered that the samples read besides the shipped maps (VitaWodTerrainSampler's card cache key)
+    internal uint InputHash()
+    {
+        uint h = 2166136261;
+        Action<float> add = f => { int bits = BitConverter.ToInt32(BitConverter.GetBytes(f), 0); for (int k = 0; k < 4; k++) h = (h ^ (uint)((bits >> (k * 8)) & 0xff)) * 16777619; };
+        add(TownAlt ? 1f : 0f);
+        for (int i = 0; i < near.Count; i++)
+        {
+            add(near[i].x); add(near[i].y); add(near[i].width); add(near[i].height);
+        }
+        for (int i = 0; i < nearAlt.Count; i++)
+        {
+            add(nearAlt[i].x); add(nearAlt[i].y);
+        }
+        for (int i = 0; i < roadBits.Length; i++)
+            add(roadBits[i]);
+        add(flatX0); add(flatX1); add(flatY0); add(flatY1); add(flatHeight);
+        return h;
     }
 
     // Per tile, after the location/road/map gathering: coarse grid reset, road segments
@@ -220,15 +359,16 @@ public sealed class VitaWodTerrain
     }
 
     // Coarse point values: 0-2 location pass (weight, height, wilderness), 3-4 port pass (weight, height; = pass 1 without a port),
-    // 5 road weight, 6 colour alpha, 7 Jordan modulators, 8 dune bump
+    // 5 road weight, 6 colour alpha, 7 Jordan modulators, 8 dune bump, 9-16 octaves, 17-18 TownAlt altitude and port weight of the pass in 4
     void CoarsePoint(int cx, int cy, int o)
     {
         int idx = cx * CS, idy = cy * CS;
         float posx = tpx + idx / 128f * 129f, posy = tpy + idy / 128f * 129f;
         float portU = Saturate(posx / WorldW) + (-0.25f / TerrainX), portV = Saturate(posy / WorldH) + (-1.1f / TerrainY);
         float portLerp = Saturate(SampleMap(1, portU, portV) * 10f);
-        float h, b;
-        coarse[o] = LocationWeight(posx, posy, portLerp, 64f, out h, out b);
+        float sampleAlt = SampleMap(2, portU, portV);
+        float h, b, a, pl;
+        coarse[o] = LocationWeight(posx, posy, portLerp, 64f, sampleAlt, out h, out b, out a, out pl);
         coarse[o + 1] = h;
         coarse[o + 2] = b;
         if (portLerp == 0f)
@@ -238,9 +378,11 @@ public sealed class VitaWodTerrain
         }
         else
         {
-            coarse[o + 3] = LocationWeight(posx, posy, portLerp, Lerp(64f, 3f, portLerp), out h, out b);
+            coarse[o + 3] = LocationWeight(posx, posy, portLerp, Lerp(64f, 3f, portLerp), sampleAlt, out h, out b, out a, out pl);
             coarse[o + 4] = h;
         }
+        coarse[o + 17] = a;
+        coarse[o + 18] = pl;
         coarse[o + 5] = RoadWeight(posx, posy, tpx, tpy);
         float colorA = ColorAlpha(posx, posy);
         coarse[o + 6] = colorA;
@@ -282,14 +424,26 @@ public sealed class VitaWodTerrain
 
     readonly float[] cv = new float[CF];
 
-    public float Sample(int x, int y)
+    float ModSample(int x, int y)
     {
         return Math.Max(100f / NewHeight, HeightSample(x, y, tpx, tpy));
+    }
+
+    public float Sample(int x, int y)
+    {
+        float h = ModSample(x, y);
+        if (flatX0 > flatX1)
+            return h;
+        float dx = Math.Max(Math.Max(flatX0 - x, x - flatX1), 0f), dy = Math.Max(Math.Max(flatY0 - y, y - flatY1), 0f);
+        float t = 1f - Smoothstep(0f, FlatBand, (float)Math.Sqrt(dx * dx + dy * dy));
+        t *= Saturate(Math.Min(Math.Min(x, y), Math.Min(128 - x, 128 - y)) / 2f);     // edge rows: the neighbour tile computes the same
+        return Lerp(h, flatHeight, t);
     }
 
     void GatherLocations(int mpx, int mpy, float tpx, float tpy)
     {
         near.Clear();
+        nearAlt.Clear();
         DaggerfallUnity dfu = DaggerfallUnity.Instance;
         // a location 7+ map pixels away is over 774 units from the tile, beyond reach (600 + half diagonal + 7.5)
         for (int x = -6; x <= 6; x++)
@@ -324,7 +478,16 @@ public sealed class VitaWodTerrain
                 float reach = 600f + (float)Math.Sqrt(sx * sx + sy * sy) * 0.5f + 7.5f + 92f;   // + tile half diagonal from its centre
                 float dx = cx - (tpx + 64.5f), dy = cy - (tpy + 64.5f);
                 if (dx * dx + dy * dy < reach * reach)
+                {
                     near.Add(new Rect(lx, ly, sx, sy));
+                    Vector2 alt;
+                    if (!alts.TryGetValue(key, out alt))
+                    {
+                        float u = Saturate(cx / WorldW) + (-0.25f / TerrainX), v = Saturate(cy / WorldH) + (-1.1f / TerrainY);
+                        alts[key] = alt = new Vector2(ReadPlane(2, u, v), Saturate(ReadPlane(1, u, v) * 10f));
+                    }
+                    nearAlt.Add(alt);
+                }
             }
     }
 
@@ -361,8 +524,50 @@ public sealed class VitaWodTerrain
         winY = Math.Max(0, (int)Math.Floor(v0 * mapH - 0.5f) - 1);
         winW = Math.Min(mapW, (int)Math.Floor(u1 * mapW - 0.5f) + 3) - winX;
         winH = Math.Min(mapH, (int)Math.Floor(v1 * mapH - 0.5f) + 3) - winY;
+        if (planeLz != null && !PlaneMemOff)
+        {
+            for (int p = 0; p < 5; p++)
+            {
+                if (win[p] == null || win[p].Length < winW * winH)
+                    win[p] = new float[winW * winH];
+                for (int y = 0; y < winH; y++)
+                {
+                    byte[] rowBuf;
+                    int o = PlaneRow(p, winY + y, out rowBuf) + winX;
+                    for (int x = 0; x < winW; x++)
+                        win[p][x + y * winW] = srgb[rowBuf[o + x]];
+                }
+            }
+            return;
+        }
+        if (!WindowRowsOff)
+        {
+            // One read per plane (the rows span winH whole map rows, ~14 KB): 5 seeks + reads instead of 5 x winH buffered 4 KB refills
+            // (a steady ~30 ms of every new tile in play)
+            int span = (winH - 1) * mapW + winW;
+            byte[] buf = windowBuffer;
+            if (buf == null || buf.Length < span)
+                windowBuffer = buf = new byte[span];
+            using (FileStream f = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 1))
+            {
+                for (int p = 0; p < 5; p++)
+                {
+                    if (win[p] == null || win[p].Length < winW * winH)
+                        win[p] = new float[winW * winH];
+                    f.Position = planeStart + (long)p * mapW * mapH + (long)winY * mapW + winX;
+                    for (int got = 0, n; got < span; got += n)
+                        if ((n = f.Read(buf, got, span - got)) <= 0)
+                            throw new IOException("wodterrain.bin: short read");
+                    for (int y = 0; y < winH; y++)
+                        for (int x = 0; x < winW; x++)
+                            win[p][x + y * winW] = srgb[buf[x + y * mapW]];
+                }
+            }
+            return;
+        }
         byte[] row = new byte[winW];
         using (FileStream f = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096))
+        {
             for (int p = 0; p < 5; p++)
             {
                 if (win[p] == null || win[p].Length < winW * winH)
@@ -375,6 +580,77 @@ public sealed class VitaWodTerrain
                         win[p][x + y * winW] = srgb[row[x]];
                 }
             }
+        }
+    }
+
+    // Map planes in memory (version 2 file): Begin's window and altitude reads were card reads, 19 ms per tile plus ~13 ms per new
+    // location, and now and then ~115 ms longer. Each thread keeps the last decoded block per plane.
+    const int BlockRows = 16;
+    static byte[] planeLz;
+    static int[] planeLzOff;
+    public static bool PlaneMemOff;   // test harness A/B (bot word "wodmemoff"): read the planes from the file per tile, as before
+    [ThreadStatic] static byte[][] rowCache;
+    [ThreadStatic] static int[] rowCacheBlock;
+
+    // Row y of plane p: returns its offset in buf (the plane's cached block, decoded on first use)
+    static int PlaneRow(int p, int y, out byte[] buf)
+    {
+        if (rowCache == null)
+        {
+            rowCache = new byte[5][];
+            rowCacheBlock = new int[] { -1, -1, -1, -1, -1 };
+        }
+        int b = y / BlockRows;
+        if (rowCacheBlock[p] != b)
+        {
+            if (rowCache[p] == null)
+                rowCache[p] = new byte[BlockRows * mapW];
+            int i = p * (mapH / BlockRows) + b;
+            bool ok;
+            unsafe
+            {
+                fixed (byte* src = planeLz)
+                fixed (byte* dst = rowCache[p])
+                    ok = VitaLz4.Decode((IntPtr)(src + planeLzOff[i]), planeLzOff[i + 1] - planeLzOff[i], (IntPtr)dst, BlockRows * mapW);
+            }
+            if (!ok)
+                throw new IOException("wodterrain.bin: damaged block " + i);
+            rowCacheBlock[p] = b;
+        }
+        buf = rowCache[p];
+        return (y - b * BlockRows) * mapW;
+    }
+
+    public static bool WindowRowsOff;   // test harness A/B (bot word "wodrowsoff"): one read per window row, as before
+    [ThreadStatic] static byte[] windowBuffer;     // load-time Begins can run on the job worker
+
+    // SampleMap(p, u, v) anywhere on the map (a location centre can be outside this tile's window): 2x2 texels from the file
+    static float ReadPlane(int p, float u, float v)
+    {
+        float tx = u * mapW - 0.5f, ty = v * mapH - 0.5f;
+        float fx = Floor(tx), fy = Floor(ty);
+        float ax = tx - fx, ay = ty - fy;
+        int x0 = Clamp((int)fx, mapW), x1 = Clamp((int)fx + 1, mapW), y0 = Clamp((int)fy, mapH), y1 = Clamp((int)fy + 1, mapH);
+        float[] t = new float[4];
+        if (planeLz != null && !PlaneMemOff)
+        {
+            for (int i = 0; i < 4; i++)
+            {
+                byte[] rowBuf;
+                int o = PlaneRow(p, (i >> 1) == 0 ? y0 : y1, out rowBuf);
+                t[i] = srgb[rowBuf[o + ((i & 1) == 0 ? x0 : x1)]];
+            }
+            return Lerp(Lerp(t[0], t[1], ax), Lerp(t[2], t[3], ax), ay);
+        }
+        using (FileStream f = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 64))
+        {
+            for (int i = 0; i < 4; i++)
+            {
+                f.Position = planeStart + (long)p * mapW * mapH + (long)((i >> 1) == 0 ? y0 : y1) * mapW + ((i & 1) == 0 ? x0 : x1);
+                t[i] = srgb[f.ReadByte()];
+            }
+        }
+        return Lerp(Lerp(t[0], t[1], ax), Lerp(t[2], t[3], ax), ay);
     }
 
     // Bilinear, clamped (Unity linear clamp sampler) on a map plane via the window
@@ -437,16 +713,18 @@ public sealed class VitaWodTerrain
         float portLerp = Saturate(portHeight * 10f);
         float[] v = cv;
         Coarse(idx, idy, v);
-        float locationHeight, bumpWeight;
+        float locationHeight, bumpWeight, locationAlt, locationPort;
         float locationWeight;
         if ((CoarseMask & 1) != 0)
         {
             locationWeight = v[0];
             locationHeight = v[1];
             bumpWeight = v[2];
+            locationAlt = v[17];
+            locationPort = v[18];
         }
         else
-            locationWeight = LocationWeight(posx, posy, portLerp, 64f, out locationHeight, out bumpWeight);
+            locationWeight = LocationWeight(posx, posy, portLerp, 64f, altHeight, out locationHeight, out bumpWeight, out locationAlt, out locationPort);
         float wildernessWeight = bumpWeight;
         float firstLocationWeight = locationWeight, firstLocationHeight = locationHeight;
         bumpWeight *= (float)Math.Sqrt(Math.Sqrt(locationWeight));
@@ -473,13 +751,13 @@ public sealed class VitaWodTerrain
             locationHeight = firstLocationHeight;
         }
         else
-            portLocationWeight = LocationWeight(posx, posy, portLerp, Lerp(64f, 3f, portLerp), out locationHeight, out bumpWeight);
+            portLocationWeight = LocationWeight(posx, posy, portLerp, Lerp(64f, 3f, portLerp), altHeight, out locationHeight, out bumpWeight, out locationAlt, out locationPort);
 
-        float regLocationHeight = Math.Max(locationHeight + (100f / 10000f) + (altHeight * 0.1f), 0.021f);
+        float regLocationHeight = Math.Max(locationHeight + (100f / 10000f) + ((TownAlt ? locationAlt : altHeight) * 0.1f), 0.021f);
         if (seaHeight > 0f)
             locationHeight = 0f;
         else
-            locationHeight = Lerp(regLocationHeight, 0.021f, portLerp);
+            locationHeight = Lerp(regLocationHeight, 0.021f, TownAlt ? locationPort : portLerp);
 
         if (baseHeight <= 0.021f)
         {
@@ -497,9 +775,14 @@ public sealed class VitaWodTerrain
     }
 
     // Mod: LocationWeight / PortLocationWeight (they differ only in the base fade distance)
-    float LocationWeight(float posx, float posy, float portLerp, float fadeBase, out float basemapHeight, out float wildernessWeight)
+    // (TownAlt: also the location altitude and port weight, blended like basemapHeight; the sample's own where no location reaches or
+    // nearAlt is missing)
+    float LocationWeight(float posx, float posy, float portLerp, float fadeBase, float sampleAlt, out float basemapHeight, out float wildernessWeight,
+        out float locationAlt, out float locationPort)
     {
         float weight = 0f, narrowWeight = 0f, height = 0f, nearestHeight = 0f, nearestDist = 99999999.9f;
+        float alt = 0f, nearestAlt = 0f, port = 0f, nearestPort = 0f;
+        bool haveAlts = nearAlt.Count == near.Count;   // the harness fills near only
         float offU = -1.5f / TerrainX, offV = 0.5f / TerrainY;
         float fallbackHeight = SampleHeights(Saturate(posx / WorldW) + offU, Saturate(posy / WorldH) + offV);
 
@@ -566,20 +849,29 @@ public sealed class VitaWodTerrain
                 w = Smoothstep(0f, 1f, w);
             }
             weight += w;
+            float locAlt = haveAlts ? nearAlt[i].x : sampleAlt, locPort = haveAlts ? nearAlt[i].y : portLerp;
             if (eDist < nearestDist)
             {
                 nearestHeight = baseHeight;
+                nearestAlt = locAlt;
+                nearestPort = locPort;
                 nearestDist = eDist;
             }
             height += baseHeight * w;
+            alt += locAlt * w;
+            port += locPort * w;
         }
 
         wildernessWeight = 1f - Saturate(narrowWeight);
         if (weight == 0f)
         {
             basemapHeight = fallbackHeight;     // the mod's 0/0 here ends as lerp(fallback, x, 0)
+            locationAlt = sampleAlt;
+            locationPort = portLerp;
             return 0f;
         }
+        locationAlt = Lerp(sampleAlt, Lerp(alt / weight, nearestAlt, Saturate(narrowWeight)), Saturate(weight));
+        locationPort = Lerp(portLerp, Lerp(port / weight, nearestPort, Saturate(narrowWeight)), Saturate(weight));
         basemapHeight = Math.Max(80f / NewHeight, height / weight);
         weight = Saturate(weight);
         basemapHeight = Lerp(basemapHeight, nearestHeight, Saturate(narrowWeight));

@@ -6,6 +6,7 @@
 // time. Writes the port's tiles next to them as <px>_<py>.vita.bin. Editor only.
 //   VITA_ARENA2=<ARENA2> VITA_WODREF=<dump folder> (Windows paths) vita/unity2017.sh VitaWodTerrainCheck.Run wodcheck
 
+#if VITA_MODS     // uses the BasicRoads port, which ships only in the VPK
 using System;
 using System.Diagnostics;
 using System.IO;
@@ -71,3 +72,4 @@ public static class VitaWodTerrainCheck
         Debug.Log("VITAWOD done");
     }
 }
+#endif

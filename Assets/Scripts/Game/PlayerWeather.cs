@@ -47,6 +47,12 @@ namespace DaggerfallWorkshop.Game
             Lighten(SnowParticles);
             VitaFindBoxes();
             VitaSetBox(VitaWeatherBox);
+            {
+                CharacterController feet = GetComponent<CharacterController>();
+                float groundY = transform.position.y + (feet ? feet.center.y - feet.height * 0.5f : -0.9f);
+                VitaWeatherMesh.Attach(RainParticles, false, groundY);
+                VitaWeatherMesh.Attach(SnowParticles, true, groundY);
+            }
             if (VitaGroundPlane)
             {
                 Transform ground = new GameObject("VitaWeatherGround").transform;

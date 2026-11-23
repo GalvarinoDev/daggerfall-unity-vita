@@ -126,6 +126,70 @@ namespace DaggerfallWorkshop
             RaiseOnSetDungeonEvent();
         }
 
+#if UNITY_PSP2
+        // Vita: SetDungeon one block per frame, so the dungeon entry's loading window keeps drawing instead of freezing 14-20 s
+        // (2026-11-12). Built under the inactive DungeonParent, as upstream's one-frame build is, so no script runs before the transition.
+        public IEnumerator VitaSetDungeonSpread(DFLocation location, bool importEnemies = true)
+        {
+            if (!ReadyCheck())
+                yield break;
+            if (this.isSet)
+                throw new Exception("This location has already been set.");
+            if (!location.Loaded)
+                throw new Exception("DFLocation not loaded.");
+            if (!location.HasDungeon)
+                throw new Exception("DFLocation does not contain a dungeon.");
+
+            summary = new DungeonSummary();
+            summary.ID = location.MapTableData.MapId;
+            summary.RegionName = location.RegionName;
+            summary.LocationName = location.Name;
+            summary.LocationData = location;
+            summary.LocationType = location.MapTableData.LocationType;
+            summary.DungeonType = location.MapTableData.DungeonType;
+            if (DungeonTextureUse == DaggerfallWorkshop.DungeonTextureUse.UseLocation_PartiallyImplemented)
+                UseLocationDungeonTextureTable();
+
+            // As LayoutDungeon, a frame per block
+            startMarker = null;
+            float playerLevel = GameManager.Instance.PlayerEntity.Level;
+            float monsterPower = Mathf.Clamp01(playerLevel / 20f);
+            for (int i = 0; i < summary.LocationData.Dungeon.Blocks.Length; i++)
+            {
+                DFLocation.DungeonBlock block = summary.LocationData.Dungeon.Blocks[i];
+                GameObject go = GameObjectHelper.CreateRDBBlockGameObject(
+                    block.BlockName,
+                    DungeonTextureTable,
+                    block.IsStartingBlock,
+                    Summary.DungeonType,
+                    monsterPower,
+                    RandomMonsterVariance,
+                    (int)DateTime.Now.Ticks/*Summary.ID*/,      // TODO: Add more options for seed
+                    dfUnity.Option_DungeonBlockPrefab,
+                    importEnemies);
+                go.transform.parent = this.transform;
+                go.transform.position = new Vector3(block.X * RDBLayout.RDBSide, 0, block.Z * RDBLayout.RDBSide);
+
+                DaggerfallRDBBlock daggerfallBlock = go.GetComponent<DaggerfallRDBBlock>();
+                FindMarkers(daggerfallBlock, ref block, block.IsStartingBlock);
+                summary.LocationData.Dungeon.Blocks[i].WaterLevel = block.WaterLevel;
+                summary.LocationData.Dungeon.Blocks[i].CastleBlock = block.CastleBlock;
+                RDBLayout.AddWater(go, go.transform.position, block.WaterLevel);
+                yield return null;
+            }
+            RemoveOverlappingDoors();
+
+            VitaAtlas.Build(gameObject);
+            yield return null;
+            VitaFlatBatch.Build(gameObject);
+            yield return null;
+            VitaModelBatch.Build(gameObject);
+
+            isSet = true;
+            RaiseOnSetDungeonEvent();
+        }
+#endif
+
         public void ResetDungeonTextureTable()
         {
             DungeonTextureTable[0] = 119;

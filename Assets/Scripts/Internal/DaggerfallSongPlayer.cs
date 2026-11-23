@@ -155,8 +155,10 @@ namespace DaggerfallWorkshop
             {
                 // Start playing
 #if UNITY_PSP2
-                // A streamed clip (VitaMusic) stays Unloaded until it plays, so waiting for Loaded never started it
-                if (isLoading && (audioSource.clip.loadState == AudioDataLoadState.Loaded || audioSource.clip.loadType == AudioClipLoadType.Streaming))
+                // A streamed clip (VitaMusic) stays Unloaded until it plays, so waiting for Loaded never started it.
+                // Not while VitaLoadingWindow has the listener paused: the paused stream read as stopped and SongManager reopened it
+                // every ~2.5 s through the whole load (each reopen a main-thread stall); it starts once the window closes.
+                if (isLoading && !AudioListener.pause && (audioSource.clip.loadState == AudioDataLoadState.Loaded || audioSource.clip.loadType == AudioClipLoadType.Streaming))
 #else
                 if (isLoading && audioSource.clip.loadState == AudioDataLoadState.Loaded)
 #endif
@@ -179,7 +181,7 @@ namespace DaggerfallWorkshop
                 // Update status
 #if UNITY_PSP2
                 // A streamed clip isn't isPlaying yet right after Play(); SongManager restarted it every frame
-                IsPlaying = audioSource.isPlaying || isLoading || Time.unscaledTime - vitaClipStarted < 2f;
+                IsPlaying = audioSource.isPlaying || isLoading || Time.unscaledTime - vitaClipStarted < 2f || (AudioListener.pause && audioSource.clip);
 #else
                 IsPlaying = audioSource.isPlaying || isLoading;
 #endif

@@ -8,6 +8,8 @@
 // shader body as Daggerfall/Vita/BillboardPalette. The billboards stay (renderer off, animation timers still running): animated flats'
 // current frames are copied into the batch's UVs.
 // Left alone: anything with a collider, an action, other components, editor/NPC flats, FaceY, OneShot, imported textures.
+// Except treasure piles (loot + its collider): merged, and watched every frame; once looted, re-textured by a save load or replaced, the
+// pile leaves the batch (its quad collapsed) and shows as its own billboard again if it still exists. LootMergeOff = test switch.
 // The meshes and materials belong to this component and go with the dungeon. settings.ini [Video] VitaFlatBatch = False turns it off.
 
 #if UNITY_PSP2
@@ -24,6 +26,7 @@ public class VitaFlatBatch : MonoBehaviour
     // Town leftovers merged per town (BuildTown). Per block it was off: Daggerfall walk 32.7 vs 32.2 FPS merged, but ~8 MB less free main.
     // CityAnimatedOff is a test switch that leaves the animated ones out.
     public static bool CityAnimatedOff;
+    public static bool LootMergeOff;
     static readonly int facingId = Shader.PropertyToID("_VitaFacing");
 
     static readonly int[] rejected = new int[6];   // per reason in Eligible, logged by Build
@@ -40,6 +43,8 @@ public class VitaFlatBatch : MonoBehaviour
         public Vector2[] uvs;
         public List<Item> items = new List<Item>();
         public List<Item> animated = new List<Item>();
+        public List<Item> watched = new List<Item>();   // treasure piles
+        public Vector4[] tangents;
     }
 
     class Item
@@ -50,6 +55,7 @@ public class VitaFlatBatch : MonoBehaviour
         public int shownFrame;
         public int frame, frameCount;   // animated: the batch's own frame timer (DaggerfallBillboard.AnimateBillboard's rates)
         public float interval, nextTick;
+        public int archive, record;     // watched: the texture it was merged with
     }
 
     /// <summary>Merges root's plain flats per block and material into one camera-facing mesh each.</summary>
@@ -66,6 +72,15 @@ public class VitaFlatBatch : MonoBehaviour
     public static void BuildTown(GameObject location)
     {
         Build(location, true, true);
+    }
+
+    /// <summary>A World of Daggerfall location's plain flats merged per material across the location (Location Loader made each flat its
+    /// own billboard, draw and Update). No log: locations spawn in play. LocationMergeOff = test switch for A/B runs.</summary>
+    public static bool LocationMergeOff;
+    public static void BuildLocation(GameObject location)
+    {
+        if (!LocationMergeOff)
+            Build(location, false, true);
     }
 
     static void Build(GameObject root, bool cityBlock, bool town)
@@ -128,7 +143,7 @@ public class VitaFlatBatch : MonoBehaviour
             owner.batches.Add(owner.CreateBatch(group.Key.Key, material, group.Value));
             merged += group.Value.Count;
         }
-        if (cityBlock)
+        if (cityBlock || town || !VitaMemory.Probes)    // interiors and dungeons: log only in probe runs (a line per door is a hitch)
             return;
         Debug.LogFormat("VitaFlatBatch: {0} of {1} flats in {2} batches ({3} materials), {4:F0} ms; left: type {5}, components/action {6}, " +
             "renderer/material {7}, scale {8}, no block {9}", merged, flats, owner ? owner.batches.Count : 0, owner ? owner.materials.Count : 0,
@@ -155,6 +170,8 @@ public class VitaFlatBatch : MonoBehaviour
         foreach (Component c in components)
             if (!(c is Transform || c is MeshFilter || c is MeshRenderer || c is DaggerfallBillboard || c is AudioSource || c is DaggerfallAudioSource))
                 extra++;
+        if (extra > 0 && !action && IsTreasurePile(billboard, components))
+            extra = 0;
         if (extra > 0 || action)
         {
             string what = action ? "action on " + (action.gameObject == billboard.gameObject ? "flat" : "parent " + action.name) : "";
@@ -180,6 +197,21 @@ public class VitaFlatBatch : MonoBehaviour
                 path = p.name + "/" + path;
             return Reject(4, "no block: " + path + " type " + summary.FlatType);
         }
+        return true;
+    }
+
+    // A random treasure pile as RDB layout makes it: the flat + DaggerfallLoot + its save component + the activation collider
+    static bool IsTreasurePile(DaggerfallBillboard billboard, Component[] components)
+    {
+        if (LootMergeOff)
+            return false;
+        DaggerfallLoot loot = billboard.GetComponent<DaggerfallLoot>();
+        if (!loot || loot.ContainerType != LootContainerTypes.RandomTreasure)
+            return false;
+        foreach (Component c in components)
+            if (!(c is Transform || c is MeshFilter || c is MeshRenderer || c is DaggerfallBillboard || c is DaggerfallLoot ||
+                c is DaggerfallWorkshop.Game.Serialization.SerializableLootContainer || c is SphereCollider))
+                return false;
         return true;
     }
 
@@ -246,6 +278,12 @@ public class VitaFlatBatch : MonoBehaviour
                 item.nextTick = Time.time + item.interval;
                 batch.animated.Add(item);
             }
+            if (billboard.GetComponent<DaggerfallLoot>())
+            {
+                item.archive = billboard.Summary.Archive;
+                item.record = billboard.Summary.Record;
+                batch.watched.Add(item);
+            }
             item.renderer.enabled = false;
             // Its Update and animation coroutine only count frames for a hidden renderer: 348 of them cost ~2.5 ms a frame in Daggerfall
             // castle, and 260 were animated (torches, candles), so the batch keeps their frame timers instead
@@ -270,8 +308,10 @@ public class VitaFlatBatch : MonoBehaviour
         // The quads turn around their pivots: bound them for any facing
         Vector3 grow = new Vector3(reach, height, reach);
         mesh.bounds = new Bounds((min + max) * 0.5f, max - min + grow * 2);
-        if (batch.animated.Count == 0)
+        if (batch.animated.Count == 0 && batch.watched.Count == 0)
             mesh.UploadMeshData(true);
+        if (batch.watched.Count > 0)
+            batch.tangents = tangents;
         go.AddComponent<MeshFilter>().sharedMesh = mesh;
         batch.renderer = go.AddComponent<MeshRenderer>();
         batch.renderer.sharedMaterial = material;
@@ -293,6 +333,18 @@ public class VitaFlatBatch : MonoBehaviour
     static readonly Dictionary<Material, List<CityFlat>> pendingCity = new Dictionary<Material, List<CityFlat>>();
     static readonly Dictionary<Material, Material> cityMaterials = new Dictionary<Material, Material>();   // atlas material -> batch copy
     static readonly Dictionary<int, bool> imported = new Dictionary<int, bool>();
+
+    /// <summary>
+    /// From MaterialReader.VitaClearCacheExceptTilesets: the reader forgot its atlas materials without destroying them, so the dead-key
+    /// check in BuildCityBlock never fired and this table kept every old atlas, its texture and the copy alive (~4 MB CDRAM per fast
+    /// travel). Only the references go: batches still drawing a copy keep it, and UnloadUnusedAssets frees it once they're gone.
+    /// </summary>
+    public static bool ForgetOff;   // test switch: the old behaviour, for before/after runs
+    public static void ForgetCityMaterials()
+    {
+        if (!ForgetOff)
+            cityMaterials.Clear();
+    }
 
     /// <summary>Queues a city flat for this block's batch (BuildCityBlock); false = make the billboard as usual.</summary>
     /// sizeRecord: the record whose size the quad takes (-1 = its own); anyType: also nature archives (fixed records, no climate swap).
@@ -541,6 +593,25 @@ public class VitaFlatBatch : MonoBehaviour
 
         if (!shown)
             return;
+        foreach (Batch batch in batches)
+            for (int i = batch.watched.Count - 1; i >= 0; i--)
+            {
+                Item item = batch.watched[i];
+                DaggerfallBillboard b = item.billboard;
+                if (b && item.renderer && b.gameObject.activeSelf && b.Summary.Archive == item.archive && b.Summary.Record == item.record)
+                    continue;
+                // Out of the batch: collapse its quad, and show it as a billboard of its own if it's still there
+                for (int v = item.firstVertex; v < item.firstVertex + 4; v++)
+                    batch.tangents[v] = Vector4.zero;
+                batch.mesh.tangents = batch.tangents;
+                batch.watched.RemoveAt(i);
+                batch.items.Remove(item);
+                if (b && item.renderer)
+                {
+                    item.renderer.enabled = true;
+                    b.enabled = true;
+                }
+            }
         // Animated flats: step each frame timer, show its current frame
         float now = Time.time;
         foreach (Batch batch in batches)

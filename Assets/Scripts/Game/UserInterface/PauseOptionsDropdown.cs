@@ -42,6 +42,7 @@ namespace DaggerfallWorkshop.Game.UserInterface
 #if UNITY_PSP2
         float lastUse = -1;
         static readonly float[] dungeonLightSteps = { 0.3f, 0.5f, 0.7f, 1f };
+        static readonly float[] lookSensitivitySteps = { 0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f, 2.5f, 3f, 4f };
 #endif
 
         private Panel dropdownPanel;
@@ -250,20 +251,6 @@ namespace DaggerfallWorkshop.Game.UserInterface
                 uiManager.PopWindow();
                 DaggerfallUI.PostMessage(DaggerfallUIMessages.dfuiOpenRestWindow);
             });
-#if VITA_TRAVELOPTIONS
-            // Travel Options (built in): its follow-road key has no free pad button
-            if (TravelOptions.TravelOptionsMod.Instance != null && TravelOptions.TravelOptionsMod.Instance.RoadsIntegration)
-            {
-                ListBox.ListItem followRoad;
-                dropdownList.AddItem("Follow Road", out followRoad);
-                UpdateMaxWidth(followRoad.textLabel.TextWidth);
-                clickHandlers.Add(() =>
-                {
-                    uiManager.PopWindow();
-                    TravelOptions.TravelOptionsMod.VitaFollowRequested = true;
-                });
-            }
-#endif
             // Same for the character sheet and magic items (no pad buttons left)
             ListBox.ListItem characterSheet;
             dropdownList.AddItem(TextManager.Instance.GetLocalizedText("vitaCharacterSheet"), out characterSheet);
@@ -323,6 +310,22 @@ namespace DaggerfallWorkshop.Game.UserInterface
                 dungeonLight.textLabel.Text = DungeonLightText();
             });
 
+            // Vita: right stick look speed (JoystickLookSensitivity, the launcher's Look Sensitivity slider); applies live
+            ListBox.ListItem lookSensitivity;
+            dropdownList.AddItem(LookSensitivityText(), out lookSensitivity);
+            UpdateMaxWidth(lookSensitivity.textLabel.TextWidth);
+            clickHandlers.Add(() =>
+            {
+                float value = DaggerfallUnity.Settings.JoystickLookSensitivity;
+                int next = 0;
+                while (next < lookSensitivitySteps.Length && lookSensitivitySteps[next] <= value + 0.01f)
+                    next++;
+                DaggerfallUnity.Settings.JoystickLookSensitivity = lookSensitivitySteps[next % lookSensitivitySteps.Length];
+                DaggerfallUnity.Settings.SaveSettings();
+                GameManager.Instance.PlayerMouseLook.joystickSensitivityScale = DaggerfallUnity.Settings.JoystickLookSensitivity;
+                lookSensitivity.textLabel.Text = LookSensitivityText();
+            });
+
             // Vita: torch/lantern strength (VitaLights); applies live
             ListBox.ListItem fireLight;
             dropdownList.AddItem(FireLightText(), out fireLight);
@@ -354,6 +357,17 @@ namespace DaggerfallWorkshop.Game.UserInterface
                 DaggerfallUnity.Settings.VitaTorchReach = reach >= 12 ? 6 : reach >= 9 ? 12 : 9;
                 DaggerfallUnity.Settings.SaveSettings();
                 torchReach.textLabel.Text = TorchReachText();
+            });
+
+            // Vita: game time while the quick menu (hold L) is open
+            ListBox.ListItem quickTime;
+            dropdownList.AddItem(QuickTimeText(), out quickTime);
+            UpdateMaxWidth(quickTime.textLabel.TextWidth);
+            clickHandlers.Add(() =>
+            {
+                DaggerfallUnity.Settings.VitaQuickTime = (DaggerfallUnity.Settings.VitaQuickTime + 1) % 3;
+                DaggerfallUnity.Settings.SaveSettings();
+                quickTime.textLabel.Text = QuickTimeText();
             });
 #endif
 
@@ -395,6 +409,11 @@ namespace DaggerfallWorkshop.Game.UserInterface
             return string.Format(TextManager.Instance.GetLocalizedText("vitaDungeonLight"), DaggerfallUnity.Settings.DungeonAmbientLightScale * 100);
         }
 
+        static string LookSensitivityText()
+        {
+            return string.Format(TextManager.Instance.GetLocalizedText("vitaLookSensitivity"), DaggerfallUnity.Settings.JoystickLookSensitivity);
+        }
+
         static string FireLightText()
         {
             return string.Format(TextManager.Instance.GetLocalizedText("vitaFireLight"), DaggerfallUnity.Settings.VitaFireLight);
@@ -411,6 +430,12 @@ namespace DaggerfallWorkshop.Game.UserInterface
         static string TorchReachText()
         {
             return string.Format(TextManager.Instance.GetLocalizedText("vitaTorchReach"), DaggerfallUnity.Settings.VitaTorchReach);
+        }
+
+        static string QuickTimeText()
+        {
+            string[] names = TextManager.Instance.GetLocalizedTextList("vitaQuickTimes");
+            return string.Format(TextManager.Instance.GetLocalizedText("vitaQuickTime"), names[Mathf.Clamp(DaggerfallUnity.Settings.VitaQuickTime, 0, names.Length - 1)]);
         }
 #endif
 

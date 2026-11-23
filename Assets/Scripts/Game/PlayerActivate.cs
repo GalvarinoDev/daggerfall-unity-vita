@@ -232,20 +232,18 @@ namespace DaggerfallWorkshop.Game
             else if (InputManager.Instance.ActionStarted(InputManager.Actions.TalkMode))
                 ChangeInteractionMode(PlayerActivateModes.Talk);
 #if UNITY_PSP2
-            // Vita: hold Cross 0.5 s = next interaction mode (Steal, Grab, Info, Talk); that press's release doesn't activate.
-            // Not while a spell is ready (Cross casts it).
+            // Vita: a Cross press held 0.5 s (sinking while levitating or swimming, InputManager) doesn't activate on release.
+            // Interaction modes are on the D-pad Down hold ring (DaggerfallHUD).
             if (InputManager.Instance.ActionStarted(InputManager.Actions.ActivateCenterObject))
             {
                 vitaActivateDownTime = Time.unscaledTime;
                 vitaModeCycled = false;
             }
-            if (InputManager.Instance.HasAction(InputManager.Actions.ActivateCenterObject) && !vitaModeCycled &&
-                Time.unscaledTime - vitaActivateDownTime >= 0.5f &&
-                !(GameManager.Instance.PlayerEffectManager && GameManager.Instance.PlayerEffectManager.HasReadySpell))
-            {
+            if (InputManager.Instance.HasAction(InputManager.Actions.ActivateCenterObject) && Time.unscaledTime - vitaActivateDownTime >= 0.5f)
                 vitaModeCycled = true;
-                ChangeInteractionMode((PlayerActivateModes)(((int)CurrentMode + 1) % 4));
-            }
+            // No activation while a building door fades to black
+            if (playerEnterExit && playerEnterExit.VitaDoorFading)
+                return;
 #endif
 
             // Do not do scene activation if player has cursor active over large HUD
@@ -1150,6 +1148,25 @@ namespace DaggerfallWorkshop.Game
         // Custom transition to store building data before entering building
         private void TransitionInterior(Transform doorOwner, StaticDoor door, bool doFade = false)
         {
+#if UNITY_PSP2
+            // Vita: fade to black first (PlayerEnterExit.VitaDoorFadeOut), then the transition
+            if (doFade)
+            {
+                StartCoroutine(VitaFadedTransitionInterior(doorOwner, door));
+                return;
+            }
+            VitaTransitionInteriorNow(doorOwner, door, false);
+        }
+
+        System.Collections.IEnumerator VitaFadedTransitionInterior(Transform doorOwner, StaticDoor door)
+        {
+            yield return StartCoroutine(playerEnterExit.VitaDoorFadeOut());
+            VitaTransitionInteriorNow(doorOwner, door, true);
+        }
+
+        void VitaTransitionInteriorNow(Transform doorOwner, StaticDoor door, bool doFade)
+        {
+#endif
             // Get building directory for location
             BuildingDirectory buildingDirectory = GameManager.Instance.StreamingWorld.GetCurrentBuildingDirectory();
             if (!buildingDirectory)

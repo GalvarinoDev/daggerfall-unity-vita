@@ -94,6 +94,11 @@ namespace DaggerfallWorkshop
                     // Example is the treasury in Daggerfall castle, some action records flow through the quest item marker
                     meshRenderer.enabled = false;
                 }
+
+#if !UNITY_PSP2   // Vita: only CulledGameObjectManager reads this cache (not in the Vita scene), and each add scans the whole
+                  // cache for destroyed objects (one native null check each): O(n^2) over a level's billboards in its build frame
+                ActiveGameObjectDatabase.RegisterBillboard(gameObject);
+#endif
             }
         }
 
@@ -300,6 +305,22 @@ namespace DaggerfallWorkshop
         /// <param name="record">Texture record index.</param>
         /// <param name="frame">Frame index.</param>
         /// <returns>Material.</returns>
+#if UNITY_PSP2
+        /// <summary>
+        /// Vita: builds (or finds cached) the atlas SetMaterial will ask for, same arguments, so a later billboard hits the cache.
+        /// Skipped when the given record has a mod replacement. LocationLoader calls it behind the loading screen.
+        /// </summary>
+        public static void VitaPrewarmAtlas(int archive, int record)
+        {
+            DaggerfallUnity dfUnity = DaggerfallUnity.Instance;
+            if (!dfUnity.MaterialReader.IsReady || !dfUnity.MaterialReader.AtlasTextures || dfUnity.MaterialReader.VitaHasAtlas(archive) || TextureReplacement.VitaHasBillboardReplacement(archive, record))
+                return;
+            Rect[] rects;
+            RecordIndex[] indices;
+            dfUnity.MaterialReader.GetMaterialAtlas(archive, 0, 4, 2048, out rects, out indices, 4, true, 0, false, true);
+        }
+#endif
+
         public override Material SetMaterial(int archive, int record, int frame = 0)
         {
             // Get DaggerfallUnity

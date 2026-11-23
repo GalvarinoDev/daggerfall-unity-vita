@@ -70,6 +70,9 @@ namespace Unity.Collections
             return new NativeArray<T>(new T[newLength + newLength / 4], newLength);
         }
 
+        /// <summary>The storage itself (VitaWodTerrain's card cache copies a tile straight into it).</summary>
+        internal T[] VitaArray { get { return array; } }
+
         public T this[int index]
         {
             get { return array[index]; }
@@ -263,7 +266,9 @@ namespace Unity.Jobs
         /// </summary>
         public static bool Deferred;
         /// <summary>Main-thread time Pump() spends per frame on deferred jobs.</summary>
-        public static float PumpBudgetMs = 6;
+        // TRIAL 2026-11-21 (revert candidate, was 6): a grid shift in a city (two tiles swapped while walking) ran 43.8-44.2 FPS, p99 53-71 ms
+        // at 6; 45.9-46.2 FPS, p99 40-42 at 3, the update 7.3 -> 10.3 s. Also LocationLoader's in-play budget.
+        public static float PumpBudgetMs = 3;
 
         internal sealed class Work
         {
@@ -383,6 +388,17 @@ namespace Unity.Jobs
         public static void Pump(float budgetMs)
         {
             Pump(budgetMs, null);
+        }
+
+        /// <summary>What the deferred queue holds (the test bot logs it with a long stall).</summary>
+        public static string VitaQueueInfo()
+        {
+            if (deferredQueue.Count == 0)
+                return "deferred queue empty";
+            Work head = deferredQueue.Peek();
+            Delegate body = head.item != null ? (Delegate)head.item : head.run;
+            return string.Format("deferred queue {0}, head {1} {2}/{3}", deferredQueue.Count,
+                body.Method.DeclaringType.Name + "." + body.Method.Name, head.next, head.count);
         }
 
         static void Pump(float budgetMs, Work target)

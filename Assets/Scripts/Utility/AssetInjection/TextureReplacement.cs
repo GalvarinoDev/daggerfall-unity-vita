@@ -1259,6 +1259,17 @@ namespace DaggerfallWorkshop.Utility.AssetInjection
             return false;
         }
 
+#if UNITY_PSP2
+        /// <summary>
+        /// Vita: whether Get[Mobile|Static]BillboardMaterial would use imported textures for this record (same first lookup, result cached).
+        /// </summary>
+        public static bool VitaHasBillboardReplacement(int archive, int record)
+        {
+            Texture2D tex, emission;
+            return DaggerfallUnity.Settings.AssetInjection && LoadFromCacheOrImport(archive, record, 0, true, true, out tex, out emission);
+        }
+#endif
+
         private static Texture2D GetTextureOrDefault(Material material, int propertyID)
         {
             return material.HasProperty(propertyID) ? (Texture2D)material.GetTexture(propertyID) : null;

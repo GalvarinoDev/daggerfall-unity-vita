@@ -32,11 +32,13 @@ public static class VitaDistantTerrain
                 Debug.Log("VITADT light far mesh started");
                 return;
             }
+#if VITA_MODS   // the reference port (DistantTerrain/) ships only in the VPK
             DistantTerrain.DistantTerrainBasicModeConfig.EnableBasicMode = true;
             GameObject go = new GameObject("DistantTerrain");
             DistantTerrain.DistantTerrain dt = go.AddComponent<DistantTerrain.DistantTerrain>();
             dt.ShaderDistantTerrainTilemap = Resources.Load<Shader>("DistantTerrain/DistantTerrainTilemap");
             Debug.Log("VITADT started, shader " + (dt.ShaderDistantTerrainTilemap != null));
+#endif
         };
     }
 }

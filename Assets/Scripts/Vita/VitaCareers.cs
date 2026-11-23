@@ -29,6 +29,8 @@ public static class VitaCareers
     }
 
     /// <summary>A new DFCareer for a CFG name, or null (no pack, or not baked: logged).</summary>
+    static readonly Dictionary<uint, byte[]> records = new Dictionary<uint, byte[]>();
+
     public static DFCareer Read(string cfgName)
     {
         if (pack == null)
@@ -41,12 +43,16 @@ public static class VitaCareers
         try
         {
             DFCareer career = null;
-            if (pack.Read(key, out memory, out data, out length))
+            // Every enemy set up asks for its career: one card read per career and session (records are small), a fresh object per call
+            byte[] bytes;
+            if (!records.TryGetValue(key, out bytes) && pack.Read(key, out memory, out data, out length))
             {
-                var bytes = new byte[length];
+                bytes = new byte[length];
                 Marshal.Copy(data, bytes, 0, length);
-                career = Parse(bytes, key);
+                records[key] = bytes;
             }
+            if (bytes != null)
+                career = Parse(bytes, key);
             if (career == null)
                 Debug.LogFormat("VITANATIVE miss career {0}", cfgName);
             return career;

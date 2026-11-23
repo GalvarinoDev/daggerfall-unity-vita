@@ -49,6 +49,9 @@ public class VitaFarTerrain : MonoBehaviour
 
     public static bool Hidden;          // test switch: renderer off, mesh kept
     public static bool OnTop;           // test switch: ZTest Always (draws over everything)
+    // A near tile promoted or switched on in play: rebuild on the next frame, not on that one (its 42 ms promote + this build + first draw
+    // made 115-130 ms town-walk frames). Test switch: bot word "farsameframe"
+    public static bool SameFrameBuild;
     // How much of the VitaFogDistance thickening WeatherManager.SetFog applies (1 = all, as without this component). It only exists to
     // fade VitaCulling's town cut, and it makes everything past ~360 m pure fog colour, so it goes to 0 while no town part is cut
     // and back to 1 when one is, over FogFadeSeconds (switching at once snapped). Near towns the far mesh, fogged the same way, fades out with the rest.
@@ -195,7 +198,8 @@ public class VitaFarTerrain : MonoBehaviour
         bool winter = DaggerfallUnity.Instance.WorldTime.Now.SeasonValue == DaggerfallDateTime.Seasons.Winter;
         int tiles = LoadedTiles();
         float sig = HeightSig(tiles);
-        if (world.MapPixelX != builtX || world.MapPixelY != builtY || winter != builtWinter || tiles != builtTiles || sig != builtSig)
+        bool deferred = !SameFrameBuild && Time.frameCount == StreamingWorld.VitaTileShownFrame && meshRenderer.enabled;
+        if (!deferred && (world.MapPixelX != builtX || world.MapPixelY != builtY || winter != builtWinter || tiles != builtTiles || sig != builtSig))
             Build(world.MapPixelX, world.MapPixelY, winter, tiles);
         meshRenderer.enabled = true;
         SetGlobals();
@@ -424,8 +428,10 @@ public class VitaFarTerrain : MonoBehaviour
         else if (climate == 226 || climate == 230) group = 1;                       // mountain
         else if (climate == 227 || climate == 228) group = 3;                       // swamp
         else group = 2;                                                             // woodland (231-233) and ocean
+#if VITA_MODS
         if (winter && ClimateSwaps.VitaSnowless(climate))
             winter = false;
+#endif
         Color32[] set = Colors[group * 3 + (winter ? 1 : 0)];
         if (water || climate == 223)
             return Colors[2 * 3 + (winter ? 1 : 0)][0];                            // the reference uses the woodland water tile

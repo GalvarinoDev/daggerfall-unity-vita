@@ -396,6 +396,14 @@ namespace DaggerfallWorkshop
                 return cm.material;
             }
 
+#if UNITY_PSP2
+            // TEMPORARY 2026-11-20 probe (bot word "leadlog"): a slow first material, wall time vs the main thread's own counters
+            long vitaT0 = System.Diagnostics.Stopwatch.GetTimestamp(), vitaRun0, vitaRun1;
+            int vitaGcs = System.GC.CollectionCount(0), vitaIntr0, vitaPre0, vitaRel0, vitaCpu0, vitaIntr1, vitaPre1, vitaRel1, vitaCpu1;
+            VitaWorldTextures.ProbeThread(out vitaRun0, out vitaIntr0, out vitaPre0, out vitaRel0, out vitaCpu0);
+            int vitaCore0, vitaCore1; long vitaIdle0, vitaAll0, vitaIdle1, vitaAll1;
+            VitaWorldTextures.ProbeIdle(out vitaCore0, out vitaIdle0, out vitaAll0);
+#endif
             Material material;
             GetTextureResults results;
 
@@ -544,9 +552,25 @@ namespace DaggerfallWorkshop
                 framesPerSecond = archive == FireWallsArchive ? 5 : 0, // Slow down fire walls
             };
             materialDict.Add(key, newcm);
+#if UNITY_PSP2
+            double vitaMs = (System.Diagnostics.Stopwatch.GetTimestamp() - vitaT0) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+            if (VitaProbeLog && vitaMs >= 20)
+            {
+                VitaWorldTextures.ProbeIdle(out vitaCore1, out vitaIdle1, out vitaAll1);
+                VitaWorldTextures.ProbeThread(out vitaRun1, out vitaIntr1, out vitaPre1, out vitaRel1, out vitaCpu1);
+                Debug.LogFormat("VITAMATSLOW {0}/{1}: {2:F1} ms, main core {10}->{11} idle {12:F1} ms, all cores idle {13:F1} ms, preempt {4} intr {5} waits {6} cpu moves {7}, gcs {8}, info {9} (ran {3:F1}, stale){14}",
+                    archive, record, vitaMs, (vitaRun1 - vitaRun0) / 1000.0, vitaPre1 - vitaPre0, vitaIntr1 - vitaIntr0, vitaRel1 - vitaRel0,
+                    vitaCpu1 - vitaCpu0, System.GC.CollectionCount(0) - vitaGcs, VitaWorldTextures.ProbeThreadResult,
+                    vitaCore0, vitaCore1, vitaCore0 == vitaCore1 ? (vitaIdle1 - vitaIdle0) / 1000.0 : -1, (vitaAll1 - vitaAll0) / 1000.0,
+                    VitaWorldTextures.ProbeSlowHook != null ? VitaWorldTextures.ProbeSlowHook(vitaT0, System.Diagnostics.Stopwatch.GetTimestamp()) : "");
+            }
+#endif
 
             return material;
         }
+#if UNITY_PSP2
+        public static bool VitaProbeLog;    // TEMPORARY 2026-11-20 probe switch
+#endif
 
         /// <summary>
         /// Gets Unity Material atlas from Daggerfall texture archive.
@@ -829,6 +853,12 @@ namespace DaggerfallWorkshop
         /// <param name="cachedMaterialOut">CachedMaterial out.</param>
         /// <param name="alphaIndex">Alpha index used if material needs to be loaded.</param>
         /// <returns>True if CachedMaterial found or loaded successfully.</returns>
+#if UNITY_PSP2
+        public bool VitaHasMaterial(int archive, int record)   // TEMPORARY probe 2026-11-21 (VITABAKELAPS)
+        {
+            return materialDict.ContainsKey(MakeTextureKey((short)archive, (byte)record, (byte)0));
+        }
+#endif
         public bool GetCachedMaterial(int archive, int record, int frame, out CachedMaterial cachedMaterialOut, int alphaIndex = -1)
         {
 #if UNITY_PSP2 && VITA_MODS
@@ -1032,10 +1062,17 @@ namespace DaggerfallWorkshop
             return result;
         }
 
+        // Vita: whether GetMaterialAtlas has this archive cached (prewarm callers skip their replacement lookups then)
+        public bool VitaHasAtlas(int archive)
+        {
+            return materialDict.ContainsKey(MakeTextureKey((short)archive, (byte)0, (byte)0, AtlasKeyGroup));
+        }
+
         public void VitaClearCacheExceptTilesets()
         {
             foreach (var item in materialDict.Where(x => x.Value.keyGroup != TileMapKeyGroup).ToList())
                 materialDict.Remove(item.Key);
+            VitaFlatBatch.ForgetCityMaterials();
         }
 
         // Vita: forget the tilesets (2048x2048 atlas each) of climates no terrain shows any more, e.g. after travelling to another climate

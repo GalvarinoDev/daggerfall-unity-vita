@@ -126,6 +126,11 @@ namespace DaggerfallWorkshop.Game.Utility
         void Start()
         {
             ApplyStartSettings();
+#if UNITY_PSP2 && !UNITY_EDITOR
+            // Memory-reset relaunch (VitaRelaunch): load the hidden save instead of the title
+            if (VitaRelaunch.TakeMarker())
+                StartMethod = StartMethods.LoadDaggerfallUnitySave;
+#endif
             SaveLoadManager.OnLoad += SaveLoadManager_OnLoad;
         }
 
@@ -518,6 +523,10 @@ namespace DaggerfallWorkshop.Game.Utility
 
         void LoadDaggerfallUnitySave()
         {
+#if UNITY_PSP2 && !UNITY_EDITOR
+            if (VitaRelaunch.TryBootLoad())
+                return;
+#endif
             if (SaveIndex == -1)
                 return;
 

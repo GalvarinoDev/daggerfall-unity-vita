@@ -16,6 +16,7 @@ Shader "Daggerfall/Vita/TreePalette" {
 		CGPROGRAM
 		#pragma target 3.0
 		#pragma surface surf Lambert vertex:vert addshadow nolightmap nodynlightmap nodirlightmap nometa noinstancing noambient
+		#pragma multi_compile __ VITA_FILL_2   // VitaLights: slots 2-3 empty, VitaFillVertexLights does half the work
 
 		sampler2D _MainTex;
 		sampler2D _PaletteTex;

@@ -64,6 +64,12 @@ namespace DaggerfallWorkshop.Game.Entity
         {
             ActiveGameObjectDatabase.VitaEnemyMayHaveJoined();  // the shared enemy list rebuilds before its next use
         }
+
+        void OnDestroy()
+        {
+            if (entity != null)
+                entity.VitaUnsubscribe();   // its static event subscriptions would keep it alive (DaggerfallEntity.VitaUnsubscribe)
+        }
 #endif
 
         void FixedUpdate()
@@ -306,6 +312,10 @@ namespace DaggerfallWorkshop.Game.Entity
         void SetEntityValue(DaggerfallEntity value)
         {
             RaiseOnSetEntityHandler(entity, value);
+#if UNITY_PSP2
+            if (entity != null && entity != value)
+                entity.VitaUnsubscribe();
+#endif
             entity = value;
         }
 

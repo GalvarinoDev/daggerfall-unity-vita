@@ -21,6 +21,17 @@ float2 VitaTownUV(float3 worldPos)
 // ShadeSHPerVertex/ShadeSHPerPixel do in gamma space. VITA_FILL_SKIP_01: the shader lights slots 0-1 per pixel itself
 half3 VitaFillVertexLights(float3 worldPos, half3 worldNormal)
 {
+    #if defined(VITA_FILL_2) && defined(VITA_FILL_SKIP_01)
+    // Slots 0-1 are lit per pixel by the shader and 2-3 are empty
+    half3 lights = half3(0, 0, 0);
+    #elif defined(VITA_FILL_2)
+    // VitaLights: slots 2-3 are empty (colour 0), so the same sum from slots 0-1
+    float3 l0 = (_VitaLightPos0.xyz - worldPos) * _VitaLightPos0.w, l1 = (_VitaLightPos1.xyz - worldPos) * _VitaLightPos1.w;
+    float2 q = max(float2(dot(l0, l0), dot(l1, l1)), 0.000001);
+    float2 ndotl = max(float2(0, 0), float2(dot(worldNormal, l0), dot(worldNormal, l1)) * rsqrt(q));
+    float2 diff = ndotl * saturate((1.0 - q) * 5.0) / (1.0 + 25.0 * q);
+    half3 lights = _VitaLightColor0.rgb * diff.x + _VitaLightColor1.rgb * diff.y;
+    #else
     float3 l0 = (_VitaLightPos0.xyz - worldPos) * _VitaLightPos0.w, l1 = (_VitaLightPos1.xyz - worldPos) * _VitaLightPos1.w;
     float3 l2 = (_VitaLightPos2.xyz - worldPos) * _VitaLightPos2.w, l3 = (_VitaLightPos3.xyz - worldPos) * _VitaLightPos3.w;
     float4 q = max(float4(dot(l0, l0), dot(l1, l1), dot(l2, l2), dot(l3, l3)), 0.000001);
@@ -30,6 +41,7 @@ half3 VitaFillVertexLights(float3 worldPos, half3 worldNormal)
         half3 lights = _VitaLightColor2.rgb * diff.z + _VitaLightColor3.rgb * diff.w;
     #else
         half3 lights = _VitaLightColor0.rgb * diff.x + _VitaLightColor1.rgb * diff.y + _VitaLightColor2.rgb * diff.z + _VitaLightColor3.rgb * diff.w;
+    #endif
     #endif
     // Per vertex for sprites; VITA_TOWN_PER_PIXEL: the shader samples it per pixel itself (terrain: vertices 6.4 m apart)
     #if defined(VITA_TOWN_LIGHTS) && !defined(VITA_TOWN_PER_PIXEL)
