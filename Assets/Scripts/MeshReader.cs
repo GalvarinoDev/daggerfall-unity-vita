@@ -253,12 +253,12 @@ namespace DaggerfallWorkshop
 #endif
 
 #if UNITY_PSP2
-        public static double VitaLastMaterialMs;   // TEMPORARY probe 2026-11-21 (VITABAKELAPS): GetCombinedMesh's material loop
-        public static bool VitaTriBoundsOld;   // test harness A/B (bot word "triboundsold")
+        public static double VitaLastMaterialMs;   // probe (VITABAKELAPS): GetCombinedMesh's material loop
+        public static bool VitaTriBoundsOld;   // test harness A/B
         public static int VitaLastNewMaterials;
-        public static double VitaLapArrays, VitaLapTris, VitaLapBounds, VitaLapVerts, VitaLapNormals;   // TEMPORARY probe 2026-11-21 (VITABAKELAPS)
-        public static double VitaLapUV, VitaLapCopy;   // TEMPORARY probe 2026-11-21 (VITABAKELAPS)
-        public static bool VitaBoundsRecalc;   // test harness A/B (bot word "boundsrecalc"): RecalculateBounds as before
+        public static double VitaLapArrays, VitaLapTris, VitaLapBounds, VitaLapVerts, VitaLapNormals;   // probe (VITABAKELAPS)
+        public static double VitaLapUV, VitaLapCopy;   // probe (VITABAKELAPS)
+        public static bool VitaBoundsRecalc;   // test harness A/B: RecalculateBounds as before
         static long vitaLap;
 #endif
         public Mesh GetCombinedMesh(
@@ -284,8 +284,8 @@ namespace DaggerfallWorkshop
                 return null;
 
             // Load materials
-#if UNITY_PSP2
-            long vitaMat0 = System.Diagnostics.Stopwatch.GetTimestamp();   // TEMPORARY probe 2026-11-21 (VITABAKELAPS)
+#if UNITY_PSP2 && VITA_PROBES
+            long vitaMat0 = System.Diagnostics.Stopwatch.GetTimestamp();   // probe (VITABAKELAPS)
             VitaLastNewMaterials = 0;
 #endif
             cachedMaterialsOut = new CachedMaterial[combinedModel.SubMeshes.Length];
@@ -295,8 +295,8 @@ namespace DaggerfallWorkshop
                 int archive = combinedModel.SubMeshes[i].TextureArchive;
                 int record = combinedModel.SubMeshes[i].TextureRecord;
                 textureKeysOut[i] = MaterialReader.MakeTextureKey((short)archive, (byte)record, (byte)0);
-#if UNITY_PSP2
-                if (!dfUnity.MaterialReader.VitaHasMaterial(archive, record))   // TEMPORARY probe 2026-11-21
+#if UNITY_PSP2 && VITA_PROBES
+                if (!dfUnity.MaterialReader.VitaHasMaterial(archive, record))   // probe
                     VitaLastNewMaterials++;
 #endif
 
@@ -310,48 +310,58 @@ namespace DaggerfallWorkshop
                     hasAnimationsOut = true;
             }
 
-#if UNITY_PSP2
+#if UNITY_PSP2 && VITA_PROBES
             VitaLastMaterialMs = (System.Diagnostics.Stopwatch.GetTimestamp() - vitaMat0) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
 #endif
             // Create mesh
-#if UNITY_PSP2
-            vitaLap = System.Diagnostics.Stopwatch.GetTimestamp();   // TEMPORARY probe
+#if UNITY_PSP2 && VITA_PROBES
+            vitaLap = System.Diagnostics.Stopwatch.GetTimestamp();   // probe
 #endif
             Mesh mesh = new Mesh();
             mesh.name = "CombinedMesh";
             mesh.vertices = combinedModel.Vertices;
-#if UNITY_PSP2
-            VitaLapVerts = (System.Diagnostics.Stopwatch.GetTimestamp() - vitaLap) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;   // TEMPORARY probe
+#if UNITY_PSP2 && VITA_PROBES
+            VitaLapVerts = (System.Diagnostics.Stopwatch.GetTimestamp() - vitaLap) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;   // probe
 #endif
             mesh.normals = combinedModel.Normals;
 #if UNITY_PSP2
-            VitaLapNormals = (System.Diagnostics.Stopwatch.GetTimestamp() - vitaLap) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;   // TEMPORARY probe
+#if VITA_PROBES
+            VitaLapNormals = (System.Diagnostics.Stopwatch.GetTimestamp() - vitaLap) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;   // probe
+#endif
             mesh.uv = combinedModel.UVs;
-            VitaLapUV = (System.Diagnostics.Stopwatch.GetTimestamp() - vitaLap) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;   // TEMPORARY probe
+#if VITA_PROBES
+            VitaLapUV = (System.Diagnostics.Stopwatch.GetTimestamp() - vitaLap) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;   // probe
+#endif
 #else
             mesh.uv = combinedModel.UVs;
 #endif
             mesh.subMeshCount = combinedModel.SubMeshes.Length;
-#if UNITY_PSP2
-            VitaLapArrays = (System.Diagnostics.Stopwatch.GetTimestamp() - vitaLap) * 1000.0 / System.Diagnostics.Stopwatch.Frequency; vitaLap = System.Diagnostics.Stopwatch.GetTimestamp();   // TEMPORARY probe
+#if UNITY_PSP2 && VITA_PROBES
+            VitaLapArrays = (System.Diagnostics.Stopwatch.GetTimestamp() - vitaLap) * 1000.0 / System.Diagnostics.Stopwatch.Frequency; vitaLap = System.Diagnostics.Stopwatch.GetTimestamp();   // probe
 #endif
 
             // Set submesh triangles
 #if UNITY_PSP2
             // Vita: one shared list, not a new int[] per submesh (a copy of every block's indices was garbage during city loads)
-            long vitaCopy = 0;   // TEMPORARY probe
+#if VITA_PROBES
+            long vitaCopy = 0;   // probe
+#endif
             for (int s = 0; s < mesh.subMeshCount; s++)
             {
                 var sub = combinedModel.SubMeshes[s];
-                long vitaC0 = System.Diagnostics.Stopwatch.GetTimestamp();   // TEMPORARY probe
+#if VITA_PROBES
+                long vitaC0 = System.Diagnostics.Stopwatch.GetTimestamp();   // probe
+#endif
                 vitaTriangles.Clear();
                 for (int t = 0; t < sub.PrimitiveCount * 3; t++)
                 {
                     vitaTriangles.Add(combinedModel.Indices[sub.StartIndex + t]);
                 }
-                vitaCopy += System.Diagnostics.Stopwatch.GetTimestamp() - vitaC0;   // TEMPORARY probe
+#if VITA_PROBES
+                vitaCopy += System.Diagnostics.Stopwatch.GetTimestamp() - vitaC0;   // probe
+#endif
                 // bounds once below (RecalculateBounds), not per submesh: a 60-submesh dock block spent ~47 ms here.
-                // TRIAL 2026-11-21 (revert candidate; bot word "triboundsold" = bounds per submesh, as before)
+                // TRIAL (revert candidate = bounds per submesh, as before)
                 mesh.SetTriangles(vitaTriangles, s, VitaTriBoundsOld);
             }
 #else
@@ -368,15 +378,15 @@ namespace DaggerfallWorkshop
 #endif
 
             // Finalise mesh
-#if UNITY_PSP2
-            VitaLapCopy = vitaCopy * 1000.0 / System.Diagnostics.Stopwatch.Frequency;   // TEMPORARY probe
-            VitaLapTris = (System.Diagnostics.Stopwatch.GetTimestamp() - vitaLap) * 1000.0 / System.Diagnostics.Stopwatch.Frequency; vitaLap = System.Diagnostics.Stopwatch.GetTimestamp();   // TEMPORARY probe
+#if UNITY_PSP2 && VITA_PROBES
+            VitaLapCopy = vitaCopy * 1000.0 / System.Diagnostics.Stopwatch.Frequency;   // probe
+            VitaLapTris = (System.Diagnostics.Stopwatch.GetTimestamp() - vitaLap) * 1000.0 / System.Diagnostics.Stopwatch.Frequency; vitaLap = System.Diagnostics.Stopwatch.GetTimestamp();   // probe
 #endif
             if (solveTangents) TangentSolver(mesh);
             if (lightmapUVs) AddLightmapUVs(mesh);
 #if UNITY_PSP2
             // The box of the vertices already in hand, not RecalculateBounds reading them back from the mesh (7.6 ms for a 20,842-vertex
-            // dock block in play). Same box: every vertex counts either way. TRIAL 2026-11-21 (revert candidate; bot word "boundsrecalc")
+            // dock block in play). Same box: every vertex counts either way. TRIAL (revert candidate)
             if (VitaBoundsRecalc || combinedModel.Vertices.Length == 0)
                 mesh.RecalculateBounds();
             else
@@ -397,8 +407,8 @@ namespace DaggerfallWorkshop
 #else
             mesh.RecalculateBounds();
 #endif
-#if UNITY_PSP2
-            VitaLapBounds = (System.Diagnostics.Stopwatch.GetTimestamp() - vitaLap) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;   // TEMPORARY probe
+#if UNITY_PSP2 && VITA_PROBES
+            VitaLapBounds = (System.Diagnostics.Stopwatch.GetTimestamp() - vitaLap) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;   // probe
 #endif
 
             return mesh;

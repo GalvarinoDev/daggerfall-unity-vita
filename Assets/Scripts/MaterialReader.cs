@@ -396,8 +396,8 @@ namespace DaggerfallWorkshop
                 return cm.material;
             }
 
-#if UNITY_PSP2
-            // TEMPORARY 2026-11-20 probe (bot word "leadlog"): a slow first material, wall time vs the main thread's own counters
+#if UNITY_PSP2 && VITA_PROBES
+            // probe: a slow first material, wall time vs the main thread's own counters
             long vitaT0 = System.Diagnostics.Stopwatch.GetTimestamp(), vitaRun0, vitaRun1;
             int vitaGcs = System.GC.CollectionCount(0), vitaIntr0, vitaPre0, vitaRel0, vitaCpu0, vitaIntr1, vitaPre1, vitaRel1, vitaCpu1;
             VitaWorldTextures.ProbeThread(out vitaRun0, out vitaIntr0, out vitaPre0, out vitaRel0, out vitaCpu0);
@@ -552,7 +552,7 @@ namespace DaggerfallWorkshop
                 framesPerSecond = archive == FireWallsArchive ? 5 : 0, // Slow down fire walls
             };
             materialDict.Add(key, newcm);
-#if UNITY_PSP2
+#if UNITY_PSP2 && VITA_PROBES
             double vitaMs = (System.Diagnostics.Stopwatch.GetTimestamp() - vitaT0) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
             if (VitaProbeLog && vitaMs >= 20)
             {
@@ -568,8 +568,10 @@ namespace DaggerfallWorkshop
 
             return material;
         }
-#if UNITY_PSP2
-        public static bool VitaProbeLog;    // TEMPORARY 2026-11-20 probe switch
+#if UNITY_PSP2 && VITA_PROBES
+        public static bool VitaProbeLog;    // probe switch
+#elif UNITY_PSP2
+        public const bool VitaProbeLog = false;     // probe code compiles away outside test builds
 #endif
 
         /// <summary>
@@ -854,7 +856,7 @@ namespace DaggerfallWorkshop
         /// <param name="alphaIndex">Alpha index used if material needs to be loaded.</param>
         /// <returns>True if CachedMaterial found or loaded successfully.</returns>
 #if UNITY_PSP2
-        public bool VitaHasMaterial(int archive, int record)   // TEMPORARY probe 2026-11-21 (VITABAKELAPS)
+        public bool VitaHasMaterial(int archive, int record)   // probe (VITABAKELAPS)
         {
             return materialDict.ContainsKey(MakeTextureKey((short)archive, (byte)record, (byte)0));
         }

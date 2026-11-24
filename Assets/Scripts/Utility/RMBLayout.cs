@@ -347,7 +347,7 @@ namespace DaggerfallWorkshop.Utility
 #if UNITY_PSP2
         // In play, a farm or town block's standalone billboards (animals, NPCs: ~2.4 ms each) cost 25-50 ms in the block's last step.
         // While a list is set here, AddMiscBlockFlats queues them instead, and the stepped builders make them over the next frames
-        // with VitaCreateDeferredFlats, the block back at the world origin as for the other steps. TRIAL 2026-11-21 (revert candidate).
+        // with VitaCreateDeferredFlats, the block back at the world origin as for the other steps. TRIAL (revert candidate).
         public struct VitaDeferredFlat
         {
             public DFBlock.RmbBlockFlatObjectRecord obj;
@@ -358,7 +358,7 @@ namespace DaggerfallWorkshop.Utility
 
         // One block step per frame across every stepped block builder: a WoD farm location's two blocks ran each step in the same frame
         // (step 2 40 + 8 ms, wodspawn frames ~71 ms). Callers wait with `do yield return null; while (!VitaBlockStepFree());`.
-        // TRIAL 2026-11-21 (revert candidate).
+        // TRIAL (revert candidate).
         public static bool VitaStepGateOff;    // test harness A/B: no gate
         static int vitaBlockStepFrame = -1;
         public static bool VitaBlockStepFree()
@@ -416,7 +416,9 @@ namespace DaggerfallWorkshop.Utility
                 return;
 
 #if UNITY_PSP2 && !UNITY_EDITOR
-            long vmImport = 0, vmBatch = 0, vmGo = 0, vmCrop = 0, vmCreate = 0, vmAudio = 0; int vmFlats = 0, vmGos = 0, vmCrops = 0;   // TEMPORARY probe 2026-11-21 (VITAMISCLAPS)
+#if VITA_PROBES
+            long vmImport = 0, vmBatch = 0, vmGo = 0, vmCrop = 0, vmCreate = 0, vmAudio = 0; int vmFlats = 0, vmGos = 0, vmCrops = 0;   // probe (VITAMISCLAPS)
+#endif
 #endif
             // Add block flats
             foreach (DFBlock.RmbBlockFlatObjectRecord obj in blockData.RmbBlock.MiscFlatObjectRecords)
@@ -425,8 +427,10 @@ namespace DaggerfallWorkshop.Utility
                 if (obj.TextureArchive == TextureReader.LightsTextureArchive)
                     continue;
 #if UNITY_PSP2 && !UNITY_EDITOR
+#if VITA_PROBES
                 long vm0 = System.Diagnostics.Stopwatch.GetTimestamp();
                 vmFlats++;
+#endif
 #endif
 
                 // Calculate position
@@ -437,8 +441,10 @@ namespace DaggerfallWorkshop.Utility
                 
                 GameObject go = MeshReplacement.ImportCustomFlatGameobject(obj.TextureArchive, obj.TextureRecord, billboardPosition, flatsParent);
 #if UNITY_PSP2 && !UNITY_EDITOR
+#if VITA_PROBES
                 long vm1 = System.Diagnostics.Stopwatch.GetTimestamp();
                 vmImport += vm1 - vm0;
+#endif
                 // Plain flats go into the block's flat batches, no billboard object (VitaFlatBatch.BuildCityBlock)
                 if (go == null && VitaFlatBatch.IsWinterCrop(obj.TextureArchive))
                 {
@@ -450,10 +456,14 @@ namespace DaggerfallWorkshop.Utility
                 }
                 if (go == null && obj.FactionID == 0 && VitaFlatBatch.AddCityFlat(obj.TextureArchive, obj.TextureRecord, billboardPosition))
                 {
+#if VITA_PROBES
                     vmBatch += System.Diagnostics.Stopwatch.GetTimestamp() - vm1;
+#endif
                     continue;
                 }
+#if VITA_PROBES
                 vmGos++;
+#endif
 #endif
 #if UNITY_PSP2
                 if (go == null && VitaDeferFlats != null)
@@ -466,24 +476,32 @@ namespace DaggerfallWorkshop.Utility
                 {
                     // Add standalone billboard gameobject
 #if UNITY_PSP2 && !UNITY_EDITOR
+#if VITA_PROBES
                     long vg0 = System.Diagnostics.Stopwatch.GetTimestamp();
+#endif
 #endif
                     go = GameObjectHelper.CreateDaggerfallBillboardGameObject(obj.TextureArchive, obj.TextureRecord, flatsParent);
                     go.transform.position = billboardPosition;
                     AlignBillboardToBase(go);
 #if UNITY_PSP2 && !UNITY_EDITOR
+#if VITA_PROBES
                     vmCreate += System.Diagnostics.Stopwatch.GetTimestamp() - vg0;
+#endif
 #endif
                 }
 
 #if UNITY_PSP2 && !UNITY_EDITOR
+#if VITA_PROBES
                 long va0 = System.Diagnostics.Stopwatch.GetTimestamp();
+#endif
 #endif
                 // Add animal sound
                 if (obj.TextureArchive == TextureReader.AnimalsTextureArchive)
                     GameObjectHelper.AddAnimalAudioSource(go, obj.TextureRecord);
 #if UNITY_PSP2 && !UNITY_EDITOR
+#if VITA_PROBES
                 vmAudio += System.Diagnostics.Stopwatch.GetTimestamp() - va0;
+#endif
 #endif
 
                 // If flat record has a non-zero faction id, then it's an exterior NPC
@@ -501,21 +519,28 @@ namespace DaggerfallWorkshop.Utility
                     QuestMachine.Instance.SetupIndividualStaticNPC(go, obj.FactionID);
                 }
 #if UNITY_PSP2 && !UNITY_EDITOR
+#if VITA_PROBES
                 vmGo += System.Diagnostics.Stopwatch.GetTimestamp() - vm1;
+#endif
 #endif
             }
 #if UNITY_PSP2 && !UNITY_EDITOR
 
+#if VITA_PROBES
             long vc0 = System.Diagnostics.Stopwatch.GetTimestamp();
+#endif
             foreach (DFBlock.RmbBlock3dObjectRecord obj in blockData.RmbBlock.Misc3dObjectRecords)
             {
                 if (VitaFlatBatch.IsCropField(obj.ModelIdNum))
                 {
+#if VITA_PROBES
                     vmCrops++;
+#endif
                     VitaFlatBatch.AddCropField(obj.ModelIdNum, new Vector3(obj.XPos, -obj.YPos + propsOffsetY, obj.ZPos + BlocksFile.RMBDimension) * MeshReader.GlobalScale,
                         blockData.Name, flatsParent.parent, flatsParent);
                 }
             }
+#if VITA_PROBES
             vmCrop = System.Diagnostics.Stopwatch.GetTimestamp() - vc0;
             if (StreamingWorld.VitaPromoteLog)
             {
@@ -523,6 +548,7 @@ namespace DaggerfallWorkshop.Utility
                 Debug.LogFormat("VITAMISCLAPS {0}: import {1:F1} ({2} flats), batched {3:F1}, objects {4:F1} ({5}: create {8:F1}, audio {9:F1}), crops {6:F1} ({7})",
                     blockData.Name, vmImport * vf, vmFlats, vmBatch * vf, vmGo * vf, vmGos, vmCrop * vf, vmCrops, vmCreate * vf, vmAudio * vf);
             }
+#endif
 #endif
         }
 

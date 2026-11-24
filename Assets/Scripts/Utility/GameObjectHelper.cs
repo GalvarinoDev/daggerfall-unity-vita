@@ -259,8 +259,8 @@ namespace DaggerfallWorkshop.Utility
         public static bool VitaDeferColliders;
         static readonly List<GameObject> vitaDeferredColliders = new List<GameObject>();
 
-        // Cooking options for those colliders (test harness A/B, bot word "cook=N"): 0 = Unity's default (fast simulation + cleaning + welding),
-        // 1 = cleaning + welding, 2 = cleaning only, 3 = none. 2 (trial, 2026-11-20): a town block's cook 102-106 -> 30 ms, no memory cost
+        // Cooking options for those colliders (test harness A/B): 0 = Unity's default (fast simulation + cleaning + welding),
+        // 1 = cleaning + welding, 2 = cleaning only, 3 = none. 2 (trial): a town block's cook 102-106 -> 30 ms, no memory cost
         public static int VitaCookMode = 2;
 
         public static void VitaAddDeferredColliders()
@@ -372,7 +372,7 @@ namespace DaggerfallWorkshop.Utility
         // An inactive GameObject with MeshFilter + MeshRenderer + DaggerfallBillboard, never shown or set up, kept outside the scenes.
         // AddComponent<DaggerfallBillboard> alone cost ~2.3 ms per billboard on the Vita (9 farm animals: 21 ms in one frame); a copy of
         // this template is the same object for ~0.4 ms. Instantiate copies it inactive, so nothing runs before it is named, parented
-        // and switched on, as with a new GameObject. TRIAL 2026-11-18 (revert candidate).
+        // and switched on, as with a new GameObject. TRIAL (revert candidate).
         public static bool VitaBillboardCloneOff;   // test harness A/B: AddComponent as upstream
         static GameObject vitaBillboardTemplate;
         static GameObject VitaNewBillboard(string name, Transform parent)
@@ -616,10 +616,14 @@ namespace DaggerfallWorkshop.Utility
             if (!DaggerfallUnity.Instance.IsReady)
                 yield break;
 
-            long vt0 = System.Diagnostics.Stopwatch.GetTimestamp();   // TEMPORARY probe 2026-11-21 (VITABLOCKLAPS town)
+#if VITA_PROBES
+            long vt0 = System.Diagnostics.Stopwatch.GetTimestamp();   // probe (VITABLOCKLAPS town)
+#endif
             GameObject go = RMBLayout.CreateBaseGameObject(ref blockData, layoutX, layoutY, cloneFrom);
+#if VITA_PROBES
             if (StreamingWorld.VitaPromoteLog)
                 Debug.LogFormat("VITABLOCKLAPS town {0} step1: base {1:F1}", blockData.Name, (System.Diagnostics.Stopwatch.GetTimestamp() - vt0) * 1000.0 / System.Diagnostics.Stopwatch.Frequency);
+#endif
             VitaDeferColliders = false;
             if (!go)
                 yield break;
@@ -632,23 +636,33 @@ namespace DaggerfallWorkshop.Utility
             if (!go || !parent)
                 yield break;    // the location went away (go went with it)
 
+#if VITA_PROBES
             long vs0 = System.Diagnostics.Stopwatch.GetTimestamp();
+#endif
             VitaPlaceBlockStep(go, null, Vector3.zero);
             RMBLayout.AddLights(ref blockData, flatsNode, lightsNode, lightsBillboardBatch);
+#if VITA_PROBES
             long vs1 = System.Diagnostics.Stopwatch.GetTimestamp();
+#endif
             RMBLayout.AddNatureFlats(ref blockData, flatsNode, natureBillboardBatch, climateNature, climateSeason);
+#if VITA_PROBES
             long vs2 = System.Diagnostics.Stopwatch.GetTimestamp();
+#endif
             VitaPlaceBlockStep(go, parent, localPosition);
+#if VITA_PROBES
             if (StreamingWorld.VitaPromoteLog)
             {
                 double vf = 1000.0 / System.Diagnostics.Stopwatch.Frequency;
                 Debug.LogFormat("VITABLOCKLAPS town {0} step2: lights {1:F1}, nature {2:F1}, place {3:F1}", blockData.Name, (vs1 - vs0) * vf, (vs2 - vs1) * vf, (System.Diagnostics.Stopwatch.GetTimestamp() - vs2) * vf);
             }
+#endif
             do yield return null; while (!RMBLayout.VitaBlockStepFree());   // one block step per frame
             if (!go || !parent)
                 yield break;
 
+#if VITA_PROBES
             long vm0 = System.Diagnostics.Stopwatch.GetTimestamp();
+#endif
             VitaPlaceBlockStep(go, null, Vector3.zero);
             List<RMBLayout.VitaDeferredFlat> deferred = RMBLayout.VitaFlatDeferOff ? null : new List<RMBLayout.VitaDeferredFlat>();
             RMBLayout.VitaDeferFlats = deferred;
@@ -660,19 +674,27 @@ namespace DaggerfallWorkshop.Utility
             {
                 RMBLayout.VitaDeferFlats = null;
             }
+#if VITA_PROBES
             long vm1 = System.Diagnostics.Stopwatch.GetTimestamp();
+#endif
             RMBLayout.AddExteriorBlockFlats(ref blockData, flatsNode, lightsNode, mapId, locationIndex, climateNature, climateSeason);
+#if VITA_PROBES
             long vm2 = System.Diagnostics.Stopwatch.GetTimestamp();
+#endif
 #if !UNITY_EDITOR
             VitaFlatBatch.BuildCityBlock(go);
 #endif
+#if VITA_PROBES
             long vm3 = System.Diagnostics.Stopwatch.GetTimestamp();
+#endif
             VitaPlaceBlockStep(go, parent, localPosition);
+#if VITA_PROBES
             if (StreamingWorld.VitaPromoteLog)
             {
                 double vf = 1000.0 / System.Diagnostics.Stopwatch.Frequency;
                 Debug.LogFormat("VITABLOCKLAPS town {0} step3: misc {1:F1}, exterior {2:F1}, flatbatch {3:F1}, place {4:F1}", blockData.Name, (vm1 - vm0) * vf, (vm2 - vm1) * vf, (vm3 - vm2) * vf, (System.Diagnostics.Stopwatch.GetTimestamp() - vm3) * vf);
             }
+#endif
             // the block's standalone billboards, ~8 ms of them per frame (RMBLayout.VitaDeferFlats)
             for (int i = 0; deferred != null && i < deferred.Count; )
             {

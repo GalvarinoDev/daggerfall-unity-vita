@@ -162,7 +162,7 @@ namespace DaggerfallWorkshop.Game.UserInterface
 #if UNITY_PSP2
                 // More than 24 effects (the same spells cast again and again) put icons past the pool. AlignIcons skips those, this didn't:
                 // on PC that is an IndexOutOfRangeException each blink, on the Vita (no bounds checks in the IL2CPP code) a write past the
-                // end of the array, which crashes or hangs the game (2026-11-22)
+                // end of the array, which crashes or hangs the game
                 if (spell.expiring && !spell.isItem && (VitaBlinkUnchecked || spell.poolIndex < maxIconPool))
 #else
                 if (spell.expiring && !spell.isItem)

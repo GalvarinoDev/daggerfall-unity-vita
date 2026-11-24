@@ -14,6 +14,16 @@ Il port gira sul player Unity della Vita stessa, quindi non viene emulato nulla.
 
 ## Novità
 
+### v.0.4.1-alpha
+
+- Cinese: il testo piccolo nel menu rapido, nell'anello delle azioni, nella finestra dello stile dell'HUD, nella finestra degli effetti e in quella dei comandi non perde più tratti, e le informazioni sugli oggetti nell'inventario ora stanno in un riquadro con cornice sotto il ritratto. I testi di aiuto lunghi nella creazione del personaggio stanno di nuovo nello schermo, e il pulsante per finire si vede. Grazie a Lin per le segnalazioni.
+- Tornano le rocce e le montagne di World of Daggerfall. Mancavano dalla 0.3.x.
+- SphincterVision Snowless Swamp and Jungle (asphinctersayswhat) sostituisce l'opzione senza neve che avevo fatto per la Vita: d'inverno paludi e giungle mantengono terreno ed edifici senza neve, e lì piove invece di nevicare. Se usavi la vecchia opzione, attiva la nuova mod in Mods.
+- VPK più leggero: il codice di test non viene più distribuito con il gioco.
+
+<details>
+<summary>Versioni precedenti</summary>
+
 ### v.0.4.0-alpha
 
 - Nuovi comandi. Tieni premuto L per un menu rapido con armi, incantesimi e oggetti, e tieni premuto giù sulla croce direzionale per un anello delle azioni con Parla, Info, Prendi, Ruba, Riposa e le mappe. Sinistra e destra sulla croce tengono quattro scorciatoie. Vedi [Comandi](#comandi). Anche il manuale nella LiveArea mostra la nuova disposizione.
@@ -25,9 +35,6 @@ Il port gira sul player Unity della Vita stessa, quindi non viene emulato nulla.
 - Dragon Rider: caricare un salvataggio fatto in volo ti rimette alla stessa altezza dal suolo.
 - Gli alberi troppo lontani per essere visti non vengono più disegnati, e le foreste vanno più veloci.
 - La sensibilità visuale è più alta di serie. Puoi cambiarla nel menu di pausa.
-
-<details>
-<summary>Versioni precedenti</summary>
 
 ### v.0.3.2-alpha
 
@@ -162,6 +169,7 @@ Dragon Rider e Travel Options sono pesanti per la Vita e possono abbassare il fr
 | Low Poly Trees | 5 | Kamer (SquidKamer) | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/380) |
 | Redguards of Hammerfell | 0.6 | WilhelmBlack | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/666) |
 | RMB Resource Pack | 0.3.0 | molti creatori, caricato da Cliffworms e mantenuto da carademono | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/528), [GitHub](https://github.com/drcarademono/rmb-resource-pack) |
+| SphincterVision Snowless Swamp and Jungle | 1.2.1 | asphinctersayswhat | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/735) |
 | Travel Options | 1.11 | Hazelnut | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/122), [GitHub](https://github.com/ajrb/dfunity-mods) |
 | Vanilla Friendly Loading Screens | 1.1 | WilhelmBlack | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/838) |
 | Windmills of Daggerfall | 2.2 | Kamer (SquidKamer) | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/33) |
@@ -171,7 +179,7 @@ Dragon Rider e Travel Options sono pesanti per la Vita e possono abbassare il fr
 
 Ho chiesto il permesso all'autore o al responsabile di ogni mod. Se un autore non era raggiungibile ma la mod è sotto licenza MIT, è inclusa lo stesso. Se hai creato una di queste mod e preferisci che venga tolta dal port, apri una issue e la toglierò.
 
-Due sono nuove per la Vita: Old Masters of Tamriel, una serie di dipinti di pubblico dominio da Wikimedia Commons, e Snowless, che d'inverno tiene verdi paludi, giungle e boschi, con la pioggia al posto della neve.
+Una è nuova per la Vita: Old Masters of Tamriel, una serie di dipinti di pubblico dominio da Wikimedia Commons.
 
 World of Daggerfall - Terrain e Distant Terrain sono quelle che costano più frame rate.
 
@@ -255,7 +263,7 @@ Questi autori hanno permesso alle loro mod di arrivare sulla Vita. La pagina di 
 - [AJ](https://github.com/AJ170) e il server PS Vita Forever.
 - [Vwing](https://github.com/Vwing) per le idee prese dal port Android di Daggerfall Unity che ha realizzato.
 - [Kenney](https://www.kenney.nl) per il pacchetto [Input Prompts](https://kenney.nl/assets/input-prompts) (CC0). Le icone dei tasti nel menu rapido si basano su quello.
-- [shoui520](https://github.com/shoui520) per [vita-agent-use](https://github.com/shoui520/vita-agent-use). L'ho usato per installare build di prova sulla mia Vita e farci girare un bot di notte, perché il gioco è grande più o meno come il Regno Unito e non posso visitare ogni posto da solo. Così sono venuti fuori tanti crash e punti lenti.
+- [shoui520](https://github.com/shoui520) per [vita-agent-use](https://github.com/shoui520/vita-agent-use). Permette a un assistente IA di controllare una Vita, e l'ho usato con uno per stress test e diagnostica hardware: installare build di prova, farci girare un bot di notte e poi leggere i dump dei crash e i log degli FPS. Il gioco è grande più o meno come il Regno Unito e non posso visitare ogni posto da solo, così sono venuti fuori tanti crash e punti lenti che a mano non avrei mai trovato.
 
 ## Licenza
 

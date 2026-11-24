@@ -1,7 +1,7 @@
 // Project:         Daggerfall Unity - PS Vita port
 // License:         MIT License (http://www.opensource.org/licenses/mit-license.php)
 //
-// Building interiors without re-cooking the town's colliders (trial, 2026-11-12). Upstream switches the whole exterior off on the way
+// Building interiors without re-cooking the town's colliders (trial). Upstream switches the whole exterior off on the way
 // into a building; on the way out every static MeshCollider in it is cooked again (Unity 2018.2 keeps no cooked data): ~3 s in a city.
 // Moving a static collider is ~0.1 ms, reparenting or switching it off is a full cook. So on entry the exterior root stays active and
 // everything is switched off except the chain of objects down to each static MeshCollider: on that chain behaviours are disabled with

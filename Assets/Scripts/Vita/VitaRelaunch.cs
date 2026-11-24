@@ -10,7 +10,7 @@
 // nothing building, no Travel Options journey, saving not prevented), and not in the first minutes after a relaunch.
 // Not in the save, so it changes across a relaunch: music position, civilians and ambient spawns, HUD messages. Camera pitch and the weather
 // go into the marker and are set again after the load (the save keeps the weather too; the marker copy is a check).
-// The restart looks like one load (2026-11-16): the loading picture shown before it is named in the marker, so the next boot draws the same
+// The restart looks like one load: the loading picture shown before it is named in the marker, so the next boot draws the same
 // picture from its first frame (VitaBootSplash) through the load (VitaLoadingWindow), with no boot music (vita/bootmusic checks the
 // marker), no launcher (SceneControl) and no title song.
 // A Travel Options journey has no doors and streams ground fast: below the low level it is stopped, the relaunch follows at the first
@@ -30,13 +30,13 @@ using DaggerfallWorkshop.Utility;
 
 public class VitaRelaunch : MonoBehaviour
 {
-    // From a 3.4 h walking soak (2026-11-13): free main never went below 42 MB on arriving in a town and a big-city walk cost up to
+    // From a 3.4 h walking soak: free main never went below 42 MB on arriving in a town and a big-city walk cost up to
     // 25 MB (lowest 28 MB); one crash came with 20-23 MB still free (a single bigger allocation failed), mesh/texture allocations fail near
     // 10 MB. Low = after a door or load, critical = any time in play.
     public static long LowFreeMain = 30L << 20;
     public static long CriticalFreeMain = 22L << 20;
     // Video memory: when CDRAM runs out Unity moves textures to main memory, and when that fails render targets and shader programs can't
-    // be made (a 2026-11-16 crash: a clear on the render thread with no uniform buffer, after free CDRAM had been at 6.7 MB). Trial values,
+    // be made (one crash was a clear on the render thread with no uniform buffer, after free CDRAM had been at 6.7 MB). Trial values,
     // to be set from a measured run.
     public static long LowFreeCdram = 8L << 20;
     public static long CriticalFreeCdram = 4L << 20;
@@ -386,7 +386,7 @@ public class VitaRelaunch : MonoBehaviour
         yield return null;
         yield return null;      // the window drawn before the save's long frames
         // The loading window is copied for the next boot before this frame is shown, then the frame is cleared: what the player sees
-        // is black with a notice (user, 2026-11-16: the dark restart looked like the Vita switching off)
+        // is black with a notice (the dark restart looked like the Vita switching off)
         yield return new WaitForEndOfFrame();
         SaveScreen();
         GL.Clear(true, true, Color.black);

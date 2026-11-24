@@ -13,9 +13,9 @@
 // Cities (BuildCity, from StreamingWorld when VitaCityMerge is off): the same per block CombinedModels, cells keyed by default texture key.
 // DaggerfallMesh.SetClimate asks OnClimate for those meshes: windows (day/night) are never in the atlas, so dusk only swaps the other
 // submeshes, and a season change refills the cells with the new season's textures (same sizes) instead of dropping the atlas.
-// Windows (2026-11-20): city window textures get cells in the same atlas and one more submesh per block with a second atlas material
+// Windows: city window textures get cells in the same atlas and one more submesh per block with a second atlas material
 // (_EMISSION, the windows' shared emission palette). Their day/night look is only the shared emission colour, which OnClimate copies
-// from the new window material: ~50 window draws at a night street became one per block. Test switch WindowsOff (bot word "winatlasoff").
+// from the new window material: ~50 window draws at a night street became one per block. Test switch WindowsOff.
 // In play (a town or hamlet streamed in with no loading screen) BuildCityStaged spreads the same work over frames (~4 ms each): it was one
 // frame of 83-820 ms. The blocks draw their upstream submeshes until their atlas submesh is in, which looks the same.
 
@@ -87,7 +87,7 @@ public class VitaAtlas : MonoBehaviour
         public int CellH { get { return Cell(height); } }
     }
 
-    // Trial 2026-11-19 (revert candidate): small power-of-two sides tiled to 2^MaxLod. Test switch (bot word "tileoff")
+    // Trial (revert candidate): small power-of-two sides tiled to 2^MaxLod. A test switch turns it off.
     public static bool TileSmallOff;
     static int Cell(int side)
     {
@@ -406,7 +406,7 @@ public class VitaAtlas : MonoBehaviour
         rects.Clear();
         for (int i = 0; i < mesh.vertexCount; i++)
             rects.Add(Vector4.zero);
-        // Shared lists (2026-11-17): per-submesh int[] copies + the merged ToArray were ~4 copies of every block's indices in garbage per city
+        // Shared lists: per-submesh int[] copies + the merged ToArray were ~4 copies of every block's indices in garbage per city
         int submeshesBefore = mesh.subMeshCount;
         cityMerged.Clear();
         cityWindows.Clear();

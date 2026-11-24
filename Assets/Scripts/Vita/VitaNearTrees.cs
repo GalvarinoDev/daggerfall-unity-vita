@@ -26,7 +26,7 @@ namespace DaggerfallWorkshop
         const int bucketsPerSide = tileDim / bucketTiles;
         const int treesPerFrame = 24;       // build budget (VitaTreeBudgetOff)
         // Build budget in time instead: 24 trees plus a mesh upload were 20-36 ms frames every few seconds while walking. About this many ms
-        // of trees per frame (at least one), and the upload on a frame of its own once they have used it. Test switch: bot word "treebudgetoff"
+        // of trees per frame (at least one), and the upload on a frame of its own once they have used it. A test switch turns it off.
         const float treeBuildMs = 5f;
         public static bool VitaTreeBudgetOff;
         const int maxVertices = 65000;      // 16-bit indices
@@ -675,7 +675,7 @@ namespace DaggerfallWorkshop
         static readonly List<int> droppedAtlases = new List<int>();
         // Released atlases stay loaded while the world is up and CDRAM has room: walking a town released an atlas after 10 s and the next
         // cell loaded it again (card read + RGBA expand + upload on one frame): 95-409 ms render frames. The town load already holds them
-        // all, so keeping them adds nothing to the peak. Test switch: bot word "keepatlasoff"
+        // all, so keeping them adds nothing to the peak. A test switch turns it off.
         const long keepAtlasMinFreeCdram = 16L << 20;
         public static bool VitaKeepAtlasOff;
 

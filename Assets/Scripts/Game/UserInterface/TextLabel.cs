@@ -107,7 +107,11 @@ namespace DaggerfallWorkshop.Game.UserInterface
         public DaggerfallFont Font
         {
             get { return font; }
+#if UNITY_PSP2
+            set { font = value; VitaApplyScale(); RefreshLayout(); }
+#else
             set { font = value; RefreshLayout(); }
+#endif
         }
 
         public string Text
@@ -194,10 +198,30 @@ namespace DaggerfallWorkshop.Game.UserInterface
             get { return textScale; }
             set
             {
+#if UNITY_PSP2
+                vitaRequestedScale = value;
+                VitaApplyScale();
+#else
                 textScale = Math.Max(0.1f, value); // Math.Min(2.0f, value));
+#endif
                 RefreshLayout();
             }
         }
+
+#if UNITY_PSP2
+        // The Chinese glyph pack is a point-filtered 1-bit atlas: drawn under one screen pixel per font pixel, sampling drops strokes.
+        // A label in it keeps at least that scale for its glyphs, layout, wrapping and line height, so its text can come out larger than asked.
+        float vitaRequestedScale = 1.0f;
+        void VitaApplyScale()
+        {
+            float scale = vitaRequestedScale;
+            if (font != null && font.IsSDFCapable)
+                // LocalScale is the label's screen pixels per UI unit (less in windows drawn below the screen scale). It stays (1, 1) until the
+                // first draw, so use the screen scale until then; otherwise text laid out in Setup gets rows spaced for 2.72x glyphs
+                scale = Math.Max(scale, font.SDFInfo.pointSize / (font.GlyphHeight * (LocalScale.y > 1 ? LocalScale.y : Screen.height / 200f)));
+            textScale = Math.Max(0.1f, scale);
+        }
+#endif
 
         public TextLabel(DaggerfallFont font = null)
         {
@@ -225,6 +249,9 @@ namespace DaggerfallWorkshop.Game.UserInterface
             // Do this before drawing so that even unparented label get a chance to recalibrate if needed
             if (font.IsSDFCapable != previousSDFState || previousLocalScale != LocalScale)
             {
+#if UNITY_PSP2
+                VitaApplyScale();
+#endif
                 RefreshLayout();
                 previousSDFState = font.IsSDFCapable;
                 previousLocalScale = LocalScale;

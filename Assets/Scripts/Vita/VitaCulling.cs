@@ -120,7 +120,7 @@ public class VitaCulling : MonoBehaviour
 
     // Block models (also VitaCityMerge's) and flats of a town; editor-marker flats stay hidden, so they are never touched
     static VitaCulling instance;
-    public static bool AddTownStagedOff;    // test harness A/B (bot word "addtownstagedoff"): a town's renderers in one frame in play, as before
+    public static bool AddTownStagedOff;    // test harness A/B: a town's renderers in one frame in play, as before
 
     static void AddTown(GameObject location, bool allowYield)
     {
@@ -128,7 +128,7 @@ public class VitaCulling : MonoBehaviour
         // stay hidden until UnPreCull shows them and the rest stay drawn, as they are while the town is being built
         if (allowYield && !VitaLoadingWindow.Showing && !AddTownStagedOff && instance)
         {
-            instance.StartCoroutine(StreamingWorld.VitaCoTimed("culltown", AddTownStaged(location)));   // TEMPORARY probe wrapper 2026-11-21
+            instance.StartCoroutine(StreamingWorld.VitaCoTimed("culltown", AddTownStaged(location)));   // probe wrapper
             return;
         }
         var list = new List<TownRenderer>();

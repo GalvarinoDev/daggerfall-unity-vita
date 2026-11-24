@@ -12,6 +12,16 @@ This is an alpha, so expect bugs. Back up your saves before updating.
 
 ## Changelog
 
+### v.0.4.1-alpha
+
+- Chinese: small text in the quick menu, the action ring, the HUD style box, the effects window and the controls window no longer loses strokes, and the inventory's item info now sits in a framed box under the portrait. Long help texts in character creation fit on the screen again, so the Finish button shows. Thanks to Lin for the reports.
+- World of Daggerfall's rocks and mountains are back. They had been missing since 0.3.x.
+- SphincterVision Snowless Swamp and Jungle (asphinctersayswhat) replaces the snowless option I made for the Vita: in winter, swamps and jungles keep snow-free ground and buildings, and it rains there instead of snowing. If you used the old option, turn the new mod on in Mods.
+- Smaller VPK: the testing code no longer ships with the game.
+
+<details>
+<summary>Older versions</summary>
+
 ### v.0.4.0-alpha
 
 - New controls. Hold L for a quick menu of your weapons, spells and items, and hold D-pad Down for an action ring with Talk, Info, Grab, Steal, Rest and the maps. D-pad Left and Right hold four hotkeys. See [Controls](#controls). The manual on the LiveArea has the new layout too.
@@ -23,9 +33,6 @@ This is an alpha, so expect bugs. Back up your saves before updating.
 - Dragon Rider: loading a save made in flight puts you back at the same height above the ground.
 - Trees too far away to see are no longer drawn, which speeds up forests.
 - Look sensitivity is higher by default. Change it in the pause menu.
-
-<details>
-<summary>Older versions</summary>
 
 ### v.0.3.2-alpha
 
@@ -160,6 +167,7 @@ Dragon Rider and Travel Options are heavy on the Vita and can lower the frame ra
 | Low Poly Trees | 5 | Kamer (SquidKamer) | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/380) |
 | Redguards of Hammerfell | 0.6 | WilhelmBlack | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/666) |
 | RMB Resource Pack | 0.3.0 | many asset creators, uploaded by Cliffworms and maintained by carademono | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/528), [GitHub](https://github.com/drcarademono/rmb-resource-pack) |
+| SphincterVision Snowless Swamp and Jungle | 1.2.1 | asphinctersayswhat | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/735) |
 | Travel Options | 1.11 | Hazelnut | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/122), [GitHub](https://github.com/ajrb/dfunity-mods) |
 | Vanilla Friendly Loading Screens | 1.1 | WilhelmBlack | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/838) |
 | Windmills of Daggerfall | 2.2 | Kamer (SquidKamer) | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/33) |
@@ -169,7 +177,7 @@ Dragon Rider and Travel Options are heavy on the Vita and can lower the frame ra
 
 Each mod's author or project lead was asked for permission. Where an author couldn't be reached but the mod is under the MIT license, it's still included. If you made one of these mods and would prefer it taken out of the port, open an issue and I'll remove it.
 
-Two are new for the Vita: Old Masters of Tamriel, a set of public-domain paintings from Wikimedia Commons, and Snowless, which keeps swamps, jungles and woodlands green in winter with rain instead of snow.
+One is new for the Vita: Old Masters of Tamriel, a set of public-domain paintings from Wikimedia Commons.
 
 World of Daggerfall - Terrain and Distant Terrain cost the most frame rate.
 
@@ -284,7 +292,7 @@ These authors let their mods come to the Vita. Each mod's own page is linked und
 - [AJ](https://github.com/AJ170) and the PS Vita Forever server.
 - [Vwing](https://github.com/Vwing) for ideas from their Android port of Daggerfall Unity.
 - [Kenney](https://www.kenney.nl) for the [Input Prompts](https://kenney.nl/assets/input-prompts) pack (CC0). The button icons in the quick menu are based on it.
-- [shoui520](https://github.com/shoui520) for [vita-agent-use](https://github.com/shoui520/vita-agent-use). I used it to install test builds on my Vita and run an auto-walk bot through them overnight, since the game is about the size of the UK and I can't visit every place myself. That caught a lot of crashes and slow spots.
+- [shoui520](https://github.com/shoui520) for [vita-agent-use](https://github.com/shoui520/vita-agent-use). It lets an AI assistant control a Vita, and I used it with one for stress testing and hardware diagnostics: installing test builds, running an auto-walk bot through them overnight, and reading the crash dumps and frame-rate logs afterwards. The game is about the size of the UK and I can't visit every place myself, so this caught a lot of crashes and slow spots I'd never have found by hand.
 
 ## License
 

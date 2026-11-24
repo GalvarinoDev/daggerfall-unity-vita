@@ -292,7 +292,7 @@ namespace DaggerfallWorkshop.Game
         public static bool IsSnowFreeClimate(int climateIndex)
         {
 #if UNITY_PSP2 && VITA_MODS
-            if (ClimateSwaps.VitaSnowless(climateIndex))
+            if (VitaRainInSwamp(climateIndex))
                 return true;
 #endif
             var climate = (MapsFile.Climates)climateIndex;
@@ -474,11 +474,19 @@ namespace DaggerfallWorkshop.Game
             SetWeather(weather);
         }
 
+#if UNITY_PSP2 && VITA_MODS
+        // Vita: with SphincterVision Snowless Swamp and Jungle on, swamps get rain instead of snow in winter, as DFU already does in the
+        // rainforest (jungle); the mod's snow-free ground stays wet instead of under falling snow
+        static bool VitaRainInSwamp(int climateIndex)
+        {
+            return DaggerfallUnity.Settings.VitaSnowlessSwampJungle && climateIndex == (int)MapsFile.Climates.Swamp;
+        }
+#endif
+
         public void SetWeather(WeatherType next)
         {
 #if UNITY_PSP2 && VITA_MODS
-            // Snowless: rain instead of snow where the ground stays green
-            if (next == WeatherType.Snow && GameManager.HasInstance && ClimateSwaps.VitaSnowless(GameManager.Instance.PlayerGPS.CurrentClimateIndex))
+            if (next == WeatherType.Snow && GameManager.HasInstance && VitaRainInSwamp(GameManager.Instance.PlayerGPS.CurrentClimateIndex))
                 next = WeatherType.Rain;
 #endif
             Debug.Log("Next weather change: " + next);

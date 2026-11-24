@@ -331,7 +331,7 @@ namespace DaggerfallWorkshop.Game.Serialization
         }
 
         // The save thumb straight from the backbuffer, read in strips of 16 rows: a full-screen GetPixels32 was one 2 MB array (plus
-        // 0.5 MB halved), and a save with no contiguous room for it grew the never-shrinking GC heap 97.6 -> 111.8 MB (2026-11-15).
+        // 0.5 MB halved), and a save with no contiguous room for it grew the never-shrinking GC heap 97.6 -> 111.8 MB.
         // Same pixels as before: channel fix, then 2x2 average; rows bottom first as Unity's texture data.
         static byte[] VitaThumbFromScreen()
         {

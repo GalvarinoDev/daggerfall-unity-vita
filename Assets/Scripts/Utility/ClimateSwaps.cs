@@ -29,25 +29,9 @@ namespace DaggerfallWorkshop.Utility
         /// <param name="climate">Climate base to apply.</param>
         /// <param name="season">Climate season to apply</param>
         /// <returns>Archive index of new texture.</returns>
-#if UNITY_PSP2 && VITA_MODS
-        // Vita: "Snowless - Swamp and Jungle" (Mods window): climates on the swamp base (swamp, jungle) keep their summer textures and
-        // weather in winter, as DFU already does for the desert. No art of its own.
-        public static bool VitaSnowless(ClimateBases climate)
-        {
-            return DaggerfallUnity.Settings.VitaSnowlessSwamp && climate == ClimateBases.Swamp;
-        }
-
-        public static bool VitaSnowless(int worldClimate)
-        {
-            return DaggerfallUnity.Settings.VitaSnowlessSwamp && VitaSnowless(FromAPIClimateBase(MapsFile.GetWorldClimateSettings(worldClimate).ClimateType));
-        }
-
-#endif
         public static int ApplyClimate(int archive, int record, ClimateBases climate, ClimateSeason season)
         {
 #if UNITY_PSP2 && VITA_MODS
-            if (season == ClimateSeason.Winter && VitaSnowless(climate))
-                season = ClimateSeason.Summer;
             // DET model textures (VitaDetModels)
             if (archive == VitaDetModels.Archive)
                 return VitaDetModels.ApplyClimate(climate, season);
@@ -491,10 +475,6 @@ namespace DaggerfallWorkshop.Utility
                     break;
             }
 
-#if UNITY_PSP2 && VITA_MODS
-            if (climateSeason == ClimateSeason.Winter && VitaSnowless(climateBase))
-                climateSeason = ClimateSeason.Summer;
-#endif
             // Modify for season
             switch (climateSeason)
             {

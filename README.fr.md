@@ -14,6 +14,16 @@ C'est une alpha, attendez-vous donc à des bugs. Sauvegardez vos parties avant c
 
 ## Nouveautés
 
+### v.0.4.1-alpha
+
+- Chinois : les petits textes du menu rapide, de l'anneau d'actions, de la fenêtre de style du HUD, de la fenêtre des effets et de celle des commandes ne perdent plus de traits, et les infos d'objet de l'inventaire s'affichent dans un cadre sous le portrait. Les longs textes d'aide de la création de personnage tiennent de nouveau à l'écran, et le bouton de fin est visible. Merci à Lin pour les signalements.
+- Les rochers et les montagnes de World of Daggerfall sont de retour. Ils manquaient depuis la 0.3.x.
+- SphincterVision Snowless Swamp and Jungle (asphinctersayswhat) remplace l'option sans neige que j'avais faite pour la Vita : en hiver, les marais et les jungles gardent un sol et des bâtiments sans neige, et il y pleut au lieu de neiger. Si vous utilisiez l'ancienne option, activez le nouveau mod dans Mods.
+- VPK plus léger : le code de test n'est plus livré avec le jeu.
+
+<details>
+<summary>Versions précédentes</summary>
+
 ### v.0.4.0-alpha
 
 - Nouvelles commandes. Maintenez L pour un menu rapide avec vos armes, sorts et objets, et maintenez le bas de la croix directionnelle pour un anneau d'actions avec Parler, Info, Prendre, Voler, Se reposer et les cartes. La gauche et la droite de la croix donnent quatre raccourcis. Voir [Commandes](#commandes). Le manuel de la LiveArea montre aussi la nouvelle disposition.
@@ -25,9 +35,6 @@ C'est une alpha, attendez-vous donc à des bugs. Sauvegardez vos parties avant c
 - Dragon Rider : charger une partie sauvegardée en vol vous replace à la même hauteur au-dessus du sol.
 - Les arbres trop loin pour être vus ne sont plus dessinés, ce qui accélère les forêts.
 - La sensibilité du regard est plus élevée par défaut. Vous pouvez la changer dans le menu pause.
-
-<details>
-<summary>Versions précédentes</summary>
 
 ### v.0.3.2-alpha
 
@@ -162,6 +169,7 @@ Dragon Rider et Travel Options sont lourds pour la Vita et peuvent faire baisser
 | Low Poly Trees | 5 | Kamer (SquidKamer) | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/380) |
 | Redguards of Hammerfell | 0.6 | WilhelmBlack | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/666) |
 | RMB Resource Pack | 0.3.0 | de nombreux créateurs, mis en ligne par Cliffworms et maintenu par carademono | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/528), [GitHub](https://github.com/drcarademono/rmb-resource-pack) |
+| SphincterVision Snowless Swamp and Jungle | 1.2.1 | asphinctersayswhat | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/735) |
 | Travel Options | 1.11 | Hazelnut | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/122), [GitHub](https://github.com/ajrb/dfunity-mods) |
 | Vanilla Friendly Loading Screens | 1.1 | WilhelmBlack | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/838) |
 | Windmills of Daggerfall | 2.2 | Kamer (SquidKamer) | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/33) |
@@ -171,7 +179,7 @@ Dragon Rider et Travel Options sont lourds pour la Vita et peuvent faire baisser
 
 J'ai demandé l'accord de l'auteur ou du responsable de chaque mod. Quand un auteur était injoignable mais que le mod est sous licence MIT, il est quand même inclus. Si vous avez fait l'un de ces mods et préférez qu'il soit retiré du portage, ouvrez une issue et je le retirerai.
 
-Deux sont nouveaux pour la Vita : Old Masters of Tamriel, une série de tableaux du domaine public venus de Wikimedia Commons, et Snowless, qui garde les marais, les jungles et les bois verts en hiver, avec de la pluie au lieu de la neige.
+Un est nouveau pour la Vita : Old Masters of Tamriel, une série de tableaux du domaine public venus de Wikimedia Commons.
 
 World of Daggerfall - Terrain et Distant Terrain sont ceux qui coûtent le plus d'images par seconde.
 
@@ -255,7 +263,7 @@ Ces auteurs ont accepté que leurs mods viennent sur la Vita. La page de chaque 
 - [AJ](https://github.com/AJ170) et le serveur PS Vita Forever.
 - [Vwing](https://github.com/Vwing) pour les idées tirées de son portage Android de Daggerfall Unity.
 - [Kenney](https://www.kenney.nl) pour le pack [Input Prompts](https://kenney.nl/assets/input-prompts) (CC0). Les icônes de touches du menu rapide en sont tirées.
-- [shoui520](https://github.com/shoui520) pour [vita-agent-use](https://github.com/shoui520/vita-agent-use). Je m'en suis servi pour installer des versions de test sur ma Vita et y faire marcher un bot toute la nuit, car le jeu fait à peu près la taille du Royaume-Uni et je ne peux pas visiter chaque endroit moi-même. Ça a permis de trouver beaucoup de plantages et d'endroits lents.
+- [shoui520](https://github.com/shoui520) pour [vita-agent-use](https://github.com/shoui520/vita-agent-use). Il permet à un assistant IA de piloter une Vita, et je m'en suis servi avec un assistant pour les tests de stress et le diagnostic matériel : installer des versions de test, y faire marcher un bot toute la nuit, puis lire les rapports de plantage et les journaux d'images par seconde. Le jeu fait à peu près la taille du Royaume-Uni et je ne peux pas visiter chaque endroit moi-même, donc ça a trouvé beaucoup de plantages et d'endroits lents que je n'aurais jamais vus à la main.
 
 ## Licence
 

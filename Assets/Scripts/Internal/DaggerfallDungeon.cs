@@ -127,8 +127,8 @@ namespace DaggerfallWorkshop
         }
 
 #if UNITY_PSP2
-        // Vita: SetDungeon one block per frame, so the dungeon entry's loading window keeps drawing instead of freezing 14-20 s
-        // (2026-11-12). Built under the inactive DungeonParent, as upstream's one-frame build is, so no script runs before the transition.
+        // Vita: SetDungeon one block per frame, so the dungeon entry's loading window keeps drawing instead of freezing 14-20 s.
+        // Built under the inactive DungeonParent, as upstream's one-frame build is, so no script runs before the transition.
         public IEnumerator VitaSetDungeonSpread(DFLocation location, bool importEnemies = true)
         {
             if (!ReadyCheck())

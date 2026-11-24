@@ -14,6 +14,16 @@ Das ist eine Alpha, rechne also mit Fehlern. Sichere deine Spielstände vor jede
 
 ## Änderungen
 
+### v.0.4.1-alpha
+
+- Chinesisch: Kleiner Text im Schnellmenü, im Aktionsring, im HUD-Stil-Fenster, im Effekte-Fenster und im Steuerungsfenster verliert keine Striche mehr, und die Gegenstandsinfo im Inventar steht jetzt in einem gerahmten Kasten unter dem Porträt. Lange Hilfetexte bei der Charaktererstellung passen wieder auf den Bildschirm, sodass der Fertig-Knopf zu sehen ist. Danke an Lin für die Hinweise.
+- Die Felsen und Berge von World of Daggerfall sind zurück. Sie fehlten seit 0.3.x.
+- SphincterVision Snowless Swamp and Jungle (asphinctersayswhat) ersetzt die schneefreie Option, die ich für die Vita gebaut hatte: Im Winter bleiben Boden und Gebäude in Sümpfen und Dschungeln schneefrei, und dort regnet es statt zu schneien. Wer die alte Option genutzt hat, schaltet den neuen Mod unter Mods ein.
+- Kleinere VPK: Der Testcode wird nicht mehr mitgeliefert.
+
+<details>
+<summary>Ältere Versionen</summary>
+
 ### v.0.4.0-alpha
 
 - Neue Steuerung. Halte L für ein Schnellmenü mit deinen Waffen, Zaubern und Gegenständen, und halte das Steuerkreuz nach unten für einen Aktionsring mit Reden, Info, Nehmen, Stehlen, Rasten und den Karten. Steuerkreuz links und rechts belegen vier Schnelltasten. Siehe [Steuerung](#steuerung). Das Handbuch im LiveArea zeigt die neue Belegung ebenfalls.
@@ -25,9 +35,6 @@ Das ist eine Alpha, rechne also mit Fehlern. Sichere deine Spielstände vor jede
 - Dragon Rider: Ein Spielstand, der im Flug gespeichert wurde, setzt dich wieder auf dieselbe Höhe über dem Boden.
 - Bäume, die zu weit weg sind, um sie zu sehen, werden nicht mehr gezeichnet. Das macht Wälder schneller.
 - Die Blickempfindlichkeit ist standardmäßig höher. Du kannst sie im Pausenmenü ändern.
-
-<details>
-<summary>Ältere Versionen</summary>
 
 ### v.0.3.2-alpha
 
@@ -162,6 +169,7 @@ Dragon Rider und Travel Options sind auf der Vita aufwendig und können die Bild
 | Low Poly Trees | 5 | Kamer (SquidKamer) | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/380) |
 | Redguards of Hammerfell | 0.6 | WilhelmBlack | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/666) |
 | RMB Resource Pack | 0.3.0 | viele Asset-Ersteller, hochgeladen von Cliffworms und gepflegt von carademono | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/528), [GitHub](https://github.com/drcarademono/rmb-resource-pack) |
+| SphincterVision Snowless Swamp and Jungle | 1.2.1 | asphinctersayswhat | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/735) |
 | Travel Options | 1.11 | Hazelnut | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/122), [GitHub](https://github.com/ajrb/dfunity-mods) |
 | Vanilla Friendly Loading Screens | 1.1 | WilhelmBlack | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/838) |
 | Windmills of Daggerfall | 2.2 | Kamer (SquidKamer) | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/33) |
@@ -171,7 +179,7 @@ Dragon Rider und Travel Options sind auf der Vita aufwendig und können die Bild
 
 Ich habe jeden Mod-Autor oder Projektleiter um Erlaubnis gefragt. War ein Autor nicht erreichbar, steht die Mod aber unter der MIT-Lizenz, ist sie trotzdem dabei. Wenn du eine dieser Mods gemacht hast und sie lieber nicht in der Portierung sehen willst, eröffne ein Issue, und ich entferne sie.
 
-Zwei sind neu für die Vita: Old Masters of Tamriel, eine Sammlung gemeinfreier Gemälde aus Wikimedia Commons, und Snowless, das Sümpfe, Dschungel und Wälder im Winter grün hält, mit Regen statt Schnee.
+Neu für die Vita ist Old Masters of Tamriel, eine Sammlung gemeinfreier Gemälde aus Wikimedia Commons.
 
 World of Daggerfall - Terrain und Distant Terrain kosten die meiste Bildrate.
 
@@ -255,7 +263,7 @@ Diese Autoren haben ihre Mods auf die Vita gelassen. Die Seite jeder Mod ist unt
 - [AJ](https://github.com/AJ170) und der Server PS Vita Forever.
 - [Vwing](https://github.com/Vwing) für Ideen aus der Android-Portierung von Daggerfall Unity, die Vwing gemacht hat.
 - [Kenney](https://www.kenney.nl) für das Paket [Input Prompts](https://kenney.nl/assets/input-prompts) (CC0). Die Tastensymbole im Schnellmenü basieren darauf.
-- [shoui520](https://github.com/shoui520) für [vita-agent-use](https://github.com/shoui520/vita-agent-use). Damit habe ich Testversionen auf meine Vita gespielt und nachts einen Bot hindurchlaufen lassen, denn das Spiel ist etwa so groß wie Großbritannien und ich kann nicht jeden Ort selbst besuchen. So sind viele Abstürze und langsame Stellen aufgefallen.
+- [shoui520](https://github.com/shoui520) für [vita-agent-use](https://github.com/shoui520/vita-agent-use). Damit kann ein KI-Assistent eine Vita steuern, und ich habe es mit einem für Belastungstests und Hardware-Diagnose genutzt: Testversionen aufspielen, nachts einen Bot hindurchlaufen lassen und danach die Absturzberichte und Bildraten-Logs auswerten. Das Spiel ist etwa so groß wie Großbritannien und ich kann nicht jeden Ort selbst besuchen, also hat das viele Abstürze und langsame Stellen gefunden, die ich von Hand nie entdeckt hätte.
 
 ## Lizenz
 

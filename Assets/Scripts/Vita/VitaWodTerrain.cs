@@ -11,7 +11,7 @@
 //  - the transition noise is weighted by saturate(((h - 100) / 5000) / 5) on a 0-1 height, which is always 0;
 //  - the TilemapComputer kernel only fills a cache other mods can ask for (none of ours do).
 // Location weights only visit locations a sample can reach (fade <= 64 * 9 units, radial edge <= half diagonal + 7.5): same result.
-// One change from the mod (2026-11-16, trial, revert candidate: TownAlt = false): a location's plateau takes the altitude and port
+// One change from the mod (trial, revert candidate: TownAlt = false): a location's plateau takes the altitude and port
 // maps' values at the location's centre instead of the values under each sample. Read per sample they tilt the ground under a town
 // the game places at one height, so buildings floated or sank (Daggerfall city, a port: portLerp 0.54-0.61 across the town = 15 m).
 // What other locations' weights still leave (up to 0.4 m) goes too: the tile's own location footprint is set to the height the game
@@ -111,8 +111,8 @@ public class VitaWodTerrainSampler : TerrainSampler
     // set misses instead of reading stale heights.
     // UserData/VitaCache/wod<Version>/<mpx / 8>_<mpy / 8>/<mpx>_<mpy>_<hash>.bin: raw floats, folders of at most 64 tiles (exFAT slows past ~100).
     // ponytail: no size cap (66 KB per tile computed during a load; 1,000 tiles = 66 MB) and old hashes stay; add a sweep if cards fill up.
-    public static bool CacheOff;      // test harness A/B (bot word "wodcacheoff")
-    public static bool CacheCheck;    // test harness: compute cached tiles anyway and compare (bot word "wodcachecheck")
+    public static bool CacheOff;      // test harness A/B
+    public static bool CacheCheck;    // test harness: compute cached tiles anyway and compare
 
     string CachePath(int mpx, int mpy, uint hash)
     {
@@ -588,7 +588,7 @@ public sealed class VitaWodTerrain
     const int BlockRows = 16;
     static byte[] planeLz;
     static int[] planeLzOff;
-    public static bool PlaneMemOff;   // test harness A/B (bot word "wodmemoff"): read the planes from the file per tile, as before
+    public static bool PlaneMemOff;   // test harness A/B: read the planes from the file per tile, as before
     [ThreadStatic] static byte[][] rowCache;
     [ThreadStatic] static int[] rowCacheBlock;
 
@@ -621,7 +621,7 @@ public sealed class VitaWodTerrain
         return (y - b * BlockRows) * mapW;
     }
 
-    public static bool WindowRowsOff;   // test harness A/B (bot word "wodrowsoff"): one read per window row, as before
+    public static bool WindowRowsOff;   // test harness A/B: one read per window row, as before
     [ThreadStatic] static byte[] windowBuffer;     // load-time Begins can run on the job worker
 
     // SampleMap(p, u, v) anywhere on the map (a location centre can be outside this tile's window): 2x2 texels from the file

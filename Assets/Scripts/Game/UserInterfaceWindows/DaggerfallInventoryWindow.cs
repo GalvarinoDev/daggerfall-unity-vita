@@ -313,7 +313,11 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             // Setup item info panel if configured
             if (DaggerfallUnity.Settings.EnableInventoryInfoPanel)
             {
+#if UNITY_PSP2
+                itemInfoPanel = DaggerfallUI.AddPanel(VitaWideInfo ? vitaWideInfoRect : itemInfoPanelRect, NativePanel);
+#else
                 itemInfoPanel = DaggerfallUI.AddPanel(itemInfoPanelRect, NativePanel);
+#endif
                 SetupItemInfoPanel();
             }
 
@@ -466,9 +470,91 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
                 ShadowPosition = new Vector2(0.5f, 0.5f),
                 ShadowColor = DaggerfallUI.DaggerfallAlternateShadowColor1
             };
+#if UNITY_PSP2
+            if (VitaWideInfo)
+            {
+                itemInfoPanelLabel.ExtraLeading = 0;
+                itemInfoPanelLabel.VerticalAlignment = VerticalAlignment.None;
+                itemInfoPanelLabel.Position = new Vector2(3, 2);
+                // Gold frame: the panel itself, with a dark fill inset over it (Outline drew a thin dark red line on the Vita)
+                itemInfoPanel.BackgroundColor = new Color32(150, 120, 60, 255);
+                vitaInfoFill = new Panel { Position = new Vector2(0.75f, 0.75f), BackgroundColor = new Color32(22, 19, 15, 245) };
+                itemInfoPanel.Components.Add(vitaInfoFill);
+                itemInfoPanelLabel.TextColor = vitaInfoTextColor;
+                vitaInfoRight = new MultiFormatTextLabel
+                {
+                    Position = new Vector2(vitaWideInfoRect.width / 2 + 2, 2),
+                    MinTextureDimTextLabel = 16,
+                    TextScale = 0.43f,
+                    MaxTextWidth = (int)vitaWideInfoRect.width / 2 - 5,
+                    WrapText = true,
+                    WrapWords = true,
+                    TextColor = vitaInfoTextColor,
+                    ShadowPosition = new Vector2(0.5f, 0.5f),
+                    ShadowColor = DaggerfallUI.DaggerfallAlternateShadowColor1
+                };
+                itemInfoPanel.Components.Add(vitaInfoRight);
+                itemInfoPanel.Enabled = false;
+            }
+            else
+                itemInfoPanel.BackgroundTexture = infoTexture;
+#else
             itemInfoPanel.BackgroundTexture = infoTexture;
+#endif
             itemInfoPanel.Components.Add(itemInfoPanelLabel);
         }
+
+#if UNITY_PSP2
+        // Chinese draws at one screen pixel per font pixel or more (TextLabel), so the item info doesn't fit the 37x32 panel there.
+        static bool VitaWideInfo { get { return DaggerfallUI.DefaultFont != null && DaggerfallUI.DefaultFont.IsSDFCapable; } }
+        // Up to four lines go in two columns (name and condition left, damage/armour and weight right) in a framed box; more lines
+        // fill the whole width and the box grows up from its bottom edge
+        static readonly Rect vitaWideInfoRect = new Rect(52, 171, 104, 21);
+        MultiFormatTextLabel vitaInfoRight;
+        Panel vitaInfoFill;
+        static readonly Color vitaInfoTextColor = new Color32(230, 200, 80, 255);
+        static readonly List<TextFile.Token> vitaLeft = new List<TextFile.Token>(), vitaRight = new List<TextFile.Token>();
+
+        void VitaSetWideInfo(TextFile.Token[] tokens)
+        {
+            vitaLeft.Clear();
+            vitaRight.Clear();
+            // Split into lines: text tokens between line breaks
+            var lines = new List<List<TextFile.Token>>();
+            var line = new List<TextFile.Token>();
+            foreach (var t in tokens)
+            {
+                bool text = t.formatting == TextFile.Formatting.Text || t.formatting == TextFile.Formatting.TextHighlight;
+                if (text && !string.IsNullOrEmpty(t.text) && t.text.Trim().Length > 0)
+                    line.Add(t);
+                else if (!text && line.Count > 0)
+                {
+                    lines.Add(line);
+                    line = new List<TextFile.Token>();
+                }
+            }
+            if (line.Count > 0)
+                lines.Add(line);
+            bool columns = lines.Count <= 4;
+            var newLine = new TextFile.Token() { formatting = TextFile.Formatting.NewLine };
+            for (int i = 0; i < lines.Count; i++)
+            {
+                var col = columns && (i & 1) == 1 ? vitaRight : vitaLeft;
+                if (col.Count > 0)
+                    col.Add(newLine);
+                col.AddRange(lines[i]);
+            }
+            float w = vitaWideInfoRect.width;
+            itemInfoPanelLabel.MaxTextWidth = columns ? (int)w / 2 - 5 : (int)w - 6;
+            itemInfoPanelLabel.SetText(vitaLeft.ToArray());
+            vitaInfoRight.SetText(vitaRight.ToArray());
+            float h = Mathf.Max(vitaWideInfoRect.height, Mathf.Max(itemInfoPanelLabel.Size.y, vitaInfoRight.Size.y) + 4);
+            itemInfoPanel.Size = new Vector2(w, h);
+            vitaInfoFill.Size = new Vector2(w - 1.5f, h - 1.5f);
+            itemInfoPanel.Position = new Vector2(vitaWideInfoRect.x, vitaWideInfoRect.yMax - h);
+            itemInfoPanel.Enabled = lines.Count > 0;
+        }
+#endif
 
         protected void SetupPaperdoll()
         {
@@ -672,7 +758,11 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
             }
             // Clear info panel
             if (itemInfoPanelLabel != null)
+#if UNITY_PSP2
+                UpdateItemInfoPanel(new TextFile.Token[0]);
+#else
                 itemInfoPanelLabel.SetText(new TextFile.Token[0]);
+#endif
 
             // Update tracked weapons for setting equip delay
             SetEquipDelayTime(false);
@@ -824,7 +914,11 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
 
             // Clear info panel
             if (itemInfoPanelLabel != null)
+#if UNITY_PSP2
+                UpdateItemInfoPanel(new TextFile.Token[0]);
+#else
                 itemInfoPanelLabel.SetText(new TextFile.Token[0]);
+#endif
 
             // Update filtered list
             localItemListScroller.ResetScroll();
@@ -1199,6 +1293,13 @@ namespace DaggerfallWorkshop.Game.UserInterfaceWindows
                 if (tokens[tokenIdx].text != null)
                     tokens[tokenIdx].text = tokens[tokenIdx].text.Replace(kgSrc, kgRep).Replace(damSrc, damRep).Replace(arSrc, arRep);
             }
+#if UNITY_PSP2
+            if (vitaInfoRight != null)
+            {
+                VitaSetWideInfo(tokens);
+                return;
+            }
+#endif
             itemInfoPanelLabel.SetText(tokens);
         }
 

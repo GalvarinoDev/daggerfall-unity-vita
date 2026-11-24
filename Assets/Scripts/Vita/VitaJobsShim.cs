@@ -266,7 +266,7 @@ namespace Unity.Jobs
         /// </summary>
         public static bool Deferred;
         /// <summary>Main-thread time Pump() spends per frame on deferred jobs.</summary>
-        // TRIAL 2026-11-21 (revert candidate, was 6): a grid shift in a city (two tiles swapped while walking) ran 43.8-44.2 FPS, p99 53-71 ms
+        // TRIAL (revert candidate, was 6): a grid shift in a city (two tiles swapped while walking) ran 43.8-44.2 FPS, p99 53-71 ms
         // at 6; 45.9-46.2 FPS, p99 40-42 at 3, the update 7.3 -> 10.3 s. Also LocationLoader's in-play budget.
         public static float PumpBudgetMs = 3;
 

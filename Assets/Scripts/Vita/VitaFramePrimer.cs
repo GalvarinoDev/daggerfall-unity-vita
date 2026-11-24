@@ -14,7 +14,7 @@ using DaggerfallWorkshop.Game;
 
 public static class VitaFramePrimer
 {
-    public static bool On = true;   // test switch (bot words primerab / primeroff)
+    public static bool On = true;   // test switch
     static readonly Rect pixel = new Rect(0, 0, 1, 1);
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]

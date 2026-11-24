@@ -88,7 +88,7 @@ public class VitaPower : MonoBehaviour
     const int WatchdogSeconds = 45;
     static bool watchdogOn;
 
-    // 2026-11-20 (memory headroom): the app's memory budget as the system reports it (a budget plugin can grow MAIN up to 381 MiB)
+    // The app's memory budget as the system reports it (a budget plugin can grow MAIN up to 381 MiB)
     static void LogBudget()
     {
 #if !UNITY_EDITOR

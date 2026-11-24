@@ -428,7 +428,11 @@ namespace DaggerfallWorkshop.Game
         }
 
 #if UNITY_PSP2
+#if VITA_PROBES
         public static bool VitaProbe;
+#else
+        public const bool VitaProbe = false;
+#endif
         public static readonly System.Diagnostics.Stopwatch VitaUpdateTime = new System.Diagnostics.Stopwatch();
         public static readonly System.Diagnostics.Stopwatch VitaRepaintTime = new System.Diagnostics.Stopwatch();
         public static readonly System.Diagnostics.Stopwatch VitaOtherGuiTime = new System.Diagnostics.Stopwatch();

@@ -272,7 +272,11 @@ namespace DaggerfallWorkshop.Game
 
         // timing probe: 0 whole step, 1 classic spawn range, 2 far-path sight, 3 GetTargets, 4 near sight, 5 hearing, 6 stealth + detect otherwise,
         // inside GetTargets: 7 sight checks, 8 enemy list (calls = entries), 9 unused, 10 sight rays cast (calls only)
+#if VITA_PROBES
         public static bool VitaSenseProbe;   // set by the test bot only, so play pays no timer reads
+#else
+        public const bool VitaSenseProbe = false;     // probe code compiles away outside test builds
+#endif
         public static long[] VitaSenseTicks = new long[11];
         public static int[] VitaSenseCalls = new int[11];
         static long vitaMark;

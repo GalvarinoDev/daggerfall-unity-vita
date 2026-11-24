@@ -14,7 +14,7 @@
 //            tap/hold uses them (DaggerfallHUD): spells cast at once, weapons are drawn, potions drunk, magic items used.
 // Looks like the classic UI: inventory stone, the large HUD's spell/weapon/magic item buttons as page tabs, the classic font.
 // Action ring (hold D-pad Down, actionRing): Talk, Info, Grab, Rest, Map, Automap, Steal; the right stick picks, releasing Down chooses.
-// (Use Magic Item left the ring 2026-11-16: the L ring's Items page has it.)
+// (Use Magic Item is on the L ring's Items page instead.)
 
 #if UNITY_PSP2
 using System;
@@ -38,7 +38,9 @@ public class VitaQuickMenuWindow : DaggerfallPopupWindow
     public const int TimePaused = 0, TimeReal = 1, TimeSlow = 2;
     const float slowScale = 0.25f;
     const int pageSize = 8;
-    const float labelScale = 0.75f;
+    // The Chinese glyph pack is a point-filtered 1-bit atlas at a whole number of screen pixels per font pixel at scale 1;
+    // smaller scales drop rows and columns (missing strokes), so Chinese labels stay at 1
+    static float labelScale { get { return Font.IsSDFCapable ? 1f : 0.75f; } }
     const float minLabelScale = 0.55f;
     const float stickPick = 0.35f;      // stick diagonals don't reach the corners
     // Ring in native 320x200 space; its texture has ringScale pixels per native pixel with smoothed edges (the stone keeps its classic texels)
@@ -437,7 +439,7 @@ public class VitaQuickMenuWindow : DaggerfallPopupWindow
                 for (int x = 0; x < ringSize; x++)
                 {
                     ringStone[y * ringSize + x] = Stone(x, y, 0.95f);
-                    discStone[y * ringSize + x] = Stone(x, y, 0.8f);      // 0.7 lost the grain next to the slices (2026-11-18)
+                    discStone[y * ringSize + x] = Stone(x, y, 0.8f);      // 0.7 lost the grain next to the slices
                 }
         }
         float c = ringSize / 2f, step = Mathf.PI * 2 / n, px = 1f / ringScale;
@@ -481,7 +483,7 @@ public class VitaQuickMenuWindow : DaggerfallPopupWindow
                     slice = seam < 0.5f ? (byte)((int)s % n) : (byte)253;
                     // Outer bevel, then the centre disc's edge
                     float rim = Cover(d - (R - 1.5f));
-                    col = Mix(col, darkEdge, rim);     // dark all round (a light top half read as a white arch, 2026-11-16)
+                    col = Mix(col, darkEdge, rim);     // dark all round (a light top half read as a white arch)
                     if (disc > 0)
                         col = Mix(col, Mix(discStone[si], DiscEdge(dy, d), Cover(d - (r - 1f))), disc);
                     if (rim >= 0.5f)
@@ -803,7 +805,7 @@ public class VitaQuickMenuWindow : DaggerfallPopupWindow
         for (int k = 0; k < 3; k++)
         {
             tabDim[k].Enabled = k != page;
-            tabs[k].Outline.Enabled = false;     // the dimmed other tabs already show which page is up (red box dropped 2026-11-16)
+            tabs[k].Outline.Enabled = false;     // the dimmed other tabs already show which page is up
         }
         LayoutHint();
         pageButton.Enabled = pages > 1;

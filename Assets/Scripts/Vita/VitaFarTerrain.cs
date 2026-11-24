@@ -41,6 +41,10 @@ public class VitaFarTerrain : MonoBehaviour
         new Color32[] { new Color32(53, 94, 143, 255), new Color32(121, 124, 124, 255), new Color32(205, 206, 214, 255), new Color32(181, 184, 187, 255) }, // 403 swamp winter
         new Color32[] { new Color32(53, 94, 143, 255), new Color32(47, 61, 49, 255), new Color32(60, 60, 40, 255), new Color32(44, 63, 38, 255) }, // 404 swamp rain
     };
+#if VITA_MODS
+    // 403 with SphincterVision Snowless Swamp and Jungle (snowless.pak): means of its records 0-3, as farterrain_colors.py does
+    static readonly Color32[] SnowlessSwampWinter = { new Color32(53, 94, 143, 255), new Color32(57, 63, 42, 255), new Color32(69, 61, 35, 255), new Color32(59, 64, 29, 255) };
+#endif
 
     static readonly int sunDirId = Shader.PropertyToID("_VitaFarSunDir"), sunColorId = Shader.PropertyToID("_VitaFarSunColor"),
         ambientId = Shader.PropertyToID("_VitaFarAmbient"), fogColorId = Shader.PropertyToID("_VitaFarFogColor"),
@@ -50,7 +54,7 @@ public class VitaFarTerrain : MonoBehaviour
     public static bool Hidden;          // test switch: renderer off, mesh kept
     public static bool OnTop;           // test switch: ZTest Always (draws over everything)
     // A near tile promoted or switched on in play: rebuild on the next frame, not on that one (its 42 ms promote + this build + first draw
-    // made 115-130 ms town-walk frames). Test switch: bot word "farsameframe"
+    // made 115-130 ms town-walk frames). A test switch turns it off.
     public static bool SameFrameBuild;
     // How much of the VitaFogDistance thickening WeatherManager.SetFog applies (1 = all, as without this component). It only exists to
     // fade VitaCulling's town cut, and it makes everything past ~360 m pure fog colour, so it goes to 0 while no town part is cut
@@ -428,11 +432,11 @@ public class VitaFarTerrain : MonoBehaviour
         else if (climate == 226 || climate == 230) group = 1;                       // mountain
         else if (climate == 227 || climate == 228) group = 3;                       // swamp
         else group = 2;                                                             // woodland (231-233) and ocean
-#if VITA_MODS
-        if (winter && ClimateSwaps.VitaSnowless(climate))
-            winter = false;
-#endif
         Color32[] set = Colors[group * 3 + (winter ? 1 : 0)];
+#if VITA_MODS
+        if (group == 3 && winter && DaggerfallUnity.Settings.VitaSnowlessSwampJungle)
+            set = SnowlessSwampWinter;
+#endif
         if (water || climate == 223)
             return Colors[2 * 3 + (winter ? 1 : 0)][0];                            // the reference uses the woodland water tile
         float grass, dirt, stone;

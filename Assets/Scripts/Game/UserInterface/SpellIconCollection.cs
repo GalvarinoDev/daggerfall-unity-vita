@@ -242,7 +242,7 @@ namespace DaggerfallWorkshop.Game.UserInterface
             string sourcePath = Path.Combine(Application.streamingAssetsPath, sourceFolderName);
 #if UNITY_PSP2
             // Packs baked on the PC ship without their PNG (only the .txt and the bake), so find them by their metadata too.
-            // No pack ships since upstream's test pack was dropped (2026-11-16), so the folder may be missing.
+            // No pack ships since upstream's test pack was dropped, so the folder may be missing.
             bool vitaFolder = Directory.Exists(sourcePath);
             List<string> vitaPaths = vitaFolder ? new List<string>(Directory.GetFiles(sourcePath, "*.png")) : new List<string>();
             foreach (string metadata in vitaFolder ? Directory.GetFiles(sourcePath, "*.txt") : new string[0])

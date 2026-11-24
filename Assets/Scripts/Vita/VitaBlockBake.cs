@@ -163,7 +163,9 @@ public static class VitaBlockBake
     public static void Prefetch(ref DFBlock blockData)
     {
         int[] entry;
-        long probeT0 = System.Diagnostics.Stopwatch.GetTimestamp();     // TEMPORARY 2026-11-20 probe
+#if VITA_PROBES
+        long probeT0 = System.Diagnostics.Stopwatch.GetTimestamp();     // probe
+#endif
         bool probeTown = false;
         if (DaggerfallUnity.Instance.Option_CombineRMB && NeedsRuntimePath(ref blockData) == null && Index().TryGetValue(Key(blockData.Name, Hash(ref blockData)), out entry))
         {
@@ -172,12 +174,18 @@ public static class VitaBlockBake
         }
         else
             bufferOffset = -1;  // PrefetchedTextures: nothing prefetched for this block
-        // TEMPORARY 2026-11-20 probe (bot word "leadlog"): slow prefetches, and whether the worker had the record
+        // probe: slow prefetches, and whether the worker had the record
+#if VITA_PROBES
         double probeMs = (System.Diagnostics.Stopwatch.GetTimestamp() - probeT0) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
         if (ProbeLog && probeMs >= 15)
             Debug.LogFormat("VITAPREFETCH {0}: {1:F1} ms, from worker {2}", blockData.Name, probeMs, probeTown);
+#endif
     }
-    public static bool ProbeLog;    // TEMPORARY 2026-11-20 probe switch
+#if VITA_PROBES
+    public static bool ProbeLog;    // probe switch
+#else
+    public const bool ProbeLog = false;     // probe code compiles away outside test builds
+#endif
 
     // In-play town builds: the card read of a block's record stalled its frame 92-145 ms now and then (records are small: the card was
     // busy elsewhere). A dedicated worker thread reads the town's deflated records into memory from its setup step on, in block order; StreamingWorld
@@ -343,9 +351,11 @@ public static class VitaBlockBake
             return false;
         }
 
-        long vt0 = System.Diagnostics.Stopwatch.GetTimestamp();   // TEMPORARY probe 2026-11-21 (VITABAKELAPS, bot word "promotelog")
+#if VITA_PROBES
+        long vt0 = System.Diagnostics.Stopwatch.GetTimestamp();   // probe (VITABAKELAPS)
         double vtRepl = 0, vtModels = 0;
         int vtReplN = 0, vtModelsN = 0;
+#endif
         if (bufferOffset == entry[0])
             pos = 0;    // Prefetch read it on an earlier frame
         else
@@ -391,18 +401,26 @@ public static class VitaBlockBake
                 Vector3 position = Vec3();
                 Quaternion rotation = new Quaternion(Float(), Float(), Float(), Float());
                 Vector3 scale = Vec3();
-                long vr0 = System.Diagnostics.Stopwatch.GetTimestamp();   // TEMPORARY probe 2026-11-21 (VITABAKELAPS)
+#if VITA_PROBES
+                long vr0 = System.Diagnostics.Stopwatch.GetTimestamp();   // probe (VITABAKELAPS)
+#endif
                 if (!MeshReplacement.ImportCustomGameobject(modelID, modelsNode.transform, Matrix4x4.TRS(position, rotation, scale)))
                     Debug.LogFormat("VITANATIVE miss block {0}: replacement model {1} not available", blockData.Name, modelID);
+#if VITA_PROBES
                 vtRepl += (System.Diagnostics.Stopwatch.GetTimestamp() - vr0) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
                 vtReplN++;
+#endif
                 continue;
             }
             // RMBLayout.AddStandaloneModel
-            long vm0 = System.Diagnostics.Stopwatch.GetTimestamp();   // TEMPORARY probe 2026-11-21 (VITABAKELAPS)
+#if VITA_PROBES
+            long vm0 = System.Diagnostics.Stopwatch.GetTimestamp();   // probe (VITABAKELAPS)
+#endif
             GameObject model = GameObjectHelper.CreateDaggerfallMeshGameObject(modelID, modelsNode.transform, dfUnity.Option_SetStaticFlags);
+#if VITA_PROBES
             vtModels += (System.Diagnostics.Stopwatch.GetTimestamp() - vm0) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
             vtModelsN++;
+#endif
             model.transform.position = Vec3();
             model.transform.rotation = new Quaternion(Float(), Float(), Float(), Float());
             model.transform.localScale = Vec3();
@@ -429,17 +447,23 @@ public static class VitaBlockBake
         {
             ModelCombiner combiner = new ModelCombiner();
             combiner.VitaSetCombined(combined);
-            long vc0 = System.Diagnostics.Stopwatch.GetTimestamp();   // TEMPORARY probe 2026-11-21 (VITABAKELAPS)
+#if VITA_PROBES
+            long vc0 = System.Diagnostics.Stopwatch.GetTimestamp();   // probe (VITABAKELAPS)
+#endif
             GameObjectHelper.CreateCombinedMeshGameObject(combiner, "CombinedModels", modelsNode.transform, dfUnity.Option_SetStaticFlags);
+#if VITA_PROBES
             if (DaggerfallWorkshop.StreamingWorld.VitaPromoteLog)
                 Debug.LogFormat("VITABAKELAPS {0}: combined {1:F1} ms ({2} vertices, {9} indices), materials {3:F1} ms ({4} new of {5}), arrays {6:F1} (vertices {10:F1}, +normals {11:F1}, +uv {12:F1}), tris {7:F1} (copy {13:F1}), bounds {8:F1}", blockData.Name,
                     (System.Diagnostics.Stopwatch.GetTimestamp() - vc0) * 1000.0 / System.Diagnostics.Stopwatch.Frequency, vertexCount,
                     MeshReader.VitaLastMaterialMs, MeshReader.VitaLastNewMaterials, combined.SubMeshes.Length,
                     MeshReader.VitaLapArrays, MeshReader.VitaLapTris, MeshReader.VitaLapBounds, combined.Indices.Length, MeshReader.VitaLapVerts, MeshReader.VitaLapNormals, MeshReader.VitaLapUV, MeshReader.VitaLapCopy);
+#endif
         }
+#if VITA_PROBES
         if (DaggerfallWorkshop.StreamingWorld.VitaPromoteLog)
             Debug.LogFormat("VITABAKELAPS {0}: total {1:F1} ms, replacements {2:F1} ({3}), models {4:F1} ({5})", blockData.Name,
                 (System.Diagnostics.Stopwatch.GetTimestamp() - vt0) * 1000.0 / System.Diagnostics.Stopwatch.Frequency, vtRepl, vtReplN, vtModels, vtModelsN);
+#endif
         return true;
     }
 

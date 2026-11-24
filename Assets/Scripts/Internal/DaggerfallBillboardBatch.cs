@@ -1148,7 +1148,7 @@ namespace DaggerfallWorkshop
                 {
                     if (vitaPush != null)
                         StopCoroutine(vitaPush);
-                    vitaPush = StartCoroutine(StreamingWorld.VitaCoTimed("bbpush", VitaPushSpread()));   // TEMPORARY probe wrapper 2026-11-21
+                    vitaPush = StartCoroutine(StreamingWorld.VitaCoTimed("bbpush", VitaPushSpread()));   // probe wrapper
                 }
                 else if (!vitaTrimmed)
                     VitaPushChannels();
@@ -1365,7 +1365,7 @@ namespace DaggerfallWorkshop
                 vitaCellOrder[next[vitaCellOf[i]]++] = i;
             VitaCellsHide();    // nothing drawn until every cell is filled, as the spread fill of the batch mesh
             if (spread)
-                vitaPush = StartCoroutine(StreamingWorld.VitaCoTimed("bbcells", VitaCellsSpread()));   // TEMPORARY probe wrapper 2026-11-21
+                vitaPush = StartCoroutine(StreamingWorld.VitaCoTimed("bbcells", VitaCellsSpread()));   // probe wrapper
             else
             {
                 for (int k = 0; k < cells; k++)

@@ -299,8 +299,10 @@ namespace DaggerfallWorkshop.Utility
 #if UNITY_PSP2
             // Vita: read the big world files from disk on demand instead of keeping ~77 MB of raw bytes in the managed heap
             const FileUsage worldFileUsage = FileUsage.UseDisk;
+#if VITA_PROBES
             var vitaWatch = System.Diagnostics.Stopwatch.StartNew();   // reader setup cost
             var vitaLaps = new System.Text.StringBuilder();   // reader setup cost
+#endif
 
 #endif
             // Try to setup Arena2-dependent content readers
@@ -310,7 +312,7 @@ namespace DaggerfallWorkshop.Utility
 #else
                 blockFileReader = new BlocksFile(Path.Combine(arena2Path, BlocksFile.Filename), FileUsage.UseMemory, true);
 #endif
-#if UNITY_PSP2
+#if UNITY_PSP2 && VITA_PROBES
             vitaLaps.Append(" blocks ").Append(vitaWatch.ElapsedMilliseconds);   // reader setup cost
 #endif
             if (mapFileReader == null)
@@ -319,12 +321,12 @@ namespace DaggerfallWorkshop.Utility
 #else
                 mapFileReader = new MapsFile(Path.Combine(arena2Path, MapsFile.Filename), FileUsage.UseMemory, true);
 #endif
-#if UNITY_PSP2
+#if UNITY_PSP2 && VITA_PROBES
             vitaLaps.Append(" maps+paks ").Append(vitaWatch.ElapsedMilliseconds);   // reader setup cost
 #endif
             if (monsterFileReader == null)
                 monsterFileReader = new MonsterFile(Path.Combine(arena2Path, MonsterFile.Filename), FileUsage.UseMemory, true);
-#if UNITY_PSP2
+#if UNITY_PSP2 && VITA_PROBES
             vitaLaps.Append(" monster ").Append(vitaWatch.ElapsedMilliseconds);   // reader setup cost
 #endif
             if (woodsFileReader == null)
@@ -333,22 +335,22 @@ namespace DaggerfallWorkshop.Utility
 #else
                 woodsFileReader = new WoodsFile(Path.Combine(arena2Path, WoodsFile.Filename), FileUsage.UseMemory, true);
 #endif
-#if UNITY_PSP2
+#if UNITY_PSP2 && VITA_PROBES
             vitaLaps.Append(" woods ").Append(vitaWatch.ElapsedMilliseconds);   // reader setup cost
 #endif
             if (factionFileReader == null)
                 factionFileReader = new FactionFile(GetFactionFilePath(), FileUsage.UseMemory, true);
-#if UNITY_PSP2
+#if UNITY_PSP2 && VITA_PROBES
             vitaLaps.Append(" faction ").Append(vitaWatch.ElapsedMilliseconds);   // reader setup cost
 #endif
             if (flatsFileReader == null)
                 flatsFileReader = new FlatsFile(Path.Combine(arena2Path, FlatsFile.Filename), FileUsage.UseMemory, true);
             if (paintFileReader == null)
                 paintFileReader = new PaintFile(Path.Combine(arena2Path, PaintFile.Filename), FileUsage.UseMemory, true);
-#if UNITY_PSP2
+#if UNITY_PSP2 && VITA_PROBES
             vitaLaps.Append(" flats+paint ").Append(vitaWatch.ElapsedMilliseconds);   // reader setup cost
 #endif
-#if UNITY_PSP2
+#if UNITY_PSP2 && VITA_PROBES
             Debug.Log("VITAREADERS ms:" + vitaLaps);   // reader setup cost
 #endif
 

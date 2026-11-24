@@ -14,6 +14,16 @@
 
 ## 更新日志
 
+### v.0.4.1-alpha
+
+- 中文：快捷菜单、行动轮盘、界面样式框、效果窗口和操作窗口里的小字不再缺笔画；物品栏的物品信息现在显示在头像下方带边框的框里。创建角色时较长的说明文字又能完整显示在屏幕上，“完成”按钮也露出来了。感谢 Lin 的反馈。
+- World of Daggerfall 的岩石和山峦回来了。它们从 0.3.x 起就一直缺失。
+- SphincterVision Snowless Swamp and Jungle（asphinctersayswhat）取代了我为 Vita 做的无雪选项：冬天沼泽和丛林的地面与建筑不再积雪，那里下雨而不是下雪。如果你用过旧选项，请在 Mods 里打开这个新 mod。
+- VPK 更小：游戏不再附带测试代码。
+
+<details>
+<summary>更早的版本</summary>
+
 ### v.0.4.0-alpha
 
 - 全新操作。按住 L 打开快捷菜单，里面有你的武器、法术和物品；按住十字键下打开行动轮盘，里面有交谈、信息、拿取、偷窃、休息和地图。十字键左右可放四个快捷键。见[操作](#操作)。LiveArea 里的说明书也换成了新的按键布局。
@@ -25,9 +35,6 @@
 - Dragon Rider：读取在飞行中保存的存档时，会回到离地面同样的高度。
 - 远到看不见的树不再绘制，森林里更流畅。
 - 视角灵敏度默认调高了，可以在暂停菜单里修改。
-
-<details>
-<summary>更早的版本</summary>
 
 ### v.0.3.2-alpha
 
@@ -162,6 +169,7 @@ Dragon Rider 和 Travel Options 在 Vita 上负担较重，可能降低帧率。
 | Low Poly Trees | 5 | Kamer (SquidKamer) | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/380) |
 | Redguards of Hammerfell | 0.6 | WilhelmBlack | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/666) |
 | RMB Resource Pack | 0.3.0 | 众多素材作者，由 Cliffworms 上传、carademono 维护 | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/528), [GitHub](https://github.com/drcarademono/rmb-resource-pack) |
+| SphincterVision Snowless Swamp and Jungle | 1.2.1 | asphinctersayswhat | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/735) |
 | Travel Options | 1.11 | Hazelnut | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/122), [GitHub](https://github.com/ajrb/dfunity-mods) |
 | Vanilla Friendly Loading Screens | 1.1 | WilhelmBlack | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/838) |
 | Windmills of Daggerfall | 2.2 | Kamer (SquidKamer) | [Nexus](https://www.nexusmods.com/daggerfallunity/mods/33) |
@@ -171,7 +179,7 @@ Dragon Rider 和 Travel Options 在 Vita 上负担较重，可能降低帧率。
 
 每个 mod 我都向作者或项目负责人征求过许可。有的作者联系不上，但 mod 使用 MIT 许可证，所以仍然收录了。如果你是其中某个 mod 的作者，希望把它从移植版中移除，请开一个 issue，我会删掉。
 
-有两个是为 Vita 新做的：Old Masters of Tamriel，一组来自 Wikimedia Commons 的公有领域名画；Snowless，让沼泽、丛林和林地在冬天保持绿色，下雨而不下雪。
+有一个是为 Vita 新做的：Old Masters of Tamriel，一组来自 Wikimedia Commons 的公有领域名画。
 
 World of Daggerfall - Terrain 和 Distant Terrain 最耗帧率。
 
@@ -255,7 +263,7 @@ World of Daggerfall - Terrain 和 Distant Terrain 最耗帧率。
 - [AJ](https://github.com/AJ170) 和 PS Vita Forever 服务器。
 - [Vwing](https://github.com/Vwing)：我借鉴了 Vwing 的 Daggerfall Unity 安卓移植里的一些思路。
 - [Kenney](https://www.kenney.nl) 的 [Input Prompts](https://kenney.nl/assets/input-prompts) 素材包（CC0）。快捷菜单里的按键图标以它为基础。
-- [shoui520](https://github.com/shoui520) 的 [vita-agent-use](https://github.com/shoui520/vita-agent-use)。我用它把测试版装到 Vita 上，夜里让一个自动行走的机器人跑遍游戏，因为游戏世界差不多有英国那么大，我没法亲自去每个地方。这样找出了很多崩溃和卡顿的地方。
+- [shoui520](https://github.com/shoui520) 的 [vita-agent-use](https://github.com/shoui520/vita-agent-use)。它能让 AI 助手操控 Vita，我用它配合 AI 助手做压力测试和硬件诊断：把测试版装到 Vita 上，夜里让一个自动行走的机器人跑遍游戏，再看崩溃转储和帧率日志。游戏世界差不多有英国那么大，我没法亲自去每个地方，这样找出了很多我手动根本发现不了的崩溃和卡顿。
 
 ## 许可证
 

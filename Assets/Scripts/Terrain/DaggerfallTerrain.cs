@@ -318,7 +318,9 @@ namespace DaggerfallWorkshop
             // Ensure TerrainData is created
             Terrain terrain = GetComponent<Terrain>();
 #if UNITY_PSP2
-            long vitaL0 = System.Diagnostics.Stopwatch.GetTimestamp();   // TEMPORARY 2026-11-20 promote laps (bot word "leadlog")
+#if VITA_PROBES
+            long vitaL0 = System.Diagnostics.Stopwatch.GetTimestamp();   // promote laps
+#endif
             while (terrain.terrainData == null && vitaTerrainDataPool.Count > 0)
             {
                 TerrainData pooled = vitaTerrainDataPool.Pop();
@@ -368,14 +370,14 @@ namespace DaggerfallWorkshop
                 terrain.heightmapPixelError = heightMapPixelError;
             }
 
-#if UNITY_PSP2
+#if UNITY_PSP2 && VITA_PROBES
             long vitaL1 = System.Diagnostics.Stopwatch.GetTimestamp();
 #endif
             // Promote tileMap
             tileMapTexture.SetPixels32(TileMap);
             tileMapTexture.Apply(false);
 
-#if UNITY_PSP2
+#if UNITY_PSP2 && VITA_PROBES
             long vitaL2 = System.Diagnostics.Stopwatch.GetTimestamp();
 #endif
             // Promote material
@@ -390,7 +392,7 @@ namespace DaggerfallWorkshop
             terrain.materialTemplate = terrainMaterial;
 
             // Promote heights
-#if UNITY_PSP2
+#if UNITY_PSP2 && VITA_PROBES
             long vitaL3 = System.Diagnostics.Stopwatch.GetTimestamp();
 #endif
             Vector3 size = terrain.terrainData.size;
@@ -403,7 +405,9 @@ namespace DaggerfallWorkshop
             terrain.terrainData.size = new Vector3(size.x, dfUnity.TerrainSampler.MaxTerrainHeight * TerrainScale, size.z);
 #endif
 #if UNITY_PSP2
+#if VITA_PROBES
             long vitaL4 = System.Diagnostics.Stopwatch.GetTimestamp();
+#endif
             // Tiles built in play: the heights now, Unity's LOD/patch bounds on the next frame (StreamingWorld calls
             // ApplyDelayedHeightmapModification before it shows the tile). SetHeights did both in one ~45 ms step.
             // VitaHeightStrips > 1 (test): StreamingWorld sets the heights in row strips on frames of their own instead.
@@ -418,12 +422,12 @@ namespace DaggerfallWorkshop
             terrain.terrainData.SetHeights(0, 0, MapData.heightmapSamples);
 #endif
 
-#if UNITY_PSP2
+#if UNITY_PSP2 && VITA_PROBES
             long vitaL5 = System.Diagnostics.Stopwatch.GetTimestamp();
 #endif
             // Raise event
             RaiseOnPromoteTerrainDataEvent(terrain.terrainData);
-#if UNITY_PSP2
+#if UNITY_PSP2 && VITA_PROBES
             if (MaterialReader.VitaProbeLog && StreamingWorld.VitaSpreadPromote)
             {
                 long vitaL6 = System.Diagnostics.Stopwatch.GetTimestamp();
@@ -436,7 +440,7 @@ namespace DaggerfallWorkshop
         }
 
 #if UNITY_PSP2
-        // TEMPORARY 2026-11-20 test (bot word "heightstrips=N"): in-play promote heights in N row strips, one per frame
+        // test: in-play promote heights in N row strips, one per frame
         public static int VitaHeightStrips = 1;
         [NonSerialized] public bool VitaHeightsPending;
         static float[,] vitaStrip;

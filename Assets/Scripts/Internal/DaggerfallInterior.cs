@@ -183,7 +183,7 @@ namespace DaggerfallWorkshop
                 yield return null;
         }
 
-        public static float VitaModelsBudgetMs = 120f;     // model/flat loop slice per frame (bot word modelsplitoff = one frame each)
+        public static float VitaModelsBudgetMs = 120f;     // model/flat loop slice per frame
 
         System.Collections.IEnumerator VitaLayoutSteps(PlayerGPS.DiscoveredBuilding buildingData)
         {

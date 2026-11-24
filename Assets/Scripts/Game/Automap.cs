@@ -1215,13 +1215,17 @@ namespace DaggerfallWorkshop.Game
             {
                 // enable automap level geometry for revealing (so raycasts can hit colliders of automap level geometry)
 #if UNITY_PSP2
+#if VITA_PROBES
                 vitaScanWatch.Reset();  // timing probe
                 vitaScanWatch.Start();
+#endif
                 VitaScanGeometry(true);
+#if VITA_PROBES
                 VitaScanTicks[0] += vitaScanWatch.ElapsedTicks;
                 VitaScanTicks[3] += vitaScanColliders.Count;
                 vitaScanWatch.Reset();
                 vitaScanWatch.Start();
+#endif
 #endif
 
                 // reveal geometry right below player - raycast down from player head position
@@ -1259,11 +1263,15 @@ namespace DaggerfallWorkshop.Game
 
                 // disable gameobjectGeometry so player movement won't be affected by geometry colliders of automap level geometry
 #if UNITY_PSP2
+#if VITA_PROBES
                 VitaScanTicks[1] += vitaScanWatch.ElapsedTicks;     // timing probe
                 vitaScanWatch.Reset();
                 vitaScanWatch.Start();
+#endif
                 VitaScanGeometry(false);
+#if VITA_PROBES
                 VitaScanTicks[2] += vitaScanWatch.ElapsedTicks;
+#endif
 #endif
             }
 
@@ -1795,8 +1803,10 @@ namespace DaggerfallWorkshop.Game
         // Mode 3 switches on only the colliders those rays can touch: switching a collider is what costs (the hidden copy's 30-40 ms
         // spike 5 times a second), and a ray can only hit a collider whose bounds it enters. Bounds are raised by the down rays' length.
         public static int VitaScanMode = 3;
+#if VITA_PROBES
         public static long[] VitaScanTicks = new long[4];   // timing probe: begin, rays, end, colliders switched on
         System.Diagnostics.Stopwatch vitaScanWatch = new System.Diagnostics.Stopwatch();
+#endif
 
         // Segment against an axis-aligned box (slab test)
         static bool VitaSegmentHits(Vector3 origin, Vector3 direction, float length, Vector3 min, Vector3 max)

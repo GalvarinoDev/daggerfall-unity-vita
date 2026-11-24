@@ -26,6 +26,7 @@ public class VitaHudStyleWindow : DaggerfallPopupWindow
     float stickX;
     readonly Panel[] cells = new Panel[3];
     readonly TextLabel[] labels = new TextLabel[3];
+    TextLabel title;
     // Owned by this window, freed on close
     Texture2D boxTexture, cellTexture, cellSelectedTexture, barTexture;
     readonly Texture2D[] thumbnails = new Texture2D[3];
@@ -48,7 +49,7 @@ public class VitaHudStyleWindow : DaggerfallPopupWindow
         LoadThumbnails();
 
         AddPanel(new Vector2(40, 52), new Vector2(240, 86), boxTexture, NativePanel);
-        Centre(AddLabel(Text("vitaHudStyle"), 1f, NativePanel), 160, 61);
+        title = Centre(AddLabel(Text("vitaHudStyle"), 1f, NativePanel), 160, 61);
         selected = System.Array.IndexOf(modes, hud.VitaHudMode);
         if (selected < 0)
             selected = 0;
@@ -134,6 +135,10 @@ public class VitaHudStyleWindow : DaggerfallPopupWindow
     public override void Update()
     {
         base.Update();
+        // Chinese labels grow to their minimum scale on their first draw (TextLabel), after Setup centred them: centre again
+        Centre(title, 160, 61);
+        for (int i = 0; i < 3; i++)
+            Centre(labels[i], 52 + i * 74 + 34, 121);
         if (uiManager.TopWindow != this)
             return;
         if (!Input.GetKey(KeyCode.JoystickButton6) && !VitaQuickMenuWindow.TestHold)

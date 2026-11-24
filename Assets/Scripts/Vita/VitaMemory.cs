@@ -26,11 +26,15 @@ using Object = UnityEngine.Object;
 
 public static class VitaMemory
 {
-    public static bool RegexCacheOff;       // test harness A/B (bot word "regexoff")
-    public static bool NoBuildingUnload;    // TEMPORARY test switch (2026-11-12, entry/exit cost): skip the unload on building entry and exit
+    public static bool RegexCacheOff;       // test harness A/B
+    public static bool NoBuildingUnload;    // test switch (entry/exit cost): skip the unload on building entry and exit
     // The development player crashes at startup on consumer Vitas,
+#if VITA_PROBES
     public static readonly bool Probes = Debug.isDebugBuild ||
         System.IO.File.Exists(System.IO.Path.Combine(DaggerfallUnityApplication.PersistentDataPath, "probes.txt"));
+#else
+    public const bool Probes = false;    // released builds: every probe block compiles out
+#endif
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     static void Init()
@@ -843,7 +847,7 @@ public static class VitaMemory
         void Update()
         {
 #if !UNITY_EDITOR
-            // TEMPORARY probe (2026-11-15, heap reserve drift): the frame the Boehm heap grows, so the step that grew it can be found
+            // probe (heap reserve drift): the frame the Boehm heap grows, so the step that grew it can be found
             try
             {
                 if (FindGcArrays())
@@ -923,7 +927,7 @@ public static class VitaMemory
         createdTotal = createdReadable = 0;
     }
 
-    // Trial (2026-11-12, revert candidate): UnloadUnusedAssets cost 0.6-0.7 s at each building door, so doors only unload when memory
+    // Trial (revert candidate): UnloadUnusedAssets cost 0.6-0.7 s at each building door, so doors only unload when memory
     // runs low. Dungeons, fast travel and scene loads still always unload, and DFU's own 180 s unload keeps running.
     const long BuildingUnloadMain = 50L << 20, BuildingUnloadCdram = 20L << 20;
     static void BuildingUnload(string tag)
@@ -943,8 +947,8 @@ public static class VitaMemory
     }
 
     // UnloadUnusedAssets dropped every shader no live material used, so each load found (Shader.Find), loaded and set up the same
-    // shaders again: the nature billboard material alone took 1.2-1.4 s per load (2026-11-17). Every shader loaded so far stays.
-    public static bool ShaderKeepOff;     // test harness A/B (bot word "shaderkeepoff")
+    // shaders again: the nature billboard material alone took 1.2-1.4 s per load. Every shader loaded so far stays.
+    public static bool ShaderKeepOff;     // test harness A/B
     static readonly HashSet<Shader> keptShaders = new HashSet<Shader>();
     public static void KeepShaders()
     {
@@ -992,7 +996,7 @@ public static class VitaMemory
         sb.AppendFormat("VITAMEM [{0}] Mesh: count={1} verts={2} profiler={3:F1}MB\n", tag, meshes.Length,
             meshes.Sum(m => (long)m.vertexCount), meshes.Sum(m => Profiler.GetRuntimeMemorySizeLong(m)) / 1048576.0);
         sb.AppendFormat("VITAMEM [{0}] billboard batches={1}\n", tag, Resources.FindObjectsOfTypeAll<DaggerfallWorkshop.DaggerfallBillboardBatch>().Length);
-        // TEMPORARY probe (2026-11-15): HeapBig grows ~1.7 MB per city while textures and meshes don't pile up; which native objects do
+        // probe: HeapBig grows ~1.7 MB per city while textures and meshes don't pile up; which native objects do
         sb.AppendFormat("VITAMEM [{0}] objects: Material={1} GameObject={2} Component={3} AudioClip={4} Shader={5} all={6}\n", tag,
             Resources.FindObjectsOfTypeAll<Material>().Length, Resources.FindObjectsOfTypeAll<GameObject>().Length,
             Resources.FindObjectsOfTypeAll<Component>().Length, Resources.FindObjectsOfTypeAll<AudioClip>().Length,

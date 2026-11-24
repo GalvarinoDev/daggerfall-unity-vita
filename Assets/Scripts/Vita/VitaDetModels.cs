@@ -162,11 +162,7 @@ public static class VitaDetModels
         PlayerGPS gps = GameManager.Instance.PlayerGPS;
         MapsFile.Climates c = (MapsFile.Climates)gps.CurrentClimateIndex;
         bool winter = DaggerfallUnity.Instance.WorldTime.Now.SeasonValue == DaggerfallDateTime.Seasons.Winter
-            && c != MapsFile.Climates.Desert && c != MapsFile.Climates.Desert2 && c != MapsFile.Climates.Subtropical
-#if VITA_MODS
-            && !ClimateSwaps.VitaSnowless((int)c)
-#endif
-            ;
+            && c != MapsFile.Climates.Desert && c != MapsFile.Climates.Desert2 && c != MapsFile.Climates.Subtropical;
         int i = slot + 2 + TableKey(slot, c, gps.CurrentRegionName) * 4 + (winter ? 2 : 0);
         if (climateSlots[i] >= 0 && OnVita(climateSlots[i]))
         {

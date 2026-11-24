@@ -164,7 +164,11 @@ namespace DaggerfallWorkshop.Game
         // timing probe: MotorFixedUpdate's calls in the same order, timed. Slots: 0 all, 1 CanFly, 2 paralysis+knockback, 3 gravity,
         // 4 noaction+bashing+timers, 5 TakeAction, 6 fall damage, 7 anim, 8 OpenDoors, 9 HeightAdjust; inside TakeAction (inclusive):
         // 10 GetDestination, 11 AttemptMove, 12 FindDetour
+#if VITA_PROBES
         public static bool VitaMotorProbe;
+#else
+        public const bool VitaMotorProbe = false;     // probe code compiles away outside test builds
+#endif
         public static long[] VitaMotorTicks = new long[13];
         public static int[] VitaMotorCalls = new int[13];
         static long vitaMotorMark;

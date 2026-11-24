@@ -49,11 +49,20 @@ public static class VitaWorldTextures
 #if VITA_MODS
     // World of Daggerfall - Biomes (vita/tools/bake_biomes.sh): ground archives 3, 4, 104 and 304
     static VitaPack biomes;
+    // SphincterVision Snowless Swamp and Jungle (vita/tools/bake_snowless.sh): winter swamp ground 403 and building sets 408-470
+    static VitaPack snowless;
 #endif
 
     static bool Read(uint key, out System.IntPtr memory, out System.IntPtr data, out int length)
     {
 #if VITA_MODS
+        if (DaggerfallUnity.Settings.VitaSnowlessSwampJungle)
+        {
+            if (snowless == null)
+                snowless = new VitaPack(Path.Combine(Path.GetDirectoryName(PackPath), "snowless.pak"), PackMagic);
+            if (snowless.Contains(key))
+                return snowless.Read(key, out memory, out data, out length);
+        }
         if (DaggerfallUnity.Settings.VitaWorldOfDaggerfallBiomes)
         {
             if (biomes == null)
@@ -83,7 +92,8 @@ public static class VitaWorldTextures
             DaggerfallUnity.Instance.MaterialReader.MainFilterMode == FilterMode.Point;
     }
 
-    // TEMPORARY 2026-11-20 probe: the calling thread's own counters (SceKernelThreadInfo, 128 bytes): run time since creation (us, +96),
+#if VITA_PROBES
+    // probe: the calling thread's own counters (SceKernelThreadInfo, 128 bytes): run time since creation (us, +96),
     // preempted by interrupts (+104) / by other threads (+108), gave up the CPU itself = waited (+112), CPU changes (+116). Main thread only.
     static readonly byte[] probeInfo = new byte[128];
     public static int ProbeThreadResult;
@@ -128,6 +138,7 @@ public static class VitaWorldTextures
 #if UNITY_PSP2 && !UNITY_EDITOR
     [DllImport("__Internal")] static extern int sceKernelGetThreadInfo(int threadId, byte[] info);
     [DllImport("__Internal")] static extern int sceKernelGetSystemInfo(byte[] info);
+#endif
 #endif
 
     /// <summary>The baked texture for settings into results (albedo, palettes, record info). False if the pack doesn't have it.</summary>

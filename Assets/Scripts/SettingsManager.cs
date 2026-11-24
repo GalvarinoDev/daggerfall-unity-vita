@@ -195,7 +195,7 @@ namespace DaggerfallWorkshop
         public bool VitaTravelOptions { get; set; }
         public bool VitaWorldOfDaggerfall { get; set; }
         public bool VitaWodTerrain { get; set; }
-        public bool VitaSnowlessSwamp { get; set; }
+        public bool VitaSnowlessSwampJungle { get; set; }
         public bool VitaWorldOfDaggerfallBiomes { get; set; }
         public bool VitaDistantTerrain { get; set; }
         public bool VitaDistantTerrainReference { get; set; }
@@ -555,9 +555,8 @@ namespace DaggerfallWorkshop
             VitaWorldOfDaggerfall = GetData(sectionVideo, "VitaWorldOfDaggerfall") == "True";
             // Vita: World of Daggerfall - Terrain (VitaWodTerrain.cs); off unless "True" until it passes a hardware run
             VitaWodTerrain = GetData(sectionVideo, "VitaWodTerrain") == "True";
-            // Vita: Snowless - Swamp and Jungle (summer textures and weather in winter there, ClimateSwaps.VitaSnowless); off unless "True"
-            // (2026-11-14: it covered more climates than the PC mods it stands in for, Mountain Woods among them)
-            VitaSnowlessSwamp = GetData(sectionVideo, "VitaSnowlessSwamp") == "True";
+            // Vita: SphincterVision Snowless Swamp and Jungle (snowless.pak, VitaWorldTextures); off unless "True"
+            VitaSnowlessSwampJungle = GetData(sectionVideo, "VitaSnowlessSwampJungle") == "True";
             VitaWorldOfDaggerfallBiomes = GetData(sectionVideo, "VitaWorldOfDaggerfallBiomes") != "False";
             // Vita: Distant Terrain mod (VitaDistantTerrain.cs); off unless "True"
             VitaDistantTerrain = GetData(sectionVideo, "VitaDistantTerrain") == "True";
@@ -592,7 +591,7 @@ namespace DaggerfallWorkshop
 #if !VITA_MODS
             // No-mods alpha (vita/nomods.txt): no mod is in the build, whatever an older ini says
             VitaLowPolyTrees = VitaDynamicSkies = VitaBasicRoads = VitaLoadScreenArt = VitaWindmills = VitaDragonRider = VitaTravelOptions = false;
-            VitaWorldOfDaggerfall = VitaWodTerrain = VitaSnowlessSwamp = VitaWorldOfDaggerfallBiomes = VitaDistantTerrain = VitaDistantTerrainReference = false;
+            VitaWorldOfDaggerfall = VitaWodTerrain = VitaSnowlessSwampJungle = VitaWorldOfDaggerfallBiomes = VitaDistantTerrain = VitaDistantTerrainReference = false;
             VitaBeautifulCities = VitaBeautifulVillages = VitaFindingMyReligion = VitaFixedDesertArchitecture = VitaFixedDungeonExteriors = false;
             VitaRedguards = VitaExpandedTextures = VitaRmbResourcePack = VitaDiep = VitaNewPaintings = VitaHarvestableCrops = false;
 #endif
@@ -825,7 +824,7 @@ namespace DaggerfallWorkshop
             SetBool(sectionVideo, "VitaTravelOptions", VitaTravelOptions);
             SetBool(sectionVideo, "VitaWorldOfDaggerfall", VitaWorldOfDaggerfall);
             SetBool(sectionVideo, "VitaWodTerrain", VitaWodTerrain);
-            SetBool(sectionVideo, "VitaSnowlessSwamp", VitaSnowlessSwamp);
+            SetBool(sectionVideo, "VitaSnowlessSwampJungle", VitaSnowlessSwampJungle);
             SetBool(sectionVideo, "VitaWorldOfDaggerfallBiomes", VitaWorldOfDaggerfallBiomes);
             SetBool(sectionVideo, "VitaDistantTerrain", VitaDistantTerrain);
             SetBool(sectionVideo, "VitaDistantTerrainReference", VitaDistantTerrainReference);

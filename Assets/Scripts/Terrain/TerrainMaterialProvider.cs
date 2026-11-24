@@ -160,12 +160,6 @@ namespace DaggerfallWorkshop
 
 #if UNITY_PSP2
 #if VITA_MODS
-            // Snowless - Swamp and Jungle (ClimateSwaps.VitaSnowless)
-            if (isWinter && ClimateSwaps.VitaSnowless(worldClimate))
-            {
-                groundArchive--;
-                isWinter = false;
-            }
             // World of Daggerfall - Biomes (WODTerrainMaterialProvider.GetClimateInfo), baked into biomes.pak
             if (DaggerfallUnity.Settings.VitaWorldOfDaggerfallBiomes)
             {
@@ -220,7 +214,7 @@ namespace DaggerfallWorkshop
             terrainMaterialData.Material.SetTexture(TileUniforms.TileAtlasTex, tileSetMaterial.GetTexture(TileUniforms.TileAtlasTex));
 #if UNITY_PSP2
             // The tileset atlas holds palette indices (TextureReader.GetTerrainTilesetTexture made this palette with no alpha index)
-            terrainMaterialData.Material.SetTexture(VitaPalette.PaletteTex, VitaPalette.TerrainPalette(terrainMaterialData.WorldClimate));
+            terrainMaterialData.Material.SetTexture(VitaPalette.PaletteTex, VitaPalette.CachedPalette(-1));
             // ground square = flat one-colour ground), so set them as TextureReader.GetTerrainTilesetTexture lays the atlas out
             terrainMaterialData.Material.SetFloat("_TilesetDim", 16);
             terrainMaterialData.Material.SetFloat("_MaxIndex", 255);

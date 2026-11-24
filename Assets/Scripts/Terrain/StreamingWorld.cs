@@ -198,26 +198,46 @@ namespace DaggerfallWorkshop
         // and talk read the slim location cache now (RMBLayout.VitaSlim), so drop them once every location build has finished.
         bool vitaDropBlocks;
 
-        public static bool VitaPromoteLog;     // TEMPORARY probe switch 2026-11-19, back 2026-11-21 (bot word "promotelog"): VITACO + VITALOC
+#if VITA_PROBES
+        public static bool VitaPromoteLog;     // probe switch: VITACO + VITALOC
+#else
+        public const bool VitaPromoteLog = false;     // probe code compiles away outside test builds
+#endif
 
-        // TEMPORARY probe 2026-11-19: time per named in-play world coroutine per frame; a frame whose total reached 80 ms is logged on the
+#if VITA_PROBES
+        // probe: time per named in-play world coroutine per frame; a frame whose total reached 80 ms is logged on the
         // next frame's first step (outside every timed span). A nested coroutine's later steps are not counted (they run on their own).
         static readonly Dictionary<string, double> vitaCoMs = new Dictionary<string, double>();
-        public static readonly Dictionary<string, double> VitaCoTotals = new Dictionary<string, double>();   // TEMPORARY probe 2026-11-21: ms per slot since the bot cleared it
+        public static readonly Dictionary<string, double> VitaCoTotals = new Dictionary<string, double>();   // probe: ms per slot since the last reset
         static int vitaCoFrame = -1;
         static int vitaCoGc;
         static string vitaLocStep = "start";
         static int vitaLocN;
+#endif
+        [System.Diagnostics.Conditional("VITA_PROBES")]
         static void VitaLoc(string step)
         {
+#if VITA_PROBES
             if (step != vitaLocStep)
             {
                 vitaLocStep = step;
                 vitaLocN = 0;
             }
+#endif
         }
 
+        /// <summary>The coroutine itself, or in test builds a wrapper that times each of its steps</summary>
         public static IEnumerator VitaCoTimed(string name, IEnumerator inner)
+        {
+#if VITA_PROBES
+            return VitaCoTimedProbe(name, inner);
+#else
+            return inner;
+#endif
+        }
+
+#if VITA_PROBES
+        static IEnumerator VitaCoTimedProbe(string name, IEnumerator inner)
         {
             if (name == "location")
                 VitaLoc("start");
@@ -243,7 +263,7 @@ namespace DaggerfallWorkshop
                         double sum = 0;
                         foreach (double v in vitaCoMs.Values)
                             sum += v;
-                        if (sum >= 30)   // TEMPORARY probe: 60 -> 30 ms 2026-11-21 (town walk 45 ms coroutine frames)
+                        if (sum >= 30)   // probe: 30 ms (town walk 45 ms coroutine frames)
                         {
                             var sb = new System.Text.StringBuilder();
                             foreach (var kv in vitaCoMs)
@@ -265,6 +285,7 @@ namespace DaggerfallWorkshop
                 yield return inner.Current;
             }
         }
+#endif
 
         IEnumerator VitaCountLocation(IEnumerator routine)
         {
@@ -289,7 +310,7 @@ namespace DaggerfallWorkshop
             {
                 // Crossed the middle of the tile: the two tiles behind are swapped for the two ahead (player tile unchanged)
                 UpdateWorld();
-                StartCoroutine(VitaCoTimed("terrains", UpdateTerrains()));   // TEMPORARY probe wrapper 2026-11-21
+                StartCoroutine(VitaCoTimed("terrains", UpdateTerrains()));   // probe wrapper
                 updateLocations = true;
             }
         }
@@ -1122,7 +1143,7 @@ namespace DaggerfallWorkshop
                 yield return null;
                 if (gen != vitaWorldGen)
                     yield break;
-                StartCoroutine(VitaCoTimed("terrains", UpdateTerrains()));   // TEMPORARY probe wrapper 2026-11-21
+                StartCoroutine(VitaCoTimed("terrains", UpdateTerrains()));   // probe wrapper
                 updateLocations = true;
                 vitaInitBuild = true;
                 init = false;
@@ -1284,10 +1305,10 @@ namespace DaggerfallWorkshop
         // the same GetBlock, so block replacements still apply. VitaBlockPredecodeOff = test harness A/B.
         public static bool VitaBlockPredecodeOff;
         public static bool VitaColliderDeferOff;
-        // In-play town blocks built over three frames (test switch: bot word "townstepsoff" = one frame per block, as before)
+        // In-play town blocks built over three frames (test switch: one frame per block, as before)
         public static bool VitaTownStepsOff;
-        public static bool VitaNullYieldOff;    // test harness A/B (bot word "nullyieldoff"): in-play town steps yield WaitForEndOfFrame, as before
-        // In-play town blocks: their materials made before the block (test switch: bot word "matwarmoff")
+        public static bool VitaNullYieldOff;    // test harness A/B: in-play town steps yield WaitForEndOfFrame, as before
+        // In-play town blocks: their materials made before the block (test switch)
         public static bool VitaMaterialWarmOff;
         static readonly List<int> vitaWarmTextures = new List<int>();
         public static bool VitaPreCullOff;
@@ -1374,7 +1395,7 @@ namespace DaggerfallWorkshop
                     // In play every step yields null: a WaitForEndOfFrame yielded from a step that resumed after null runs the next step at the
                     // end of the same frame, so a block's last step + climate (65-71 ms) and its colliders (~103 ms) shared one 168-174 ms frame
                     object vitaStepYield = vitaSpread && !VitaNullYieldOff ? null : new WaitForEndOfFrame();
-                    VitaLoc("setup");   // TEMPORARY probe 2026-11-20
+                    VitaLoc("setup");   // probe
                     if (vitaSpread && !VitaColliderDeferOff)
                         VitaBlockBake.BeginTown(blocks);    // the block records read by a worker while the setup runs
                     if (vitaSpread)
@@ -1399,7 +1420,7 @@ namespace DaggerfallWorkshop
                     animalsBillboardBatch.hideFlags = defaultHideFlags;
                     //miscBillboardBatch.hideFlags = defaultHideFlags;
 #if UNITY_PSP2
-                    VitaLoc("batches");   // TEMPORARY probe 2026-11-20
+                    VitaLoc("batches");   // probe
                     if (vitaSpread)
                         yield return null;
 #endif
@@ -1417,7 +1438,7 @@ namespace DaggerfallWorkshop
                     CityNavigation cityNavigation = dfLocation.gameObject.AddComponent<CityNavigation>();
                     cityNavigation.FormatNavigation(location.RegionName, location.Name, width, height);
 #if UNITY_PSP2
-                    VitaLoc("nav");   // TEMPORARY probe 2026-11-20
+                    VitaLoc("nav");   // probe
                     if (vitaSpread && !VitaNullYieldOff)
                         yield return null;
 #endif
@@ -1436,7 +1457,7 @@ namespace DaggerfallWorkshop
 
 #if UNITY_PSP2
                     VitaMemory.Step("location " + index + " setup " + location.Name + " " + width + "x" + height);
-                    VitaLoc("pop");   // TEMPORARY probe 2026-11-20
+                    VitaLoc("pop");   // probe
                     if (vitaSpread && !VitaNullYieldOff)
                         yield return null;
 #endif
@@ -1461,7 +1482,7 @@ namespace DaggerfallWorkshop
                                 while (VitaBlockBake.TownPending(blockIndex))
                                     yield return null;
                                 VitaBlockBake.Prefetch(ref blocks[blockIndex]);
-                                VitaLoc("prefetch");   // TEMPORARY probe 2026-11-20
+                                VitaLoc("prefetch");   // probe
                                 yield return vitaStepYield;
                                 if (!VitaMaterialWarmOff)
                                 {
@@ -1475,7 +1496,7 @@ namespace DaggerfallWorkshop
                                         dfUnity.MaterialReader.GetCachedMaterial(vitaWarmTextures[t], vitaWarmTextures[t + 1], 0, out vitaMaterial);
                                         if ((System.Diagnostics.Stopwatch.GetTimestamp() - vitaWarm) * 1000 >= 8 * System.Diagnostics.Stopwatch.Frequency)
                                         {
-                                            VitaLoc("warm");   // TEMPORARY probe 2026-11-20
+                                            VitaLoc("warm");   // probe
                                             yield return vitaStepYield;
                                             vitaWarm = System.Diagnostics.Stopwatch.GetTimestamp();
                                         }
@@ -1492,7 +1513,7 @@ namespace DaggerfallWorkshop
                                     blocks[blockIndex], x, y, location.MapTableData.MapId, location.LocationIndex, dfUnity.Option_CityBlockPrefab,
                                     natureBillboardBatch, lightsBillboardBatch, animalsBillboardBatch, dfLocation.Summary.Nature,
                                     dfUnity.WorldTime.Now.SeasonValue == DaggerfallDateTime.Seasons.Winter ? ClimateSeason.Winter : ClimateSeason.Summer);
-                                VitaLoc("rmb");   // TEMPORARY probe 2026-11-20
+                                VitaLoc("rmb");   // probe
                                 while (vitaSteps.MoveNext())
                                     yield return vitaSteps.Current;
                                 go = vitaStepped[0];
@@ -1542,7 +1563,7 @@ namespace DaggerfallWorkshop
 
                             // Optionally yield after placing block
 #if UNITY_PSP2
-                            VitaLoc("blockend");   // TEMPORARY probe 2026-11-20
+                            VitaLoc("blockend");   // probe
                             if (allowYield || vitaFramePerBlock)
                                 yield return vitaStepYield;
 #else
@@ -1554,7 +1575,7 @@ namespace DaggerfallWorkshop
                             {
                                 // Its own frame: the block before this one's colliders
                                 GameObjectHelper.VitaAddDeferredColliders();
-                                VitaLoc("colliders");   // TEMPORARY probe 2026-11-20
+                                VitaLoc("colliders");   // probe
                                 yield return vitaStepYield;
                             }
 #endif
@@ -1573,7 +1594,7 @@ namespace DaggerfallWorkshop
                     animalsBillboardBatch.Apply();
                     //miscBillboardBatch.Apply();
 #if UNITY_PSP2
-                    VitaLoc("applied");   // TEMPORARY probe 2026-11-20
+                    VitaLoc("applied");   // probe
                     if (vitaSpread && !VitaNullYieldOff)
                     {
                         yield return null;
@@ -1588,14 +1609,14 @@ namespace DaggerfallWorkshop
                     else
                     {
                         dfLocation.VitaApplyTimeAndSpace();     // the texture atlas takes the season/windows the town shows
-                        VitaLoc("timespace");   // TEMPORARY probe 2026-11-20
+                        VitaLoc("timespace");   // probe
                         if (vitaSpread && !VitaNullYieldOff)
                         {
                             yield return null;
                             if (!locationObject)
                                 yield break;
                         }
-                        VitaLoc("atlas");   // TEMPORARY probe 2026-11-20
+                        VitaLoc("atlas");   // probe
                         if (allowYield && !VitaLoadingWindow.Showing)   // in play: over frames, on an object that outlives the town
                             yield return DaggerfallUnity.Instance.StartCoroutine(VitaAtlas.BuildCityStaged(locationObject));
                         else
@@ -1604,7 +1625,7 @@ namespace DaggerfallWorkshop
                     // The town's leftover billboards (animated lights, decorations, animals) merged per material across the whole town
                     if (locationObject)
                         VitaFlatBatch.BuildTown(locationObject);
-                    VitaLoc("flattown");   // TEMPORARY probe 2026-11-20
+                    VitaLoc("flattown");   // probe
                     if (vitaSpread && !VitaNullYieldOff)
                     {
                         yield return null;
@@ -2090,13 +2111,21 @@ namespace DaggerfallWorkshop
                     yield break;
                 dfTerrain.UpdateClimateMaterial(init);
                 VitaSpreadPromote = true;       // promote handlers may spread their work over frames (VitaPromoteBusy)
-                long vitaP0 = System.Diagnostics.Stopwatch.GetTimestamp();   // TEMPORARY 2026-11-20 probe
+#if VITA_PROBES
+                long vitaP0 = System.Diagnostics.Stopwatch.GetTimestamp();   // probe
+#endif
                 try { dfTerrain.PromoteTerrainData(); }
                 finally { VitaSpreadPromote = false; }
                 VitaTileShownFrame = Time.frameCount;
+#if VITA_PROBES
                 double vitaPromoteMs = (System.Diagnostics.Stopwatch.GetTimestamp() - vitaP0) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+#endif
+#if VITA_PROBES
                 double vitaApplyMs = 0;
+#endif
+#if VITA_PROBES
                 string vitaStrips = "";
+#endif
                 if (dfTerrain.VitaHeightsPending)
                 {
                     for (int k = 0; k < DaggerfallTerrain.VitaHeightStrips; k++)
@@ -2104,9 +2133,13 @@ namespace DaggerfallWorkshop
                         yield return null;
                         if (vitaGen != vitaWorldGen)
                             yield break;
+#if VITA_PROBES
                         long vitaS0 = System.Diagnostics.Stopwatch.GetTimestamp();
+#endif
                         dfTerrain.VitaSetHeightStrip(k, DaggerfallTerrain.VitaHeightStrips);
+#if VITA_PROBES
                         vitaStrips += string.Format(" {0:F1}", (System.Diagnostics.Stopwatch.GetTimestamp() - vitaS0) * 1000.0 / System.Diagnostics.Stopwatch.Frequency);
+#endif
                     }
                     dfTerrain.VitaHeightsPending = false;
                 }
@@ -2117,18 +2150,28 @@ namespace DaggerfallWorkshop
                     yield return null;
                     if (vitaGen != vitaWorldGen)
                         yield break;
+#if VITA_PROBES
                     long vitaA0 = System.Diagnostics.Stopwatch.GetTimestamp();
+#endif
                     dfTerrain.GetComponent<Terrain>().ApplyDelayedHeightmapModification();
+#if VITA_PROBES
                     vitaApplyMs = (System.Diagnostics.Stopwatch.GetTimestamp() - vitaA0) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+#endif
                 }
-                if (MaterialReader.VitaProbeLog)   // TEMPORARY 2026-11-20 probe (bot word "leadlog")
+#if VITA_PROBES
+                if (MaterialReader.VitaProbeLog)   // probe
                     Debug.LogFormat("VITAPROMOTE2 {0},{1}: promote {2:F1} ms, height strips{4}, delayed LOD apply {3:F1} ms", dfTerrain.MapPixelX, dfTerrain.MapPixelY, vitaPromoteMs, vitaApplyMs, vitaStrips);
-                long vitaV0 = System.Diagnostics.Stopwatch.GetTimestamp();   // TEMPORARY probe 2026-11-21 (VITASHOW, bot word "promotelog")
+#endif
+#if VITA_PROBES
+                long vitaV0 = System.Diagnostics.Stopwatch.GetTimestamp();   // probe (VITASHOW)
+#endif
                 terrainDesc.terrainObject.SetActive(true);
                 VitaTileShownFrame = Time.frameCount;
+#if VITA_PROBES
                 if (VitaPromoteLog)
                     Debug.LogFormat("VITASHOW {0},{1}: promote {2:F1} ms, height strips{3}, LOD apply {4:F1} ms, SetActive {5:F1} ms", dfTerrain.MapPixelX, dfTerrain.MapPixelY,
                         vitaPromoteMs, vitaStrips, vitaApplyMs, (System.Diagnostics.Stopwatch.GetTimestamp() - vitaV0) * 1000.0 / System.Diagnostics.Stopwatch.Frequency);
+#endif
                 terrainDesc.terrainObject.name = TerrainHelper.GetTerrainName(dfTerrain.MapPixelX, dfTerrain.MapPixelY);
                 // Nature layout reads what the handlers leave (location rects, blended heights): wait for them first
                 while (VitaPromoteBusy != null && VitaPromoteBusy(dfTerrain))
@@ -2208,7 +2251,7 @@ namespace DaggerfallWorkshop
         public static bool VitaSpreadPromote;
         public static Func<DaggerfallTerrain, bool> VitaPromoteBusy;
         public static int VitaTileShownFrame = -1;  // frame an in-play promote set heights or switched its tile on (VitaFarTerrain rebuilds on the next one)
-        public static bool VitaDelayLodOff;     // 2026-11-20 test harness A/B: SetHeights in one step on in-play promotes, as before
+        public static bool VitaDelayLodOff;     // test harness A/B: SetHeights in one step on in-play promotes, as before
 #endif
 
         // Gets terrain at map pixel coordinates, or null if not found

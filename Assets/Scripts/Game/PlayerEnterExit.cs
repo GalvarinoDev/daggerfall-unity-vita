@@ -481,7 +481,9 @@ namespace DaggerfallWorkshop.Game
             // new one, as the transitions do: otherwise a save load builds on top of it (peak memory). Save loads run behind a loading window
             world.VitaClearWorld();
             yield return StartCoroutine(VitaUnload("respawn unloaded"));
+#if VITA_PROBES
             Debug.Log("VITARESPAWN unloaded");
+#endif
 #endif
 
             // Store if player was inside a dungeon or building before respawning
@@ -573,7 +575,9 @@ namespace DaggerfallWorkshop.Game
             }
 
 #if UNITY_PSP2
+#if VITA_PROBES
             Debug.Log("VITARESPAWN done");
+#endif
 #endif
             // Lower respawn flag
             isRespawning = false;
@@ -804,7 +808,7 @@ namespace DaggerfallWorkshop.Game
 
 #if UNITY_PSP2
             // A mod interior can hold a door that faces out of the room (Beautiful Villages placed house model 212's own shell inside
-            // TEMPASE0 building 6), and the landing above is then outside the floor: the player starts in a wall and falls (2026-11-15)
+            // TEMPASE0 building 6), and the landing above is then outside the floor: the player starts in a wall and falls
             landingPosition = VitaCheckLanding(landingPosition, foundDoorNormal, checkPosition);
 #endif
 
@@ -1367,7 +1371,7 @@ namespace DaggerfallWorkshop.Game
 #if UNITY_PSP2
         bool vitaEnteringDungeon;
         DaggerfallDungeon vitaPrebuiltDungeon;      // built over frames by VitaTransitionDungeonInterior, used by TransitionDungeonInterior
-        public static bool VitaNoDungeonSpread;     // TEMPORARY test switch (2026-11-12): upstream's one-frame dungeon build
+        public static bool VitaNoDungeonSpread;     // test switch: upstream's one-frame dungeon build
 
         // Vita: DFU keeps the whole exterior (hidden) under a dungeon, so both were in memory at once. Behind a loading window: destroy
         // the exterior, give the GPU a few frames, unload, then build the dungeon. The exit rebuilds the exterior (TeleportToCoordinates).
